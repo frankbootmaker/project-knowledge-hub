@@ -7,6 +7,7 @@ export {
 export { Button } from './Button';
 export { buttonClassName, type ButtonVariant } from './buttonStyles';
 export { ErrorText, Field, Input, Select, Textarea } from './Field';
+export { DateField, DateRangeFields } from './DateField';
 export { FilePicker } from './FilePicker';
 export { FunctionHeader } from './FunctionHeader';
 export { PasswordInput } from './PasswordInput';

@@ -1168,7 +1168,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown, including tokensCacheWrite, bills split rates. Optional cloudAgentId links imported Cursor usage with that id onto this task. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown, including tokensCacheWrite, bills split rates. Optional cloudAgentId links imported Cursor usage with that id onto this task. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Recompute skips an archived story, epic, or milestone and never overwrites a cancelled status. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Parent start and end follow included children. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -1228,7 +1228,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_milestones',
     description:
-      'List project milestones. Pages at 25. The note (description) is an excerpt. Pass cursor until hasMore is false. completionPercent is 0 or 100 from linked items and predecessor dependencies. 100 only when every included item is done or 100 percent. Cancelled items are left out. Otherwise 0. No included items leaves it null. completion.done counts included linked items and predecessor dependencies that are done or 100 percent. completion.total is that included set, so a partial milestone can report done greater than 0 while completionPercent stays 0. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, otherwise planned. No included links keeps the stored status. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. A predecessor moves the due date. Duration is always 0. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List project milestones. Pages at 25. The note (description) is an excerpt. Pass cursor until hasMore is false. completionPercent is 0 or 100 from linked items and predecessor dependencies. 100 only when every included item is done or 100 percent. Cancelled items are left out. Otherwise 0. No included items leaves it null. completion.done counts included linked items and predecessor dependencies that are done or 100 percent. completion.total is that included set, so a partial milestone can report done greater than 0 while completionPercent stays 0. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, otherwise planned. No included links keeps the stored status. Recompute skips an archived milestone and never overwrites a cancelled status. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. A predecessor moves the due date. Duration is always 0. Each row includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     output: pagedResult('milestones', milestoneRowResult),
@@ -1268,7 +1268,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_milestone',
     description:
-      'Update a milestone. milestoneId may be UUID or HL1-M-1. description is the note. startDate and targetDate are stored and writable. Dates are not derived from linked items. targetPercent is null. Requires pm:write.',
+      'Update a milestone. milestoneId may be UUID or HL1-M-1. description is the note. startDate and targetDate are stored and writable. Dates are not derived from linked items. targetPercent is null. Recompute skips an archived milestone and never overwrites a cancelled status. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     output: wrappedResult('milestone', milestoneRowResult),
@@ -1290,7 +1290,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_milestone',
     description:
-      'Get one milestone with its note, start date, due date, completionPercent, linkedItems, and status derived from those links. completionPercent is 0 or 100. completion.done counts included linked items and predecessor dependencies that are done or 100 percent. completion.total is that same included set. completion.percent stays 0 or 100. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. No included links keeps the stored status. milestoneId may be UUID or HL1-M-1. Requires pm:read. Via call_hub_tool on ChatGPT.',
+      'Get one milestone with its note, start date, due date, completionPercent, linkedItems, and status derived from those links. completionPercent is 0 or 100. completion.done counts included linked items and predecessor dependencies that are done or 100 percent. completion.total is that same included set. completion.percent stays 0 or 100. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. No included links keeps the stored status. Recompute skips an archived milestone and never overwrites a cancelled status. milestoneId may be UUID or HL1-M-1. Requires pm:read. Via call_hub_tool on ChatGPT.',
     scope: 'pm:read',
     output: wrappedResult('milestone', milestoneRowResult),
     body: {
@@ -1304,7 +1304,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_project_milestone_item_links',
     description:
-      'Replace epics, stories, tasks, and bugs linked to a milestone. Bugs use entityType task. Requires pm:write. Via call_hub_tool on ChatGPT.',
+      'Replace epics, stories, tasks, and bugs linked to a milestone. Bugs use entityType task. An archived milestone is rejected until it is unarchived, and nothing is written. Recompute skips an archived milestone and never overwrites a cancelled status. Requires pm:write. Via call_hub_tool on ChatGPT.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -1800,14 +1800,14 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'get_platform_status',
-    description: 'Redacted platform health. Requires monitoring:read.',
+    description: 'Redacted platform health, including audit retention and log size. Requires monitoring:read.',
     scope: 'monitoring:read',
     body: { type: 'object', properties: {} },
   },
   {
     name: 'update_project_epic',
     description:
-      'Update an epic. startDate and endDate are writable only when that side is not derived from included children. A derived side is read-only and a write is rejected. targetPercent is the planned percent and is read-only. Requires pm:write.',
+      'Update an epic. startDate and endDate are writable only when that side is not derived from included children. A derived side is read-only and a write is rejected. targetPercent is the planned percent and is read-only. Recompute skips an archived epic and never overwrites a cancelled status. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     output: wrappedResult('epic', parentRowResult),
@@ -1829,7 +1829,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_user_story',
     description:
-      'Update a user story. startDate and endDate are writable only when that side is not derived from included children. A derived side is read-only and a write is rejected. targetPercent is the planned percent and is read-only. Requires pm:write.',
+      'Update a user story. startDate and endDate are writable only when that side is not derived from included children. A derived side is read-only and a write is rejected. targetPercent is the planned percent and is read-only. Recompute skips an archived story and never overwrites a cancelled status. Moving the story onto an archived epic is rejected. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     output: wrappedResult('userStory', parentRowResult),
@@ -3068,6 +3068,44 @@ const EXTRA_HUB_TOOLS: Array<{
         },
         aiCostNotes: { type: 'string', maxLength: 500, nullable: true },
         aiBudgetAllocation: money,
+      },
+    },
+  },
+  {
+    name: 'get_ai_usage_theoretical_cost',
+    description:
+      'Per-month theoretical API cost. linked is allocated to a project task. unassigned is workspace-level imported usage with no task. Amounts are in the workspace reporting currency. Unpriced models are listed instead of being treated as a silent zero. from and to accept YYYY-MM or YYYY-MM-DD. Requires pm:read. Via call_hub_tool.',
+    scope: 'pm:read',
+    write: false,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId'],
+      properties: {
+        workspaceId: uuidProp('Workspace id. Required.'),
+        from: {
+          type: 'string',
+          description: 'Optional range start, YYYY-MM or YYYY-MM-DD.',
+        },
+        to: {
+          type: 'string',
+          description: 'Optional range end, YYYY-MM or YYYY-MM-DD.',
+        },
+      },
+    },
+  },
+  {
+    name: 'list_ai_model_prices',
+    description:
+      'List default and workspace AI model prices (input, cache write, cache read, output per 1,000,000 tokens). A workspace row overrides a matching default. Requires pm:read. Via call_hub_tool.',
+    scope: 'pm:read',
+    write: false,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId'],
+      properties: {
+        workspaceId: uuidProp('Workspace id. Required.'),
       },
     },
   },

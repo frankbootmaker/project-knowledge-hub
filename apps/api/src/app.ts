@@ -39,6 +39,7 @@ import { registerOauthMcpRoutes } from './routes/oauth-mcp.js';
 import { registerMcpSetupRoutes } from './routes/mcp-setup.js';
 import { registerMembershipRoutes } from './routes/memberships.js';
 import { registerMonitoringRoutes } from './routes/monitoring.js';
+import { registerOpsAlertSettingsRoutes } from './routes/ops-alert-settings.js';
 import { registerPlatformStatusRoutes } from './routes/platform-status.js';
 import { registerOrganizationRoutes } from './routes/organizations.js';
 import { registerProjectRoutes } from './routes/projects.js';
@@ -273,6 +274,7 @@ export async function buildApp(deps: ApiDependencies): Promise<FastifyInstance> 
   await registerDocFactoryAdminRoutes(app);
   await registerDocFactoryRoutes(app);
   await registerMonitoringRoutes(app);
+  await registerOpsAlertSettingsRoutes(app);
   await registerPlatformStatusRoutes(app);
   await registerMembershipRoutes(app);
   await registerApiClientRoutes(app);

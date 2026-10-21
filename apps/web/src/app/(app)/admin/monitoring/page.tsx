@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import { MonitoringDashboard } from '../../../../components/admin/MonitoringDashboard';
+import type { OpsAlertAdminView } from '../../../../components/admin/AlertsSettingsAdmin';
 import type { MonitoringPayload } from '../../../../components/admin/monitoring-types';
 import { apiFetch } from '../../../../lib/session';
 
@@ -95,7 +96,13 @@ export default async function AdminMonitoringPage({
   const range =
     rawRange === '1h' || rawRange === '7d' || rawRange === '24h' ? rawRange : '24h';
 
-  const response = await apiFetch(`/api/v1/admin/monitoring?range=${range}`);
+  const [response, alertResponse] = await Promise.all([
+    apiFetch(`/api/v1/admin/monitoring?range=${range}`),
+    apiFetch('/api/v1/admin/monitoring/alerts'),
+  ]);
+  const initialAlerts = alertResponse.ok
+    ? ((await alertResponse.json()) as { settings: OpsAlertAdminView }).settings
+    : null;
   let payload: MonitoringPayload;
   if (response.ok) {
     payload = (await response.json()) as MonitoringPayload;
@@ -117,6 +124,7 @@ export default async function AdminMonitoringPage({
       description={t('monitoringBlurb')}
       initial={payload}
       initialRange={range}
+      initialAlerts={initialAlerts}
     />
   );
 }

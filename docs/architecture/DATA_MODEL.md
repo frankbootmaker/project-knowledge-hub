@@ -41,7 +41,11 @@ Unique: `email`
 
 `key` (PK), `value` (JSON text), `updated_by`, `updated_at`
 
-Platform-wide overrides that win over env at request time. Known keys include `mail_config`, `oidc_config`, blob/MCP public URL, and related admin settings. **Admin → SSO** writes `oidc_config` (issuer, client, secret, JIT, enabled); GET APIs never return secrets.
+Platform-wide overrides that win over env at request time. Known keys include `mail_config`, `oidc_config`, `ops_alert_settings` (PRO-T-116 alert recipients, thresholds, webhook mode, audit retention days), blob/MCP public URL, and related admin settings. **Admin → SSO** writes `oidc_config` (issuer, client, secret, JIT, enabled); GET APIs never return secrets. Absent `ops_alert_settings` keeps the previous behaviour: every active system admin receives every alert.
+
+### `audit_retention_state`
+
+Singleton (`id = default`): `last_purged_at`, `rows_purged`, `retention_days`, `cutoff`, `updated_at`. The worker writes it after each audit purge (migration `0076`). Admin → Monitoring and `get_platform_status` read it next to `count(*)` and `pg_total_relation_size('audit_events')`.
 
 ### `memberships`
 

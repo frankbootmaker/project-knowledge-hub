@@ -37,6 +37,16 @@ describe('parent status shown in delivery views', () => {
       ]),
     ).toBe('done');
     expect(displayedMilestoneStatus('active', [])).toBe('active');
+    expect(
+      displayedMilestoneStatus('cancelled', [
+        { entityType: 'task', status: 'in_progress', completionPercent: 50 },
+      ]),
+    ).toBe('cancelled');
+    expect(
+      parentStatusFromChildren('cancelled', [
+        { status: 'in_progress', completionPercent: 50 },
+      ]),
+    ).toBe('cancelled');
   });
 });
 

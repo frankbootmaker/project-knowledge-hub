@@ -21,6 +21,8 @@ describe('resolveAiCostViewWindow', () => {
     expect(resolveAiCostViewWindow({}, NOW)).toEqual({
       from: '2025-11',
       to: '2026-10',
+      fromDay: '2025-11-01',
+      toDay: '2026-10-31',
       range: 'last12',
     });
     expect(resolveAiCostViewWindow({ range: 'last12' }, NOW).range).toBe('last12');
@@ -30,6 +32,8 @@ describe('resolveAiCostViewWindow', () => {
     expect(resolveAiCostViewWindow({ range: 'year' }, NOW)).toEqual({
       from: '2026-01',
       to: '2026-12',
+      fromDay: '2026-01-01',
+      toDay: '2026-12-31',
       range: 'year',
     });
     expect(
@@ -37,10 +41,71 @@ describe('resolveAiCostViewWindow', () => {
         { range: 'all', knownPeriods: ['2026-08', '2026-12', '2026-10'] },
         NOW,
       ),
-    ).toEqual({ from: '2026-08', to: '2026-12', range: 'all' });
+    ).toEqual({
+      from: '2026-08',
+      to: '2026-12',
+      fromDay: '2026-08-01',
+      toDay: '2026-12-31',
+      range: 'all',
+    });
     expect(resolveAiCostViewWindow({ from: '2026-09', to: '2026-10' }, NOW)).toEqual({
       from: '2026-09',
       to: '2026-10',
+      fromDay: '2026-09-01',
+      toDay: '2026-10-31',
+      range: 'custom',
+    });
+  });
+
+  it('sets this quarter and this month, including timezone boundaries', () => {
+    expect(resolveAiCostViewWindow({ range: 'quarter' }, NOW)).toMatchObject({
+      from: '2026-10',
+      to: '2026-12',
+      fromDay: '2026-10-01',
+      toDay: '2026-12-31',
+      range: 'quarter',
+    });
+    expect(resolveAiCostViewWindow({ range: 'month' }, NOW)).toMatchObject({
+      from: '2026-10',
+      to: '2026-10',
+      fromDay: '2026-10-01',
+      toDay: '2026-10-31',
+      range: 'month',
+    });
+    const yearEdges = [
+      new Date('2026-01-01T00:30:00.000Z'),
+      new Date('2026-03-31T12:00:00.000Z'),
+      new Date('2026-04-01T00:30:00.000Z'),
+      new Date('2026-12-31T23:30:00.000Z'),
+    ];
+    expect(
+      yearEdges.map((now) => resolveAiCostViewWindow({ range: 'quarter', timeZone: 'UTC' }, now).from),
+    ).toEqual(['2026-01', '2026-01', '2026-04', '2026-10']);
+    const beforeAprilInBudapest = new Date('2026-03-31T21:30:00.000Z');
+    const aprilInBudapest = new Date('2026-03-31T22:30:00.000Z');
+    expect(
+      resolveAiCostViewWindow(
+        { range: 'quarter', timeZone: 'Europe/Budapest' },
+        beforeAprilInBudapest,
+      ),
+    ).toMatchObject({ from: '2026-01', to: '2026-03', range: 'quarter' });
+    expect(
+      resolveAiCostViewWindow(
+        { range: 'quarter', timeZone: 'Europe/Budapest' },
+        aprilInBudapest,
+      ),
+    ).toMatchObject({ from: '2026-04', to: '2026-06', range: 'quarter' });
+    expect(
+      resolveAiCostViewWindow(
+        { range: 'month', timeZone: 'Europe/Budapest' },
+        new Date('2026-10-31T23:30:00.000Z'),
+      ),
+    ).toMatchObject({ from: '2026-11', to: '2026-11', fromDay: '2026-11-01', toDay: '2026-11-30' });
+    expect(resolveAiCostViewWindow({ from: '2026-10-19', to: '2026-10-19' }, NOW)).toMatchObject({
+      from: '2026-10',
+      to: '2026-10',
+      fromDay: '2026-10-19',
+      toDay: '2026-10-19',
       range: 'custom',
     });
   });

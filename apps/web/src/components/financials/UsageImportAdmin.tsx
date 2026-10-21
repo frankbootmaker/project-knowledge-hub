@@ -4,6 +4,8 @@ import { Fragment, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Button, ErrorText, Field, FilePicker, useToast } from '../ui';
+import { ModelPriceAdmin } from './ModelPriceAdmin';
+import { formatMoney } from '../../lib/project-currency';
 
 export type UsageImportSummary = {
   dateFrom: string | null;
@@ -54,6 +56,14 @@ export type UsagePreview = {
     tokensTotal: number;
   };
   errors: Array<{ rowNumber: number; message: string }>;
+  theoretical?: Array<{
+    currency: string;
+    linked: number;
+    unassigned: number;
+    total: number;
+    paid: number;
+  }>;
+  unpricedModels?: Array<{ model: string; rowCount: number }>;
 };
 
 export type UnassignedUsageGroup = {
@@ -72,12 +82,16 @@ export function UsageImportAdmin({
   imports,
   unassignedTotal,
   unassigned,
+  unassignedTheoretical = [],
+  unpricedModels = [],
 }: {
   workspaceId: string;
   canImport: boolean;
   imports: UsageImportRow[];
   unassignedTotal: number;
   unassigned: UnassignedUsageGroup[];
+  unassignedTheoretical?: Array<{ currency: string; amount: number }>;
+  unpricedModels?: Array<{ model: string; rowCount: number }>;
 }) {
   const t = useTranslations('financials');
   const locale = useLocale();
@@ -105,19 +119,6 @@ export function UsageImportAdmin({
     const end = to ? usageDate(to) : start;
     return start === end ? start : `${start} – ${end}`;
   };
-
-  async function readCsv(file: File | null) {
-    setPreview(null);
-    setError(null);
-    if (!file) {
-      setFileName(null);
-      setCsv(null);
-      return;
-    }
-    setFileName(file.name);
-    const text = await file.text();
-    setCsv(text);
-  }
 
   async function postCsv(path: string) {
     const response = await fetch(path, {
@@ -156,7 +157,7 @@ export function UsageImportAdmin({
   }
 
   async function onImport() {
-    if (!csv || !preview) return;
+    if (csv === null) return;
     setPending(true);
     setError(null);
     try {
@@ -188,8 +189,16 @@ export function UsageImportAdmin({
                   accept=".csv,text/csv"
                   fileName={fileName}
                   disabled={pending}
-                  onFileChange={(file) => {
-                    void readCsv(file);
+                  onFileChange={(file, text) => {
+                    setPreview(null);
+                    setError(null);
+                    if (!file) {
+                      setFileName(null);
+                      setCsv(null);
+                      return;
+                    }
+                    setFileName(file.name);
+                    setCsv(text ?? '');
                   }}
                 />
               </Field>
@@ -197,14 +206,14 @@ export function UsageImportAdmin({
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={pending || !csv}
+                  disabled={pending || csv === null}
                   onClick={() => void onPreview()}
                 >
                   {t('usagePreview')}
                 </Button>
                 <Button
                   type="button"
-                  disabled={pending || !preview}
+                  disabled={pending || csv === null}
                   onClick={() => void onImport()}
                 >
                   {pending ? t('usageImporting') : t('usageConfirm')}
@@ -214,6 +223,7 @@ export function UsageImportAdmin({
           ) : (
             <p className="m-0 text-sm text-ink-muted">{t('usageAdminOnly')}</p>
           )}
+          {canImport ? <ModelPriceAdmin workspaceId={workspaceId} /> : null}
           {error ? <ErrorText>{error}</ErrorText> : null}
           {preview ? (
             <>
@@ -237,6 +247,19 @@ export function UsageImportAdmin({
                 {t('usageOutput')} {number(preview.totals.tokensOutput)},{' '}
                 {t('usageTotal')} {number(preview.totals.tokensTotal)}
               </p>
+              {preview.theoretical?.map((row) => (
+                <p key={row.currency} className="m-0 text-sm">
+                  {row.currency} · {t('usagePaid')}: {formatMoney(row.paid, row.currency, locale)} ·{' '}
+                  {t('usageTheoretical')}: {formatMoney(row.total, row.currency, locale)} ·{' '}
+                  {t('theoreticalLinked')}: {formatMoney(row.linked, row.currency, locale)} ·{' '}
+                  {t('theoreticalUnassigned')}: {formatMoney(row.unassigned, row.currency, locale)}
+                </p>
+              ))}
+              {preview.unpricedModels && preview.unpricedModels.length > 0 ? (
+                <p className="m-0 text-sm text-ink-muted">
+                  {t('unpricedModels')}: {preview.unpricedModels.map((row) => row.model).join(', ')}
+                </p>
+              ) : null}
               {preview.models.length > 0 ? (
                 <div className="kh-ops-table-wrap">
                   <table className="kh-ops-data-table">
@@ -340,6 +363,16 @@ export function UsageImportAdmin({
         </div>
         <div className="flex flex-col gap-3 p-4">
           <p className="m-0 text-sm text-ink-muted">{t('usageUnassignedHint')}</p>
+          {unassignedTheoretical.map((row) => (
+            <p key={row.currency} className="m-0 text-sm">
+              {t('theoreticalUnassigned')}: {formatMoney(row.amount, row.currency, locale)}
+            </p>
+          ))}
+          {unpricedModels.length > 0 ? (
+            <p className="m-0 text-sm text-ink-muted">
+              {t('unpricedModels')}: {unpricedModels.map((row) => row.model).join(', ')}
+            </p>
+          ) : null}
           {unassignedTotal === 0 ? (
             <p className="m-0 text-sm text-ink-muted">{t('usageUnassignedEmpty')}</p>
           ) : (

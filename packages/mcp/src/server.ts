@@ -694,6 +694,12 @@ export type McpToolHandlers = {
     to?: string;
     reportingCurrency?: string;
   }) => Promise<unknown>;
+  getAiUsageTheoreticalCost: (input: {
+    workspaceId: string;
+    from?: string;
+    to?: string;
+  }) => Promise<unknown>;
+  listAiModelPrices: (input: { workspaceId: string }) => Promise<unknown>;
   createAiBillingEntry: (input: {
     workspaceId: string;
     period?: string;
@@ -2164,7 +2170,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_platform_status',
-    'Redacted platform health snapshot (ready checks, backup ages, MCP error counts). Requires monitoring:read. No secrets or content.',
+    'Redacted platform health snapshot (ready checks, backup ages, MCP error counts, audit retention and log size). Requires monitoring:read. No secrets or content.',
     {},
     async () =>
       wrap('get_platform_status', 'monitoring:read', () =>
@@ -2316,7 +2322,7 @@ export function createKnowledgeHubMcpServer(
     'list_project_milestones',
     {
       description:
-        'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts of the note. Pass cursor from nextCursor until hasMore is false. Each row includes completionPercent (0 or 100 from linked items and predecessor dependencies: 100 only when every included item is done or 100 percent, cancelled items are left out, otherwise 0; no included items leaves it null). completion.done counts included linked items and predecessor dependencies that are done or 100 percent. completion.total is that included set, so a partial milestone can report done greater than 0 while completionPercent stays 0. Each row also includes linkedItems, plus mediaLinks and mediaLinkCount for the Media tab. Status follows those same links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. startDate and targetDate are the stored start and due date. They are writable and are not derived from linked items. targetPercent is null. A predecessor moves the due date. Duration is always 0. Requires pm:read.',
+        'List milestones for a project (Project Delivery). Pages at 25. Descriptions are excerpts of the note. Pass cursor from nextCursor until hasMore is false. Each row includes completionPercent (0 or 100 from linked items and predecessor dependencies: 100 only when every included item is done or 100 percent, cancelled items are left out, otherwise 0; no included items leaves it null). completion.done counts included linked items and predecessor dependencies that are done or 100 percent. completion.total is that included set, so a partial milestone can report done greater than 0 while completionPercent stays 0. Each row also includes linkedItems, plus mediaLinks and mediaLinkCount for the Media tab. Status follows those same links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. Recompute skips an archived milestone and never overwrites a cancelled status. startDate and targetDate are the stored start and due date. They are writable and are not derived from linked items. targetPercent is null. A predecessor moves the due date. Duration is always 0. Requires pm:read.',
       inputSchema: {
         projectId: z.string().uuid(),
         includeArchived: z.boolean().optional(),
@@ -2423,7 +2429,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_milestone',
     {
       description:
-        'Update a project milestone (live state). milestoneId may be UUID or human key (e.g. HL1-M-1). description is the note. targetDate is the due date. startDate is the stored start. Omitting either date leaves it unchanged. Dates are not derived from linked items. targetPercent is null. When included links remain, status is replaced by the status derived from those links. A milestone with no included links keeps the status you set. Requires pm:write.',
+        'Update a project milestone (live state). milestoneId may be UUID or human key (e.g. HL1-M-1). description is the note. targetDate is the due date. startDate is the stored start. Omitting either date leaves it unchanged. Dates are not derived from linked items. targetPercent is null. When included links remain, status is replaced by the status derived from those links. Recompute skips an archived milestone and never overwrites a cancelled status. A milestone with no included links keeps the status you set. Requires pm:write.',
       inputSchema: {
         milestoneId: entityRef,
         title: z.string().min(1).max(200).optional(),
@@ -2450,7 +2456,7 @@ export function createKnowledgeHubMcpServer(
     'get_project_milestone',
     {
       description:
-        'Get one milestone with its note (description), start date (startDate), due date (targetDate), completionPercent, and linkedItems (epics, user stories, tasks, and bugs). completionPercent is 100 only when every included linked item and every predecessor dependency is done or 100 percent. Cancelled items are left out. Anything else included is 0. No included items leaves it null. completion.done counts included linked items and predecessor dependencies that are done or 100 percent. completion.total is that same included set. completion.percent stays 0 or 100. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. milestoneId may be a UUID or human key (HL1-M-1). Includes mediaLinks and mediaLinkCount. Requires pm:read.',
+        'Get one milestone with its note (description), start date (startDate), due date (targetDate), completionPercent, and linkedItems (epics, user stories, tasks, and bugs). completionPercent is 100 only when every included linked item and every predecessor dependency is done or 100 percent. Cancelled items are left out. Anything else included is 0. No included items leaves it null. completion.done counts included linked items and predecessor dependencies that are done or 100 percent. completion.total is that same included set. completion.percent stays 0 or 100. Status follows those links: all complete is done, a non-done blocked link is blocked, completion above 0 or any started link is in progress, and nothing started is planned. No included links keeps the stored status. Recompute skips an archived milestone and never overwrites a cancelled status. startDate and targetDate are stored and writable, not derived from linked items. targetPercent is null. milestoneId may be a UUID or human key (HL1-M-1). Includes mediaLinks and mediaLinkCount. Requires pm:read.',
       inputSchema: { milestoneId: entityRef },
       outputSchema: { milestone: milestoneRowOutput },
     },
@@ -2466,7 +2472,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'set_project_milestone_item_links',
-    'Replace the epics, user stories, tasks, and bugs linked to a milestone. Bugs use entityType task and a B key. Items must belong to the milestone project. The returned milestone includes completionPercent, linkedItems, and the status derived from those links. Requires pm:write.',
+    'Replace the epics, user stories, tasks, and bugs linked to a milestone. Bugs use entityType task and a B key. Items must belong to the milestone project. An archived milestone is rejected until it is unarchived, and nothing is written. Recompute skips an archived milestone and never overwrites a cancelled status. The returned milestone includes completionPercent, linkedItems, and the status derived from those links. Requires pm:write.',
     {
       milestoneId: entityRef,
       items: z
@@ -2625,7 +2631,7 @@ export function createKnowledgeHubMcpServer(
     'create_project_task',
     {
       description:
-        'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. When both startDate and dueDate are set without duration, duration is the gap and startDate must be on or before dueDate. Bugs use the same start date and duration. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
+        'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. When both startDate and dueDate are set without duration, duration is the gap and startDate must be on or before dueDate. Bugs use the same start date and duration. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
       inputSchema: {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -2707,7 +2713,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_task',
     {
       description:
-        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentId (max 80, null clears it) links imported Cursor usage with that id onto this task; one task per id. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Parent start and end follow included children. Requires pm:write.',
+        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentId (max 80, null clears it) links imported Cursor usage with that id onto this task; one task per id. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Recompute skips an archived story, epic, or milestone and never overwrites a cancelled status. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Parent start and end follow included children. Requires pm:write.',
       inputSchema: {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -2920,12 +2926,14 @@ export function createKnowledgeHubMcpServer(
 
   const parentDateNote =
     'targetPercent is the planned percent from start through end (0 on the start day, 100 on the end day, null when the window is missing) and is read-only. startDateDerived and endDateDerived are true when that side comes from included children. A write to a derived side is rejected. A side with no child date stays the stored date and is writable.';
+  const parentFreezeNote =
+    'Recompute skips an archived story, epic, or milestone and never overwrites a cancelled status. Linking an item to an archived milestone, story, epic, or sprint is rejected until that item is unarchived.';
 
   server.registerTool(
     'list_project_epics',
     {
       description:
-        `List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each epic includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Status is derived from those children: all done is done, a non-done blocked child is blocked, completion above 0 or any started child is in progress, and nothing started is planned. Cancelled children are left out. An epic with no included children keeps its stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. ${parentDateNote} Each epic includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.`,
+        `List epics for a project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each epic includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Status is derived from those children: all done is done, a non-done blocked child is blocked, completion above 0 or any started child is in progress, and nothing started is planned. Cancelled children are left out. An epic with no included children keeps its stored status. ${parentFreezeNote} startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. ${parentDateNote} Each epic includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.`,
       inputSchema: {
         projectId: z.string().uuid(),
         includeArchived: z.boolean().optional(),
@@ -2973,7 +2981,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_epic',
     {
       description:
-        `Update a project epic. When the epic has included child tasks or bugs, status is replaced by the derived status (done, blocked, in progress, or planned). An epic with no included children keeps the status you set. ${parentDateNote} Requires pm:write.`,
+        `Update a project epic. When the epic has included child tasks or bugs, status is replaced by the derived status (done, blocked, in progress, or planned). An epic with no included children keeps the status you set. ${parentFreezeNote} ${parentDateNote} Requires pm:write.`,
       inputSchema: {
         epicId: entityRef,
         title: z.string().min(1).max(200).optional(),
@@ -3000,7 +3008,7 @@ export function createKnowledgeHubMcpServer(
     'list_project_user_stories',
     {
       description:
-        `List user stories for a project (optional epic filter). epicId must belong to the given project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each story includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Status is derived from those children: all done is done, a non-done blocked child is blocked, completion above 0 or any started child is in progress, and nothing started is planned. Cancelled children are left out. A story with no included children keeps its stored status. startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. ${parentDateNote} Each story includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.`,
+        `List user stories for a project (optional epic filter). epicId must belong to the given project. Pages at 25. Descriptions are excerpts. Pass cursor from nextCursor until hasMore is false. Each story includes completionPercent: done is 100, cancelled is 0, otherwise the average of non-cancelled child tasks and bugs, or null when none remain. Status is derived from those children: all done is done, a non-done blocked child is blocked, completion above 0 or any started child is in progress, and nothing started is planned. Cancelled children are left out. A story with no included children keeps its stored status. ${parentFreezeNote} startDate is the earliest child start and endDate the latest child end; a side with no child date keeps the stored date. ${parentDateNote} Each story includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.`,
       inputSchema: {
         projectId: z.string().uuid(),
         epicId: entityRef.optional(),
@@ -3023,7 +3031,7 @@ export function createKnowledgeHubMcpServer(
     'create_project_user_story',
     {
       description:
-        `Create a user story under an epic. epicId must belong to the given project. startDate and endDate are writable until included children supply that side. ${parentDateNote} Requires pm:write.`,
+        `Create a user story under an epic. epicId must belong to the given project and must not be archived. startDate and endDate are writable until included children supply that side. ${parentFreezeNote} ${parentDateNote} Requires pm:write.`,
       inputSchema: {
         projectId: z.string().uuid(),
         epicId: entityRef,
@@ -3050,7 +3058,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_user_story',
     {
       description:
-        `Update a user story. epicId must belong to the story's project. Moving the story recomputes the old and new epic. When the story has included child tasks or bugs, status is replaced by the derived status. A story with no included children keeps the status you set. ${parentDateNote} Requires pm:write.`,
+        `Update a user story. epicId must belong to the story's project. Moving the story onto an archived epic is rejected. Moving the story recomputes the old and new epic. When the story has included child tasks or bugs, status is replaced by the derived status. A story with no included children keeps the status you set. ${parentFreezeNote} ${parentDateNote} Requires pm:write.`,
       inputSchema: {
         storyId: entityRef,
         title: z.string().min(1).max(200).optional(),
@@ -3339,6 +3347,30 @@ export function createKnowledgeHubMcpServer(
   const listBillingOutput = { entries: z.array(billingEntryOutput()) };
   const createBillingOutput = { entry: billingEntryOutput() };
   const updateBillingOutput = { entry: billingEntryOutput() };
+
+  server.tool(
+    'get_ai_usage_theoretical_cost',
+    'Per-month theoretical API cost for imported usage and task usage that was not replaced by an import. linked is allocated to a project task. unassigned is workspace-level. Amounts are in the workspace reporting currency. Unpriced models are listed and are not treated as zero without a flag. from and to are YYYY-MM or YYYY-MM-DD. Requires pm:read. Via call_hub_tool.',
+    {
+      workspaceId: z.string().uuid(),
+      from: z.string().optional(),
+      to: z.string().optional(),
+    },
+    async (args) =>
+      wrap('get_ai_usage_theoretical_cost', 'pm:read', () =>
+        handlers.getAiUsageTheoreticalCost(args),
+      )(),
+  );
+
+  server.tool(
+    'list_ai_model_prices',
+    'List default and workspace AI model prices used for theoretical API cost. Rates are per 1,000,000 tokens for input, cache write, cache read, and output. A workspace row overrides a default with the same pattern. Requires pm:read. Via call_hub_tool.',
+    {
+      workspaceId: z.string().uuid(),
+    },
+    async (args) =>
+      wrap('list_ai_model_prices', 'pm:read', () => handlers.listAiModelPrices(args))(),
+  );
 
   server.tool(
     'get_platform_ai_cost',

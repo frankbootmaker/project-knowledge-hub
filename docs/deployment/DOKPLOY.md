@@ -79,8 +79,10 @@ docker compose -f compose.yaml -f compose.production.yaml --profile full build
 | `NODE_ENV` | runtime | Always `production` in containers |
 | `MCP_PUBLIC_URL` | runtime | Optional; prefer `https://<domain>/mcp` |
 | `EMBEDDING_PROVIDER` | runtime | Default `disabled` (FTS only) |
-| `MAIL_DRIVER` | runtime | `console` (default), `smtp`, or `resend` (Resend / Freeresend-compatible) |
-| `SMTP_*` / `RESEND_API_KEY` / `RESEND_BASE_URL` / `MCP_PUBLIC_URL` | runtime | Set only when used — omit empty values. `RESEND_BASE_URL` optional (default `https://api.resend.com`) |
+| `MAIL_DRIVER` | runtime | `console` (default), `smtp`, or `resend` (Resend / Freeresend-compatible). Passed to api and worker. Admin → Email overrides it. |
+| `MAIL_FROM` / `SMTP_*` / `RESEND_API_KEY` / `RESEND_BASE_URL` | runtime | Passed through `compose.dokploy.yaml` (`x-app-env`) to api and worker. Empty SMTP/Resend values are omitted by the app. Admin → Email overrides them. `RESEND_BASE_URL` optional (default `https://api.resend.com`) |
+| `ALERT_WEBHOOK_URL` / `ALERT_ERROR_SPIKE_*` / `ALERT_DISK_FREE_RATIO_MIN` / `ALERT_DISK_FREE_GB_MIN` / `BACKUP_STALE_AFTER_HOURS` / `BACKUP_STALE_ALERT_INTERVAL_MS` / `BACKUP_OFFSITE_STALE_AFTER_HOURS` | runtime | Passed to api and worker. `disk.low` fires when free space is under the ratio **or** under `ALERT_DISK_FREE_GB_MIN` GB (1024³, default 10; `0` disables that check). Admin → Monitoring overrides recipients, thresholds, webhook, and these hours on the next poll. Clear the override to use env again. |
+| `AUDIT_RETENTION_DAYS` / `AUDIT_RETENTION_INTERVAL_MS` | runtime | Passed to api and worker. Default 90 days / 24 h. `AUDIT_RETENTION_DAYS=0` disables purge. Admin → Monitoring overrides the day count without a redeploy; the interval stays this env value. |
 | `BOOTSTRAP_ADMIN_*` | migrate one-shot (seed step) | Optional first admin |
 | `MARKITDOWN_URL` | runtime | Default `http://nd-markitdown:8080` (document/image import) |
 | `VISION_LLM_*` | runtime + `nd-markitdown` | Optional env fallback for vision OCR / AI translation when Admin → AI providers has no binding for that service |

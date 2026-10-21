@@ -1,7 +1,8 @@
-import { formatAiBillingMonthLabel } from '@project-knowledge-hub/domain';
+import { formatAiBillingMonthLabel, formatAiCostDayLabel } from '@project-knowledge-hub/domain';
 
-/** Locale month label shared by the chart, tooltips, and monthly overview. */
+/** Locale label for a month (YYYY-MM) or a day / week start (YYYY-MM-DD). */
 export function formatAiBillingMonth(period: string, locale: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(period)) return formatAiCostDayLabel(period, locale);
   return formatAiBillingMonthLabel(period, locale);
 }
 

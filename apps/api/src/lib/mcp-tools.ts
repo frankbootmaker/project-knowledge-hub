@@ -252,8 +252,11 @@ import {
   getAiBillingEntry,
   listAiBillingEntries,
   loadPlatformAiCost,
+  loadWorkspaceAiCostOverview,
   updateAiBillingEntry,
 } from './ai-billing.js';
+import { presentWorkspaceAiCost } from './ai-cost-window.js';
+import { listAiModelPrices } from './ai-usage-pricing.js';
 import {
   importAiUsageCsv as commitAiUsageCsv,
   listAiUsageImportSummaries,
@@ -4902,6 +4905,31 @@ export function createMcpToolHandlers(
         totals: report.totals,
         entries: report.entries,
       };
+    },
+
+    async getAiUsageTheoreticalCost(input) {
+      assertWorkspaceAllowed(client, input.workspaceId);
+      const overview = await loadWorkspaceAiCostOverview(app.database, input.workspaceId);
+      const presented = presentWorkspaceAiCost(overview, {
+        ...(input.from ? { from: input.from } : {}),
+        ...(input.to ? { to: input.to } : {}),
+      });
+      return {
+        workspaceId: input.workspaceId,
+        reportingCurrency: presented.reportingCurrency,
+        from: presented.from,
+        to: presented.to,
+        fromDay: presented.fromDay,
+        toDay: presented.toDay,
+        months: presented.theoreticalMonths,
+        theoretical: presented.theoretical,
+        unpricedModels: presented.unpricedModels,
+      };
+    },
+
+    async listAiModelPrices(input) {
+      assertWorkspaceAllowed(client, input.workspaceId);
+      return { prices: await listAiModelPrices(app.database, input.workspaceId) };
     },
 
     async createAiBillingEntry(input) {

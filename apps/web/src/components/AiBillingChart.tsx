@@ -138,6 +138,7 @@ export function AiBillingChart({
   labels,
   ratioDigits = 3,
   showValueLabels,
+  onActivate,
 }: {
   periods: AiBillingPeriodPoint[];
   ariaLabel: string;
@@ -146,6 +147,7 @@ export function AiBillingChart({
   labels: AiBillingChartLabels;
   ratioDigits?: number;
   showValueLabels?: boolean;
+  onActivate?: (period: string) => void;
 }) {
   const tipId = useId();
   const [active, setActive] = useState<number | null>(null);
@@ -359,6 +361,14 @@ export function AiBillingChart({
                 onMouseLeave={() => setActive((current) => (current === index ? null : current))}
                 onFocus={() => setActive(index)}
                 onBlur={() => setActive((current) => (current === index ? null : current))}
+                onClick={() => onActivate?.(row.period)}
+                onKeyDown={(event) => {
+                  if (!onActivate) return;
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onActivate(row.period);
+                  }
+                }}
               />
             </g>
           );

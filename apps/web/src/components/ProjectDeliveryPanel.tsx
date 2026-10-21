@@ -38,6 +38,7 @@ import {
   plannedTargetPercent,
   taskDeliveryCompletion,
 } from '../lib/delivery-completion';
+import { archivedParentLinkTarget } from '../lib/archived-parent-link';
 import {
   coerceProjectCalendar,
   evaluateDeliveryScheduleSlips,
@@ -85,6 +86,7 @@ type Milestone = {
   baselineFinishDate?: string | null;
   sortOrder: number;
   humanKey?: string | null;
+  archivedAt?: string | null;
   completionPercent?: number | null;
   completion?: { percent: number; done: number; total: number } | null;
   linkedItems?: MilestoneLink[];
@@ -102,6 +104,7 @@ type Epic = {
   baselineFinishDate?: string | null;
   sortOrder: number;
   humanKey?: string | null;
+  archivedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -117,6 +120,7 @@ type UserStory = {
   baselineFinishDate?: string | null;
   sortOrder: number;
   humanKey?: string | null;
+  archivedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -458,35 +462,43 @@ export function ProjectDeliveryPanel({
     }
     const derivedStories = stories.map((story) => {
       const children = tasksByStory.get(story.id) ?? [];
-      const dates = derivedParentDates(
-        { start: story.startDate, end: story.endDate },
-        children.map((task) => ({
-          status: task.status,
-          start: task.startDate ?? null,
-          end: task.dueDate,
-        })),
-      );
+      const frozen = Boolean(story.archivedAt);
+      const dates = frozen
+        ? { start: story.startDate, end: story.endDate }
+        : derivedParentDates(
+            { start: story.startDate, end: story.endDate },
+            children.map((task) => ({
+              status: task.status,
+              start: task.startDate ?? null,
+              end: task.dueDate,
+            })),
+          );
       return {
         ...story,
-        status: parentStatusFromChildren(story.status, children),
+        status: frozen ? story.status : parentStatusFromChildren(story.status, children),
         startDate: dates.start,
         endDate: dates.end,
       };
     });
     const derivedEpics = epics.map((epic) => {
-      const dates = derivedParentDates(
-        { start: epic.startDate, end: epic.endDate },
-        derivedStories
-          .filter((story) => story.epicId === epic.id)
-          .map((story) => ({
-            status: story.status,
-            start: story.startDate,
-            end: story.endDate,
-          })),
-      );
+      const frozen = Boolean(epic.archivedAt);
+      const dates = frozen
+        ? { start: epic.startDate, end: epic.endDate }
+        : derivedParentDates(
+            { start: epic.startDate, end: epic.endDate },
+            derivedStories
+              .filter((story) => story.epicId === epic.id)
+              .map((story) => ({
+                status: story.status,
+                start: story.startDate,
+                end: story.endDate,
+              })),
+          );
       return {
         ...epic,
-        status: parentStatusFromChildren(epic.status, tasksByEpic.get(epic.id) ?? []),
+        status: frozen
+          ? epic.status
+          : parentStatusFromChildren(epic.status, tasksByEpic.get(epic.id) ?? []),
         startDate: dates.start,
         endDate: dates.end,
       };
@@ -496,7 +508,9 @@ export function ProjectDeliveryPanel({
       stories: derivedStories,
       milestones: milestones.map((milestone) => ({
         ...milestone,
-        status: displayedMilestoneStatus(milestone.status, milestone.linkedItems ?? []),
+        status: milestone.archivedAt
+          ? milestone.status
+          : displayedMilestoneStatus(milestone.status, milestone.linkedItems ?? []),
       })),
     };
   }, [epics, milestones, stories, tasks]);
@@ -831,6 +845,33 @@ export function ProjectDeliveryPanel({
   async function submitCreate() {
     if (!title.trim()) return;
     if (createKind === 'story' && !storyEpicId) return;
+    if (createKind === 'story') {
+      const blocked = archivedParentLinkTarget({ nextId: storyEpicId, parents: epics });
+      if (blocked) {
+        setError(t('archivedParentLink', { kind: t('archivedKindEpic'), key: blocked.key }));
+        return;
+      }
+    }
+    if (createKind === 'task' || createKind === 'bug') {
+      const storyBlocked = archivedParentLinkTarget({
+        nextId: taskStoryId,
+        parents: stories,
+      });
+      const milestoneBlocked = archivedParentLinkTarget({
+        nextId: taskMilestoneId,
+        parents: milestones,
+      });
+      const blocked = storyBlocked ?? milestoneBlocked;
+      if (blocked) {
+        setError(
+          t('archivedParentLink', {
+            kind: storyBlocked ? t('archivedKindStory') : t('archivedKindMilestone'),
+            key: blocked.key,
+          }),
+        );
+        return;
+      }
+    }
     setPending(true);
     setError(null);
     try {

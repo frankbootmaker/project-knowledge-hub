@@ -1,13 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
+import { addCalendarDays, lastDayOfMonth } from '@project-knowledge-hub/domain';
 import { formatAiBillingMonth, formatServiceDate } from '../../lib/ai-billing-month';
 import { formatMoney } from '../../lib/project-currency';
 import { AiBillingChart, AiBillingChartLegend } from '../AiBillingChart';
 import { Button, ErrorText, Field, Input, Select, useToast } from '../ui';
-import { AiCostPeriodForm, type AiCostViewRange } from './AiCostPeriodForm';
+import {
+  AiCostGrainToggle,
+  AiCostPeriodForm,
+  type AiCostGrain,
+  type AiCostViewRange,
+} from './AiCostPeriodForm';
 
 type BillingType = 'subscription' | 'plan_change' | 'on_demand';
 
@@ -82,6 +89,19 @@ export type PlatformAiCostReport = {
   originalMonths?: PlatformAiMonth[];
   originalTotals?: PlatformAiTotal[];
   entries: PlatformAiEntry[];
+  fromDay?: string;
+  toDay?: string;
+  grain?: AiCostGrain;
+  grainAdjusted?: boolean;
+  chart?: PlatformAiTotal[];
+  originalChart?: PlatformAiTotal[];
+  theoretical?: Array<{
+    currency: string;
+    linked: number;
+    unassigned: number;
+    total: number;
+  }>;
+  unpricedModels?: Array<{ model: string }>;
 };
 
 export type PlatformAiCostFilters = {
@@ -118,7 +138,13 @@ export function PlatformAiCost({
 }) {
   const t = useTranslations('financials');
   const locale = useLocale();
+  const router = useRouter();
   const { pushToast } = useToast();
+  const [timeZone, setTimeZone] = useState('UTC');
+  useEffect(() => {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (zone) setTimeZone(zone);
+  }, []);
   const [showOriginal, setShowOriginal] = useState(false);
   const [fxDate, setFxDate] = useState('');
   const [fxBase, setFxBase] = useState('EUR');
@@ -143,6 +169,44 @@ export function PlatformAiCost({
   const totals = showOriginal
     ? sourceTotals.filter((row) => row.currency === activeCurrency)
     : sourceTotals;
+  const sourceChart = showOriginal
+    ? (report.originalChart ?? sourceTotals)
+    : (report.chart ?? sourceTotals);
+  const chartRows = showOriginal
+    ? sourceChart.filter((row) => row.currency === activeCurrency)
+    : sourceChart;
+  const grain = report.grain ?? 'month';
+  const grainPreserve: Record<string, string> = {
+    tz: timeZone,
+    workspaceId: filters.workspaceId,
+    provider: filters.provider,
+    type: filters.type,
+    period: filters.period,
+  };
+  if ((report.range ?? 'last12') !== 'custom' && report.range) grainPreserve.range = report.range;
+  else {
+    if (report.fromDay) grainPreserve.from = report.fromDay;
+    if (report.toDay) grainPreserve.to = report.toDay;
+  }
+  function openBucket(period: string) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(grainPreserve)) {
+      if (value && key !== 'range' && key !== 'from' && key !== 'to') params.set(key, value);
+    }
+    params.set('tz', timeZone);
+    if (/^\d{4}-\d{2}$/.test(period)) {
+      params.set('from', `${period}-01`);
+      params.set('to', lastDayOfMonth(period));
+    } else if (grain === 'week') {
+      params.set('from', period);
+      params.set('to', addCalendarDays(period, 6));
+    } else {
+      params.set('from', period);
+      params.set('to', period);
+    }
+    params.set('grain', 'day');
+    router.push(`/admin/financials?${params.toString()}`);
+  }
   const entries = report.entries;
 
   async function saveManualRate() {
@@ -236,12 +300,16 @@ export function PlatformAiCost({
         action="/admin/financials"
         from={report.from}
         to={report.to}
+        fromDay={report.fromDay}
+        toDay={report.toDay}
         range={report.range ?? 'last12'}
         preserve={{
           workspaceId: filters.workspaceId,
           provider: filters.provider,
           type: filters.type,
           period: filters.period,
+          grain,
+          tz: timeZone,
         }}
       />
 
@@ -337,21 +405,34 @@ export function PlatformAiCost({
       <section className="kh-ops-panel">
         <div className="kh-ops-panel-head">
           <h2 className="kh-ops-panel-title">{t('chartTitle')}</h2>
+          <AiCostGrainToggle
+            action="/admin/financials"
+            grain={grain}
+            adjusted={report.grainAdjusted}
+            preserve={grainPreserve}
+          />
         </div>
         <div className="kh-ops-chart-wrap">
           <AiBillingChartLegend
-            periods={totals.map((row) => ({ ...row, legacyToken: 0 }))}
+            periods={chartRows.map((row) => ({ ...row, legacyToken: 0 }))}
             labels={chartLabels}
           />
-          {totals.length === 0 ? (
+          {report.theoretical?.map((row) => (
+            <p key={row.currency} className="m-0 px-3 text-[13px] text-ink-muted">
+              {row.currency} · {t('theoreticalLinked')}: {formatMoney(row.linked, row.currency, locale)}{' '}
+              · {t('theoreticalUnassigned')}: {formatMoney(row.unassigned, row.currency, locale)}
+            </p>
+          ))}
+          {chartRows.length === 0 ? (
             <p className="kh-ops-empty">{t('chartEmpty')}</p>
           ) : (
             <AiBillingChart
-              periods={totals.map((row) => ({ ...row, legacyToken: 0 }))}
+              periods={chartRows.map((row) => ({ ...row, legacyToken: 0 }))}
               ariaLabel={t('chartAria')}
               locale={locale}
               currency={chartCurrency}
               labels={chartLabels}
+              onActivate={openBucket}
             />
           )}
           {totals.some((row) => row.fxSource) ? (

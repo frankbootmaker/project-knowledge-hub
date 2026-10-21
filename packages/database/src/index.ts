@@ -22,6 +22,32 @@ export {
   syncScheduleSlipRisks,
   type ScheduleSlipSyncResult,
 } from './schedule-slip-sync.js';
+export {
+  OPS_ALERT_SETTINGS_KEY,
+  OPS_ALERT_TYPES,
+  clearStoredOpsAlertSettings,
+  configuredUserIds,
+  listActiveAdminRecipients,
+  listActiveUsersForAlerts,
+  listRecipientUsers,
+  loadEffectiveAlertSettings,
+  parseStoredOpsAlertSettings,
+  readAuditRetentionSnapshot,
+  readStoredOpsAlertSettings,
+  recipientsFromSpec,
+  recordAuditRetentionRun,
+  resolveEffectiveAlertSettings,
+  saveStoredOpsAlertSettings,
+  type AlertEnvSource,
+  type AlertRecipient,
+  type AlertUserOption,
+  type AuditRetentionSnapshot,
+  type EffectiveAlertSettings,
+  type OpsAlertType,
+  type RecipientSpec,
+  type StoredOpsAlertSettings,
+  type WebhookMode,
+} from './ops-alert-settings.js';
 
 export type Database = ReturnType<typeof createDatabase>;
 

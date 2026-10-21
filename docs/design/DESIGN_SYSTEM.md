@@ -203,7 +203,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `Switch` | On/off toggles |
 | `ToastProvider` / `useToast` | Global confirmations (`pushToast(message, tone?)`); mobile full-width bottom, desktop corner |
 | `Page`, `PageHeader`, `SectionHeader`, `ListCard` | Page layout. `PageHeader` is the Ops Console view-intro (eyebrow + condensed title + subtitle + actions). `ListCard` is a dense catalogue row inside `.kh-ops-panel` |
-| `FunctionHeader` | List/admin toolbar: search + filters + primary actions (`.kh-ops-toolbar`; stacks below `sm`) |
+| `FunctionHeader` | List/admin toolbar: search + filters + primary actions (`.kh-ops-toolbar`; stacks below `sm`, controls wrap). MCP API clients and OAuth grants use the Workspace & Projects header, plus scope or client, sort, result count, and Clear filters |
 | `OpsCountStrip` | Horizontal count strip for live totals (dashboard, workspace, git, imports, stakeholders) |
 | `AuthCard` | Bordered login/register/reset/confirm card with KH mark |
 
@@ -248,6 +248,16 @@ from client components. Tones: `success` (default), `danger`, `info`.
 ## Changelog
 
 Record durable UI / design-system changes here (newest first).
+
+### 2026-10-21
+
+* **MCP list filters (PRO-T-114)** — Admin MCP API clients and OAuth grants use `FunctionHeader`, the same toolbar as Workspace & Projects. API clients filter by search (name, client id, token prefix, acting user), status (active, pending approval, revoked, expired), and scope, and sort by created or last used. OAuth grants filter by search (client, host, client id, user), client (ChatGPT, Claude, or the host), and status (active, revoked, expired), and sort by last used or created. Expired is derived from `expiresAt` or `refreshExpiresAt`. Each list shows `{shown} of {total}` and a secondary Clear filters button. Empty copy differs for no rows and no matches. English, German, and Hungarian.
+* **Self-hosted fonts (PRO-T-115)** — IBM Plex Sans (400–700), IBM Plex Sans Condensed (400, 600, 700), and IBM Plex Mono (400, 500) load with `next/font/local` from `apps/web/src/fonts`. Families, weights, `display: swap`, and the `--font-ibm-plex-*` variables stay the same. Buttons stay on the UI sans.
+* **Archived parent links** — The milestone Linked items tab uses existing `ErrorText` when the milestone is archived (`archivedParentLink`: “Milestone PNZ-M-12 is archived; unarchive it first”) and disables add/remove. Task and story saves use the same sentence when a new story, milestone, or epic assignment points at an archived parent. English, German, and Hungarian copy match. No new control.
+* **Monitoring alerts** — Admin → Monitoring adds an Alerts panel (`#alerts`) under the health cards. It uses `Field`, `Input`, `Select`, `Button`, and `Badge` inside `.kh-ops-panel`. A warn `Badge` shows when the mail driver is console, with a text link to Admin → Email. Per-type recipients sit in a `<details>` with `.kh-ops-scope-check` user rows. Retention stats reuse `.kh-ops-list-row`. Save, reset, and send-test use `useToast`. Copy is in English, German, and Hungarian.
+* **AI cost period** — Workspace and platform Financials add This quarter and This month beside This year (`LinkButton` presets). The active preset stays filled until the from/to dates change. From and to use a shared calendar (`DateField` / `DateRangeFields`): a calendar button opens a popover, a typed date still applies, and the same calendar can pick one day or a day range. Day buttons use the UI sans. Service start and service end in the cost-entry dialog use the same single-day field, and the end cannot be on or before the start.
+* **AI cost chart grain** — Month, Week, and Day sit in the chart header. Day view wider than 92 days switches to weeks and says so. Subscription cost is spread evenly across service days, so a week or day chart of one range sums to the same total. The monthly overview table stays in calendar months; a partial day range includes only those days. Clicking a bar drills a month or week into days. Labels use the locale day form (`Oct 19`, `19. Okt.`, `okt. 19.`).
+* **Theoretical model prices** — Usage import shows linked and unassigned theoretical cost, the CSV paid amount beside it, and models without a price. Workspace admins edit the per-model price table on that tab (pattern, four rates per 1M tokens, currency, effective date) with save, delete, and recompute actions.
 
 ### 2026-10-20
 
@@ -446,6 +456,7 @@ Record durable UI / design-system changes here (newest first).
 * **Account profile** — `/account/profile` for display name + full name (email read-only), optional photo upload, and `UserAvatar` monogram fallback. **Workspace roles** (`/account/memberships`) lists memberships read-only. **Sign-in identity** and **Change password** are separate Account sidebar pages (`/account/identity`, `/account/password`; `POST /api/v1/me/password`). Account area uses the same left sidebar layout as Admin. Header shows avatar + display name linked to profile; mobile nav includes Profile.
 * **Admin overview setup cards** — LLM/MCP and Email promo panels can be hidden per browser (`localStorage`); they remain in the admin sidebar. A small restore strip reappears when either card is hidden.
 * **Admin Email** — Sidebar link `/admin/email` for SMTP / Resend / console mail settings, test send, and overview card on Admin home. Product emails use a shared branded HTML layout in `packages/mail` with en/de/hu catalogs; locale comes from `users.preferred_locale` (synced from the language switcher / login / register).
+* **Admin Monitoring alerts** — `/admin/monitoring#alerts` sets per-type recipients, disk and staleness thresholds, the ops webhook, and audit retention. A warn badge appears when mail is console-only. Send test alert uses the effective recipients.
 * **Auth pages** — Public `/forgot-password`, `/set-password`, `/register`, and `/confirm-email` match the login `Page narrow` + `Panel` pattern.
 * **Admin users** — Create modal toggles invite-vs-password; list rows open Edit (display name, status, optional password, system admin) with Resend invite for `invited` users.
 

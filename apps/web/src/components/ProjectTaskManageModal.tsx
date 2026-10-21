@@ -8,6 +8,7 @@ import {
   statusForTaskCompletionChange,
   type TaskStatus,
 } from '@project-knowledge-hub/domain';
+import { archivedParentLinkTarget } from '../lib/archived-parent-link';
 import {
   Badge,
   Button,
@@ -124,9 +125,20 @@ type Member = {
   email: string;
 };
 
-type Epic = { id: string; title: string };
-type Story = { id: string; epicId: string; title: string };
-type Milestone = { id: string; title: string };
+type Epic = { id: string; title: string; archivedAt?: string | null; humanKey?: string | null };
+type Story = {
+  id: string;
+  epicId: string;
+  title: string;
+  archivedAt?: string | null;
+  humanKey?: string | null;
+};
+type Milestone = {
+  id: string;
+  title: string;
+  archivedAt?: string | null;
+  humanKey?: string | null;
+};
 
 type LinkedRaid = {
   id: string;
@@ -529,6 +541,26 @@ export function ProjectTaskManageModal({
         setError(raciIssueLabel(issue));
         return;
       }
+    }
+    const storyBlocked = archivedParentLinkTarget({
+      nextId: userStoryId,
+      currentId: task?.userStoryId,
+      parents: stories,
+    });
+    const milestoneBlocked = archivedParentLinkTarget({
+      nextId: milestoneId,
+      currentId: task?.milestoneId,
+      parents: milestones,
+    });
+    const blocked = storyBlocked ?? milestoneBlocked;
+    if (blocked) {
+      setError(
+        t('archivedParentLink', {
+          kind: storyBlocked ? t('archivedKindStory') : t('archivedKindMilestone'),
+          key: blocked.key,
+        }),
+      );
+      return;
     }
     setPending(true);
     setError(null);
