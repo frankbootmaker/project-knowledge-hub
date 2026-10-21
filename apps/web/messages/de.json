@@ -3928,6 +3928,8 @@
     "fxSaved": "Wechselkurs gespeichert.",
     "fxSaveFailed": "Wechselkurs konnte nicht gespeichert werden",
     "fxRateInvalid": "Datum und einen positiven Kurs eingeben.",
+    "fxQuoted": "{source} · {date}",
+    "fxMissing": "Kein importierter Kurs für dieses Paar an oder vor diesem Datum.",
     "fxImport": "Kurse importieren",
     "fxImported": "{count} Kurse importiert.",
     "fxImportFailed": "Wechselkurse konnten nicht importiert werden",

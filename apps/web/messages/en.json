@@ -3927,6 +3927,8 @@
     "fxSaved": "Exchange rate saved.",
     "fxSaveFailed": "Could not save the exchange rate",
     "fxRateInvalid": "Enter a date and a positive rate.",
+    "fxQuoted": "{source} · {date}",
+    "fxMissing": "No imported rate for this pair on or before this date.",
     "fxImport": "Import rates",
     "fxImported": "Imported {count} rates.",
     "fxImportFailed": "Could not import exchange rates",

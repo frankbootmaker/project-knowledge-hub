@@ -1214,6 +1214,46 @@ a.kh-section-shortcut[aria-current='location'] {
   background: var(--kh-panel-solid);
 }
 
+/* Period From/To sit beside the date box so the box lines up with the presets. */
+.kh-ops-period-field {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: auto;
+}
+
+.kh-ops-period-field > span {
+  white-space: nowrap;
+}
+
+.kh-ops-period-field > .kh-input {
+  width: auto;
+  height: var(--kh-button-height);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.kh-ops-fx-date {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.kh-ops-fx-date > .kh-input[type='date'] {
+  width: 12rem;
+  min-width: 12rem;
+  color: var(--kh-ink);
+}
+
+.kh-ops-fx-date > .kh-input[type='date']::-webkit-datetime-edit,
+.kh-ops-fx-date > .kh-input[type='date']::-webkit-datetime-edit-fields-wrapper,
+.kh-ops-fx-date > .kh-input[type='date']::-webkit-datetime-edit-text,
+.kh-ops-fx-date > .kh-input[type='date']::-webkit-datetime-edit-month-field,
+.kh-ops-fx-date > .kh-input[type='date']::-webkit-datetime-edit-day-field,
+.kh-ops-fx-date > .kh-input[type='date']::-webkit-datetime-edit-year-field {
+  color: var(--kh-ink);
+}
+
 .kh-ops-table-wrap {
   overflow-x: auto;
 }
@@ -3514,6 +3554,10 @@ a.kh-ops-choice {
   fill: var(--kh-ink-muted);
   font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
   font-size: 10px;
+}
+
+.kh-ops-ai-cost-month-vertical {
+  font-size: 9px;
 }
 
 .kh-ops-ai-cost-value {

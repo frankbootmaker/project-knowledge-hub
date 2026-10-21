@@ -148,6 +148,8 @@ async function latestEurOnOrBefore(
 
 /**
  * Import ECB (and MNB) quotes when the book does not already cover `dates`.
+ * `force` always downloads that window. A rate on the first and last day is
+ * not enough coverage: the months between can still be a single seed day.
  * Without a fetcher, or when the fetch fails, the stored book is left as it is.
  */
 export async function ensureExchangeRates(
@@ -155,6 +157,7 @@ export async function ensureExchangeRates(
   dates: readonly string[],
   fetchImpl?: FxFetcher,
   now = new Date(),
+  options?: { force?: boolean },
 ): Promise<{ imported: number; error?: string }> {
   if (!fetchImpl || dates.length === 0) return { imported: 0 };
   const valid = dates.filter((date) => ISO_DATE.test(date)).sort();
@@ -163,11 +166,13 @@ export async function ensureExchangeRates(
   if (!earliest || !latest) return { imported: 0 };
   const today = now.toISOString().slice(0, 10);
   const cap = latest < today ? latest : today;
-  const target = weekdayOnOrBefore(cap);
-  const acceptable = cap >= today ? previousWeekday(target) : target;
-  const early = await latestEurOnOrBefore(database, earliest);
-  const fresh = await latestEurOnOrBefore(database, cap);
-  if (early && fresh && fresh >= acceptable) return { imported: 0 };
+  if (!options?.force) {
+    const target = weekdayOnOrBefore(cap);
+    const acceptable = cap >= today ? previousWeekday(target) : target;
+    const early = await latestEurOnOrBefore(database, earliest);
+    const fresh = await latestEurOnOrBefore(database, cap);
+    if (early && fresh && fresh >= acceptable) return { imported: 0 };
+  }
   const loaded = await loadReferenceRates({
     fetchImpl,
     from: earliest,

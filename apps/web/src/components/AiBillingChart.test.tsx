@@ -102,6 +102,26 @@ describe('AiBillingChart', () => {
     const line = container.querySelector('.kh-ops-ai-cost-line');
     expect(sub).toBeTruthy();
     expect(line).toBeTruthy();
+    expect(container.querySelector('.kh-ops-ai-cost-month-vertical')).toBeNull();
+  });
+
+  it('turns week and day labels upright so they do not share a line', () => {
+    const container = render(
+      <AiBillingChart
+        periods={[
+          { ...periods[1], period: '2026-10-06' },
+          { ...periods[1], period: '2026-10-13' },
+        ]}
+        ariaLabel="AI cost"
+        locale="en"
+        currency="USD"
+        labels={labels}
+      />,
+    );
+    const vertical = [...container.querySelectorAll('.kh-ops-ai-cost-month-vertical')];
+    expect(vertical).toHaveLength(2);
+    expect(vertical[0]?.getAttribute('transform')).toContain('rotate(-90');
+    expect(vertical[0]?.textContent).toBe('Oct 6');
   });
 
   it('greys a series that is zero in every month', () => {

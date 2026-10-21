@@ -185,5 +185,11 @@ describe('AiCostPeriodForm presets', () => {
     );
     expect(quarter?.getAttribute('href')).toContain('range=quarter');
     expect(quarter?.getAttribute('href')).not.toContain('from=');
+    const dates = [...document.body.querySelectorAll('input[type="date"]')];
+    expect(dates).toHaveLength(2);
+    for (const input of dates) {
+      expect(input.parentElement?.className).toContain('kh-ops-period-field');
+      expect(input.previousElementSibling?.tagName).toBe('SPAN');
+    }
   });
 });

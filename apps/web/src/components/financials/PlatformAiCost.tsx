@@ -4,7 +4,12 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { addCalendarDays, lastDayOfMonth } from '@project-knowledge-hub/domain';
+import {
+  addCalendarDays,
+  lastDayOfMonth,
+  lookupFxRate,
+  type FxRate,
+} from '@project-knowledge-hub/domain';
 import { formatAiBillingMonth, formatServiceDate } from '../../lib/ai-billing-month';
 import { formatMoney } from '../../lib/project-currency';
 import { AiBillingChart, AiBillingChartLegend } from '../AiBillingChart';
@@ -125,6 +130,10 @@ function fxDetail(
   return [source.toUpperCase(), rateDate ?? '', figure].filter(Boolean).join(' · ');
 }
 
+function formatQuotedRate(rate: number): string {
+  return rate.toFixed(8).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
 function workspaceHref(slug: string): string {
   return `/workspaces/${slug}/financials`;
 }
@@ -150,8 +159,50 @@ export function PlatformAiCost({
   const [fxBase, setFxBase] = useState('EUR');
   const [fxQuote, setFxQuote] = useState('USD');
   const [fxRate, setFxRate] = useState('');
+  const [fxQuoteNote, setFxQuoteNote] = useState<string | null>(null);
+  const [fxLookup, setFxLookup] = useState(0);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxPending, setFxPending] = useState(false);
+  useEffect(() => {
+    const base = fxBase.trim();
+    const quote = fxQuote.trim();
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(fxDate) ||
+      !/^[A-Z]{3}$/.test(base) ||
+      !/^[A-Z]{3}$/.test(quote) ||
+      base === quote
+    ) {
+      setFxQuoteNote(null);
+      return;
+    }
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      from: addCalendarDays(fxDate, -21),
+      to: fxDate,
+    });
+    void (async () => {
+      try {
+        const response = await fetch(`/api/v1/admin/exchange-rates?${params.toString()}`, {
+          credentials: 'include',
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { rates?: FxRate[] };
+        if (controller.signal.aborted) return;
+        const found = lookupFxRate(payload.rates ?? [], base, quote, fxDate);
+        if (!found) {
+          setFxRate('');
+          setFxQuoteNote(t('fxMissing'));
+          return;
+        }
+        setFxRate(formatQuotedRate(found.rate));
+        setFxQuoteNote(t('fxQuoted', { source: found.source.toUpperCase(), date: found.date }));
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+      }
+    })();
+    return () => controller.abort();
+  }, [fxDate, fxBase, fxQuote, fxLookup, t]);
   const sourceMonths = showOriginal ? (report.originalMonths ?? report.months) : report.months;
   const sourceTotals = showOriginal ? (report.originalTotals ?? report.totals) : report.totals;
   const currencies = useMemo(() => {
@@ -250,7 +301,10 @@ export function PlatformAiCost({
           'Content-Type': 'application/json',
           Origin: window.location.origin,
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          ...(report.fromDay ? { from: report.fromDay } : {}),
+          ...(report.toDay ? { to: report.toDay } : {}),
+        }),
       });
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string | { message?: string } | null;
@@ -263,6 +317,8 @@ export function PlatformAiCost({
       }
       if (payload.error) setFxError(String(payload.error));
       pushToast(t('fxImported', { count: payload.imported ?? 0 }), 'success');
+      setFxLookup((current) => current + 1);
+      router.refresh();
     } catch (error) {
       setFxError(error instanceof Error ? error.message : t('fxImportFailed'));
     } finally {
@@ -313,13 +369,13 @@ export function PlatformAiCost({
         }}
       />
 
-      <div className="flex flex-wrap items-end gap-3">
-        <p className="m-0 text-[13px] text-ink-muted">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="m-0 text-[13px] leading-none text-ink-muted">
           {t('reportingCurrency')}: {report.reportingCurrency ?? 'EUR'}
         </p>
         <Button
           type="button"
-          variant="ghost"
+          variant="secondary"
           className="w-fit"
           onClick={() => setShowOriginal((current) => !current)}
         >
@@ -356,7 +412,7 @@ export function PlatformAiCost({
             void saveManualRate();
           }}
         >
-          <Field label={t('fxDate')} className="min-w-36">
+          <Field label={t('fxDate')} className="kh-ops-fx-date">
             <Input type="date" value={fxDate} onChange={(event) => setFxDate(event.target.value)} />
           </Field>
           <Field label={t('fxBase')} className="min-w-24">
@@ -387,7 +443,7 @@ export function PlatformAiCost({
           </Button>
           <Button
             type="button"
-            variant="ghost"
+            variant="secondary"
             className="self-end"
             disabled={fxPending}
             onClick={() => void importRates()}
@@ -395,6 +451,9 @@ export function PlatformAiCost({
             {t('fxImport')}
           </Button>
         </form>
+        {fxQuoteNote ? (
+          <p className="m-0 px-3 pb-3 text-[13px] text-ink-muted">{fxQuoteNote}</p>
+        ) : null}
         {fxError ? (
           <div className="px-3 pb-3">
             <ErrorText>{fxError}</ErrorText>

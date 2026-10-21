@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { isIsoDay } from '@project-knowledge-hub/domain';
-import { Button, LinkButton } from '../ui';
-import { DateRangeFields } from '../ui/DateField';
+import { Button, Field, Input, LinkButton } from '../ui';
 
 export type AiCostViewRange = 'last12' | 'year' | 'quarter' | 'month' | 'all' | 'custom';
 
@@ -67,7 +66,7 @@ export function AiCostPeriodForm({
 
   return (
     <form method="get" action={action} className="kh-ops-toolbar flex-wrap">
-      <div className="flex flex-wrap items-end gap-2" role="group" aria-label={t('period')}>
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('period')}>
         {PRESETS.map((preset) => (
           <LinkButton
             key={preset}
@@ -79,17 +78,30 @@ export function AiCostPeriodForm({
           </LinkButton>
         ))}
       </div>
-      <DateRangeFields
-        from={fromValue}
-        to={toValue}
-        fromLabel={t('from')}
-        toLabel={t('to')}
-        onChange={(next) => {
-          setFromValue(next.from);
-          setToValue(next.to);
-          setActiveRange('custom');
-        }}
-      />
+      <Field label={t('from')} className="kh-ops-period-field">
+        <Input
+          type="date"
+          value={fromValue}
+          onChange={(event) => {
+            const next = event.target.value;
+            setFromValue(next);
+            setToValue((current) => (current && next && current < next ? next : current));
+            setActiveRange('custom');
+          }}
+        />
+      </Field>
+      <Field label={t('to')} className="kh-ops-period-field">
+        <Input
+          type="date"
+          value={toValue}
+          onChange={(event) => {
+            const next = event.target.value;
+            setToValue(next);
+            setFromValue((current) => (current && next && next < current ? next : current));
+            setActiveRange('custom');
+          }}
+        />
+      </Field>
       {activeRange !== 'custom' ? <input type="hidden" name="range" value={activeRange} /> : null}
       {activeRange === 'custom' && fromValue ? (
         <input type="hidden" name="from" value={fromValue} />
@@ -101,7 +113,7 @@ export function AiCostPeriodForm({
       {Object.entries(preserve).map(([key, value]) =>
         value && key !== 'tz' ? <input key={key} type="hidden" name={key} value={value} /> : null,
       )}
-      <Button type="submit" variant="secondary" className="self-end">
+      <Button type="submit" variant="secondary">
         {t('apply')}
       </Button>
     </form>

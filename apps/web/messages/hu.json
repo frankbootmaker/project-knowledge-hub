@@ -3927,6 +3927,8 @@
     "fxSaved": "Árfolyam mentve.",
     "fxSaveFailed": "Az árfolyamot nem sikerült menteni",
     "fxRateInvalid": "Adjon meg egy dátumot és egy pozitív árfolyamot.",
+    "fxQuoted": "{source} · {date}",
+    "fxMissing": "Nincs importált árfolyam ehhez a párhoz ezen a napon vagy korábban.",
     "fxImport": "Árfolyamok importálása",
     "fxImported": "{count} árfolyam importálva.",
     "fxImportFailed": "Az árfolyamokat nem sikerült importálni",
