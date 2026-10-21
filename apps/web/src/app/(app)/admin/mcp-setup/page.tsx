@@ -113,7 +113,6 @@ async function McpAdminPane({ tab }: { tab: McpAdminTab }) {
     );
     return (
       <div className="grid gap-8">
-        <OauthResourceCard initial={oauthSettings} />
         {oauthSettings ? (
           <OauthConnectGuide
             audience="admin"
@@ -121,6 +120,7 @@ async function McpAdminPane({ tab }: { tab: McpAdminTab }) {
             enabled={oauthSettings.effectiveEnabled}
           />
         ) : null}
+        <OauthResourceCard initial={oauthSettings} />
         <OauthGrantsList
           grants={grants}
           workspaceNames={workspaceNames}
