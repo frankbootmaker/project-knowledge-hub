@@ -10,11 +10,18 @@ import {
   runOffsiteBackupCycle,
 } from '@project-knowledge-hub/blob-store';
 import {
+  configuredUserIds,
   createDatabase,
   ensureExchangeRates,
   gitRepositoryConnections,
   knowledgeRecords,
+  listActiveAdminRecipients,
+  listRecipientUsers,
+  loadEffectiveAlertSettings,
+  recipientsFromSpec,
+  recordAuditRetentionRun,
   syncEnabledScheduleSlipRisks,
+  type OpsAlertType,
 } from '@project-knowledge-hub/database';
 import {
   createEmbeddingProvider,
@@ -407,16 +414,38 @@ async function main(): Promise<void> {
     const runOpsAlertPoll = async () => {
       try {
         const mailConfig = await resolveWorkerMailConfig(database, env);
+        const { stored, effective } = await loadEffectiveAlertSettings(database, env);
+        const [admins, selected] = await Promise.all([
+          listActiveAdminRecipients(database),
+          listRecipientUsers(database, configuredUserIds(stored)),
+        ]);
+        let offsiteEnabled = false;
+        try {
+          const blob = await resolveWorkerBlobStore(database, env);
+          offsiteEnabled = Boolean(
+            blob.backupOffsite && blob.store.provider !== 'disabled',
+          );
+        } catch (error) {
+          logger.warn({ err: error }, 'Ops alert offsite check failed');
+        }
         const results = await runOpsAlerts({
           database,
           mailConfig,
           webUrl: env.WEB_URL,
           backupDir: env.BACKUP_DIR,
-          staleAfterHours: env.BACKUP_STALE_AFTER_HOURS,
-          webhookUrl: env.ALERT_WEBHOOK_URL,
-          errorSpikeThreshold: env.ALERT_ERROR_SPIKE_THRESHOLD,
-          errorSpikeWindowMinutes: env.ALERT_ERROR_SPIKE_WINDOW_MINUTES,
-          diskFreeRatioMin: env.ALERT_DISK_FREE_RATIO_MIN,
+          staleAfterHours: effective.staleAfterHours,
+          offsiteStaleAfterHours: effective.offsiteStaleAfterHours,
+          offsiteEnabled,
+          webhookUrl: effective.webhookUrl,
+          errorSpikeThreshold: effective.errorSpikeThreshold,
+          errorSpikeWindowMinutes: effective.errorSpikeWindowMinutes,
+          diskFreeRatioMin: effective.diskFreeRatioMin,
+          diskFreeGbMin: effective.diskFreeGbMin,
+          resolveRecipients: async (type: OpsAlertType) => recipientsFromSpec({
+            spec: stored?.recipients?.[type],
+            admins,
+            selectedUsers: selected,
+          }).recipients,
         });
         for (const result of results) {
           if (result.alerted) {
@@ -436,19 +465,30 @@ async function main(): Promise<void> {
     }, env.BACKUP_STALE_ALERT_INTERVAL_MS);
   }
 
-  if (env.AUDIT_RETENTION_DAYS > 0 && env.AUDIT_RETENTION_INTERVAL_MS > 0) {
+  // Interval stays on env (compose). Days are re-read each tick so Admin →
+  // Monitoring applies on the next purge without a redeploy, including 0 = off.
+  if (env.AUDIT_RETENTION_INTERVAL_MS > 0) {
     const runAuditRetention = async () => {
       try {
+        const { effective } = await loadEffectiveAlertSettings(database, env);
+        const retentionDays = effective.auditRetentionDays;
+        if (retentionDays <= 0) return;
         const result = await purgeExpiredAuditEvents({
           database,
-          retentionDays: env.AUDIT_RETENTION_DAYS,
+          retentionDays,
+        });
+        await recordAuditRetentionRun(database, {
+          lastPurgedAt: new Date(),
+          rowsPurged: result.deleted,
+          retentionDays,
+          cutoff: result.cutoff ? new Date(result.cutoff) : null,
         });
         if (result.deleted > 0) {
           logger.info(
             {
               deleted: result.deleted,
               cutoff: result.cutoff,
-              retentionDays: env.AUDIT_RETENTION_DAYS,
+              retentionDays,
             },
             'Purged expired audit events',
           );
@@ -528,6 +568,7 @@ async function main(): Promise<void> {
       signupPendingEscalateAfterHours: env.SIGNUP_PENDING_ESCALATE_AFTER_HOURS,
       opsAlertMs: env.BACKUP_STALE_ALERT_INTERVAL_MS,
       backupStaleAfterHours: env.BACKUP_STALE_AFTER_HOURS,
+      diskFreeGbMin: env.ALERT_DISK_FREE_GB_MIN,
       auditRetentionDays: env.AUDIT_RETENTION_DAYS,
       exchangeRateSyncMs: env.EXCHANGE_RATE_SYNC_INTERVAL_MS,
       status: 'ready',

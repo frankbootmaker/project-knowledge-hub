@@ -278,9 +278,15 @@ export const envSchema = z.object({
     .default(15),
   /**
    * Alert when backup volume free/total falls below this ratio (0 = disable).
-   * Default 0.10 (10% free).
+   * Default 0.10 (10% free). Fires together with ALERT_DISK_FREE_GB_MIN;
+   * whichever threshold is crossed first wins.
    */
   ALERT_DISK_FREE_RATIO_MIN: z.coerce.number().min(0).max(1).default(0.1),
+  /**
+   * Alert when backup volume free space falls below this many GB (1024^3 bytes).
+   * 0 disables the absolute check. Default 10. Admin → Monitoring can override.
+   */
+  ALERT_DISK_FREE_GB_MIN: z.coerce.number().min(0).max(100000).default(10),
   /**
    * Delete audit_events older than N days (0 = disable). Default 90.
    * Runs on the worker on AUDIT_RETENTION_INTERVAL_MS.

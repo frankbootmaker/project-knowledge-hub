@@ -101,6 +101,35 @@ export type MailMessages = {
     title: string;
     body: string;
     freeLabel: string;
+    absoluteLabel: string;
+    ratioLabel: string;
+  };
+  opsAlertOffsiteStale: {
+    subject: string;
+    title: string;
+    body: string;
+    ageLabel: string;
+    thresholdLabel: string;
+  };
+  opsAlertOffsiteError: {
+    subject: string;
+    title: string;
+    body: string;
+    errorLabel: string;
+    atLabel: string;
+  };
+  opsAlertRotationError: {
+    subject: string;
+    title: string;
+    body: string;
+    targetLabel: string;
+    errorLabel: string;
+  };
+  opsAlertTest: {
+    subject: string;
+    title: string;
+    body: string;
+    typeLabel: string;
   };
   passwordChanged: {
     subject: string;
@@ -258,8 +287,37 @@ export const en: MailMessages = {
   opsAlertDiskLow: {
     subject: 'Backup volume disk space low — KnowHub',
     title: 'Backup volume disk space low',
-    body: 'Free space on the backup volume is below the configured minimum. Free space or adjust retention.',
+    body: 'Free space on the backup volume is below the free-space ratio or the absolute minimum, whichever is reached first. Free space or adjust retention.',
     freeLabel: 'Free: {free} of {total} ({percent}%)',
+    absoluteLabel: 'Absolute minimum: {gb} GB free',
+    ratioLabel: 'Ratio minimum: {percent}% free',
+  },
+  opsAlertOffsiteStale: {
+    subject: 'Offsite backup is stale — KnowHub',
+    title: 'Stale offsite backup',
+    body: 'The last successful offsite backup is missing or older than the configured threshold.',
+    ageLabel: 'Last offsite copy: {age}',
+    thresholdLabel: 'Stale after: {hours} hours',
+  },
+  opsAlertOffsiteError: {
+    subject: 'Offsite backup failed — KnowHub',
+    title: 'Offsite backup failed',
+    body: 'The last offsite upload recorded an error and no newer successful copy exists.',
+    errorLabel: 'Error: {message}',
+    atLabel: 'Recorded at: {at}',
+  },
+  opsAlertRotationError: {
+    subject: 'Backup rotation failed — KnowHub',
+    title: 'Backup rotation failed',
+    body: 'Local or offsite backup rotation recorded an error. Old dumps may not have been pruned.',
+    targetLabel: 'Target: {target}',
+    errorLabel: 'Error: {message}',
+  },
+  opsAlertTest: {
+    subject: 'Test alert — KnowHub',
+    title: 'Test alert',
+    body: 'This is a test ops alert from Admin → Monitoring. No incident is open.',
+    typeLabel: 'Alert type: {type}',
   },
   passwordChanged: {
     subject: 'Your KnowHub password was changed',
@@ -421,8 +479,37 @@ export const de: MailMessages = {
   opsAlertDiskLow: {
     subject: 'Wenig Speicher auf dem Backup-Volume — KnowHub',
     title: 'Wenig Speicher auf dem Backup-Volume',
-    body: 'Der freie Speicher auf dem Backup-Volume liegt unter dem Minimum. Speicher freigeben oder Retention anpassen.',
+    body: 'Der freie Speicher liegt unter dem freien Anteil oder dem absoluten Minimum, je nachdem was zuerst erreicht wird. Speicher freigeben oder Retention anpassen.',
     freeLabel: 'Frei: {free} von {total} ({percent}%)',
+    absoluteLabel: 'Absolutes Minimum: {gb} GB frei',
+    ratioLabel: 'Mindestanteil: {percent}% frei',
+  },
+  opsAlertOffsiteStale: {
+    subject: 'Offsite-Backup ist veraltet — KnowHub',
+    title: 'Veraltetes Offsite-Backup',
+    body: 'Die letzte erfolgreiche Offsite-Kopie fehlt oder ist älter als der konfigurierte Schwellenwert.',
+    ageLabel: 'Letzte Offsite-Kopie: {age}',
+    thresholdLabel: 'Veraltet nach: {hours} Stunden',
+  },
+  opsAlertOffsiteError: {
+    subject: 'Offsite-Backup fehlgeschlagen — KnowHub',
+    title: 'Offsite-Backup fehlgeschlagen',
+    body: 'Der letzte Offsite-Upload hat einen Fehler gemeldet und es gibt keine neuere erfolgreiche Kopie.',
+    errorLabel: 'Fehler: {message}',
+    atLabel: 'Zeitpunkt: {at}',
+  },
+  opsAlertRotationError: {
+    subject: 'Backup-Rotation fehlgeschlagen — KnowHub',
+    title: 'Backup-Rotation fehlgeschlagen',
+    body: 'Die lokale oder Offsite-Rotation hat einen Fehler gemeldet. Alte Dumps wurden möglicherweise nicht gelöscht.',
+    targetLabel: 'Ziel: {target}',
+    errorLabel: 'Fehler: {message}',
+  },
+  opsAlertTest: {
+    subject: 'Testalarm — KnowHub',
+    title: 'Testalarm',
+    body: 'Dies ist ein Testalarm aus Admin → Monitoring. Es liegt kein Vorfall vor.',
+    typeLabel: 'Alarmtyp: {type}',
   },
   passwordChanged: {
     subject: 'Ihr KnowHub-Passwort wurde geändert',
@@ -583,8 +670,37 @@ export const hu: MailMessages = {
   opsAlertDiskLow: {
     subject: 'Keves a szabad hely a mentési köteten — KnowHub',
     title: 'Keves a szabad hely a mentési köteten',
-    body: 'A mentési kötet szabad helye a beállított minimum alatt van. Szabadíts fel helyet, vagy módosítsd a megőrzést.',
+    body: 'A szabad hely a százalékos vagy az abszolút minimum alatt van, amelyik előbb teljesül. Szabadíts fel helyet, vagy módosítsd a megőrzést.',
     freeLabel: 'Szabad: {free} / {total} ({percent}%)',
+    absoluteLabel: 'Abszolút minimum: {gb} GB szabad',
+    ratioLabel: 'Arány minimum: {percent}% szabad',
+  },
+  opsAlertOffsiteStale: {
+    subject: 'A külső mentés elavult — KnowHub',
+    title: 'Elavult külső mentés',
+    body: 'Az utolsó sikeres külső másolat hiányzik, vagy régebbi a beállított küszöbnél.',
+    ageLabel: 'Utolsó külső másolat: {age}',
+    thresholdLabel: 'Elavult ennyi óra után: {hours}',
+  },
+  opsAlertOffsiteError: {
+    subject: 'A külső mentés sikertelen — KnowHub',
+    title: 'A külső mentés sikertelen',
+    body: 'Az utolsó külső feltöltés hibát jelzett, és nincs nála újabb sikeres másolat.',
+    errorLabel: 'Hiba: {message}',
+    atLabel: 'Időpont: {at}',
+  },
+  opsAlertRotationError: {
+    subject: 'A mentésrotáció sikertelen — KnowHub',
+    title: 'A mentésrotáció sikertelen',
+    body: 'A helyi vagy a külső rotáció hibát jelzett. A régi dumpok lehet, hogy nem lettek törölve.',
+    targetLabel: 'Cél: {target}',
+    errorLabel: 'Hiba: {message}',
+  },
+  opsAlertTest: {
+    subject: 'Tesztriasztás — KnowHub',
+    title: 'Tesztriasztás',
+    body: 'Ez egy tesztriasztás az Admin → Monitoring oldalról. Nincs nyitott incidens.',
+    typeLabel: 'Riasztás típusa: {type}',
   },
   passwordChanged: {
     subject: 'A KnowHub jelszavad megváltozott',

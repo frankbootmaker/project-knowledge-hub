@@ -1,6 +1,7 @@
 import { createReadStream, promises as fs } from 'node:fs';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { loadEffectiveAlertSettings } from '@project-knowledge-hub/database';
 import { AppError } from '@project-knowledge-hub/domain';
 import { requireSystemAdmin } from '@project-knowledge-hub/permissions';
 import {
@@ -903,7 +904,8 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         since: since.toISOString(),
       },
       retention: {
-        auditRetentionDays: app.env.AUDIT_RETENTION_DAYS,
+        auditRetentionDays: (await loadEffectiveAlertSettings(app.database, app.env))
+          .effective.auditRetentionDays,
       },
       support,
       auditErrors: {
