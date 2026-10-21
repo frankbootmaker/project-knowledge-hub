@@ -206,6 +206,8 @@ export async function milestoneIdsForDeliveryEntities(
 /**
  * Persist story, epic, and milestone status from included children.
  * A parent with no included children is left unchanged.
+ * An archived parent keeps its status and dates.
+ * A cancelled status is never replaced. Dates on an active cancelled parent still follow children.
  */
 export async function recomputeDeliveryParentStatuses(
   database: Database,
@@ -252,6 +254,7 @@ export async function recomputeDeliveryParentStatuses(
             epicId: projectUserStories.epicId,
             startDate: projectUserStories.startDate,
             endDate: projectUserStories.endDate,
+            archivedAt: projectUserStories.archivedAt,
           })
           .from(projectUserStories)
           .where(
@@ -272,6 +275,7 @@ export async function recomputeDeliveryParentStatuses(
             status: projectEpics.status,
             startDate: projectEpics.startDate,
             endDate: projectEpics.endDate,
+            archivedAt: projectEpics.archivedAt,
           })
           .from(projectEpics)
           .where(
@@ -335,11 +339,18 @@ export async function recomputeDeliveryParentStatuses(
   const storyChanges: Array<{ id: string; status: string }> = [];
   const storyDateChanges: Array<{ id: string; start: string | null; end: string | null }> = [];
   for (const story of storyRows) {
-    const derived = derivedParentStatus(sourcesByStory.get(story.id) ?? []);
+    const archived = story.archivedAt != null;
+    const derived = archived || story.status === 'cancelled'
+      ? null
+      : derivedParentStatus(sourcesByStory.get(story.id) ?? []);
     const next = derived ?? story.status;
     stories.set(story.id, next);
     if (derived != null && derived !== story.status) {
       storyChanges.push({ id: story.id, status: derived });
+    }
+    if (archived) {
+      dates.stories.set(story.id, { start: story.startDate, end: story.endDate });
+      continue;
     }
     const span = derivedParentDates(
       { start: story.startDate, end: story.endDate },
@@ -394,11 +405,18 @@ export async function recomputeDeliveryParentStatuses(
   const epicChanges: Array<{ id: string; status: string }> = [];
   const epicDateChanges: Array<{ id: string; start: string | null; end: string | null }> = [];
   for (const epic of epicRows) {
-    const derived = derivedParentStatus(sourcesByEpic.get(epic.id) ?? []);
+    const archived = epic.archivedAt != null;
+    const derived = archived || epic.status === 'cancelled'
+      ? null
+      : derivedParentStatus(sourcesByEpic.get(epic.id) ?? []);
     const next = derived ?? epic.status;
     epics.set(epic.id, next);
     if (derived != null && derived !== epic.status) {
       epicChanges.push({ id: epic.id, status: derived });
+    }
+    if (archived) {
+      dates.epics.set(epic.id, { start: epic.startDate, end: epic.endDate });
+      continue;
     }
     const span = derivedParentDates(
       { start: epic.startDate, end: epic.endDate },
@@ -441,6 +459,7 @@ async function recomputeMilestones(
     .select({
       id: projectMilestones.id,
       status: projectMilestones.status,
+      archivedAt: projectMilestones.archivedAt,
       startDate: projectMilestones.startDate,
       targetDate: projectMilestones.targetDate,
     })
@@ -543,12 +562,15 @@ async function recomputeMilestones(
 
   const changes: Array<{ id: string; status: string }> = [];
   for (const milestone of milestoneRows) {
-    const derived = derivedParentStatus(
-      (linksByMilestone.get(milestone.id) ?? []).map((link) => ({
-        status: link.status,
-        points: milestoneLinkPoints(link),
-      })),
-    );
+    const frozen = milestone.archivedAt != null || milestone.status === 'cancelled';
+    const derived = frozen
+      ? null
+      : derivedParentStatus(
+          (linksByMilestone.get(milestone.id) ?? []).map((link) => ({
+            status: link.status,
+            points: milestoneLinkPoints(link),
+          })),
+        );
     const next = derived ?? milestone.status;
     into.milestones.set(milestone.id, next);
     if (derived != null && derived !== milestone.status) {

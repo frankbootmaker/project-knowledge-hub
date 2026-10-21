@@ -1395,7 +1395,14 @@ describe('task reopen and milestone done count', () => {
       for (const tool of [getMilestone, listMilestones]) {
         expect(tool?.description).toMatch(/completion\.done/);
         expect(tool?.description).toMatch(/completion\.total/);
+        expect(tool?.description).toMatch(/never overwrites a cancelled status/);
       }
+      const links = listed.tools.find(
+        (item) => item.name === 'set_project_milestone_item_links',
+      );
+      expect(links?.description).toMatch(/archived milestone is rejected/);
+      expect(links?.description).toMatch(/never overwrites a cancelled status/);
+      expect(update?.description).toMatch(/never overwrites a cancelled status/);
     });
     for (const name of [
       'update_project_task',
@@ -1407,11 +1414,18 @@ describe('task reopen and milestone done count', () => {
       if (name === 'update_project_task') {
         expect(catalog?.description).toMatch(/clears completedAt/);
         expect(catalog?.description).toMatch(/resets completionPercent to 0/);
+        expect(catalog?.description).toMatch(/never overwrites a cancelled status/);
       } else {
         expect(catalog?.description).toMatch(/completion\.done/);
         expect(catalog?.description).toMatch(/completion\.total/);
+        expect(catalog?.description).toMatch(/never overwrites a cancelled status/);
       }
     }
+    const linkCatalog = LLM_TOOL_CATALOG.find(
+      (item) => item.name === 'set_project_milestone_item_links',
+    );
+    expect(linkCatalog?.description).toMatch(/archived milestone is rejected/);
+    expect(linkCatalog?.description).toMatch(/never overwrites a cancelled status/);
   });
 });
 

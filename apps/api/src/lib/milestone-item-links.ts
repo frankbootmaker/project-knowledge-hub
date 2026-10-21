@@ -22,6 +22,7 @@ import {
 import { diffReplacement } from './replace-diff.js';
 import { recomputeDeliveryParentStatuses } from './parent-status.js';
 import { rescheduleDeliveryFrom } from './delivery-dependencies.js';
+import { archivedDeliveryLinkError, deliveryKeyLabel } from './delivery-archive.js';
 import { toHumanKeyFields } from './project-issue-keys.js';
 
 export type MilestoneCompletionFields = {
@@ -449,6 +450,36 @@ export async function setMilestoneItemLinks(
     createdBy?: string | null;
   },
 ): Promise<void> {
+  const [milestone] = await database.db
+    .select({
+      id: projectMilestones.id,
+      projectId: projectMilestones.projectId,
+      title: projectMilestones.title,
+      archivedAt: projectMilestones.archivedAt,
+      issueKeyType: projectMilestones.issueKeyType,
+      issueNumber: projectMilestones.issueNumber,
+    })
+    .from(projectMilestones)
+    .where(eq(projectMilestones.id, input.milestoneId))
+    .limit(1);
+  if (!milestone || milestone.projectId !== input.projectId) {
+    throw new AppError({
+      code: 'MILESTONE_NOT_FOUND',
+      message: 'Milestone not found',
+      statusCode: 404,
+    });
+  }
+  if (milestone.archivedAt) {
+    const label = await deliveryKeyLabel(
+      database,
+      input.projectId,
+      milestone.issueKeyType,
+      milestone.issueNumber,
+      milestone.title,
+    );
+    throw archivedDeliveryLinkError('milestone', label);
+  }
+
   const unique = new Map<string, MilestoneLinkInput>();
   for (const item of input.items) {
     if (!isLinkEntityType(item.entityType)) continue;

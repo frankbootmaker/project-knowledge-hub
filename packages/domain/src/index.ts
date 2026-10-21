@@ -364,12 +364,30 @@ export function derivedParentStatus(
   return idleStatus;
 }
 
-/** Story or epic status from child tasks and bugs. No included children keeps manualStatus. */
+export const ARCHIVED_LINK_KIND_LABEL = {
+  milestone: 'Milestone',
+  epic: 'Epic',
+  user_story: 'User story',
+  sprint: 'Sprint',
+} as const;
+
+export type ArchivedLinkKind = keyof typeof ARCHIVED_LINK_KIND_LABEL;
+
+/** Clear error when an active item is linked to an archived parent. */
+export function archivedItemLinkMessage(kind: ArchivedLinkKind, label: string): string {
+  return `${ARCHIVED_LINK_KIND_LABEL[kind]} ${label} is archived; unarchive it first`;
+}
+
+/**
+ * Story or epic status from child tasks and bugs. No included children keeps manualStatus.
+ * Cancelled is a manual terminal status and is never replaced.
+ */
 export function parentStatusFromChildren(
   manualStatus: string,
   children: readonly { status: string; completionPercent?: number | null }[],
   idleStatus: 'planned' | 'todo' = 'planned',
 ): string {
+  if (manualStatus === 'cancelled') return 'cancelled';
   const derived = derivedParentStatus(
     children.map((child) => ({
       status: child.status,
@@ -380,11 +398,12 @@ export function parentStatusFromChildren(
   return derived ?? manualStatus;
 }
 
-/** Milestone status from the same links that feed milestone completion. */
+/** Milestone status from the same links that feed milestone completion. Cancelled stays cancelled. */
 export function milestoneStatusFromLinks(
   manualStatus: string,
   links: readonly MilestoneLinkCompletion[],
 ): string {
+  if (manualStatus === 'cancelled') return 'cancelled';
   const derived = derivedParentStatus(
     links.map((link) => ({
       status: link.status,

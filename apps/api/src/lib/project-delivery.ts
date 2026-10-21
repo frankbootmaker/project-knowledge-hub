@@ -66,6 +66,7 @@ import {
   getProjectKeyPrefix,
   toHumanKeyFields,
 } from './project-issue-keys.js';
+import { archivedDeliveryLinkError, deliveryKeyLabel } from './delivery-archive.js';
 import { withMilestoneLinks, deleteMilestoneItemLinks } from './milestone-item-links.js';
 import {
   milestoneIdsForDeliveryEntities,
@@ -517,10 +518,17 @@ async function assertUserStoryInProject(
   database: Database,
   projectId: string,
   userStoryId: string | null | undefined,
+  currentStoryId?: string | null,
 ): Promise<void> {
   if (!userStoryId) return;
   const [story] = await database.db
-    .select({ id: projectUserStories.id })
+    .select({
+      id: projectUserStories.id,
+      title: projectUserStories.title,
+      archivedAt: projectUserStories.archivedAt,
+      issueKeyType: projectUserStories.issueKeyType,
+      issueNumber: projectUserStories.issueNumber,
+    })
     .from(projectUserStories)
     .where(
       and(
@@ -535,6 +543,16 @@ async function assertUserStoryInProject(
       message: 'User story not found in this project',
       statusCode: 400,
     });
+  }
+  if (story.archivedAt && story.id !== currentStoryId) {
+    const label = await deliveryKeyLabel(
+      database,
+      projectId,
+      story.issueKeyType,
+      story.issueNumber,
+      story.title,
+    );
+    throw archivedDeliveryLinkError('user_story', label);
   }
 }
 
@@ -988,6 +1006,7 @@ async function assertMilestoneInProject(
   database: Database,
   projectId: string,
   milestoneId: string | null | undefined,
+  currentMilestoneId?: string | null,
 ): Promise<void> {
   if (!milestoneId) {
     return;
@@ -1009,12 +1028,23 @@ async function assertMilestoneInProject(
       statusCode: 400,
     });
   }
+  if (milestone.archivedAt && milestone.id !== currentMilestoneId) {
+    const label = await deliveryKeyLabel(
+      database,
+      projectId,
+      milestone.issueKeyType,
+      milestone.issueNumber,
+      milestone.title,
+    );
+    throw archivedDeliveryLinkError('milestone', label);
+  }
 }
 
 async function assertSprintInProject(
   database: Database,
   projectId: string,
   sprintId: string | null | undefined,
+  currentSprintId?: string | null,
 ): Promise<void> {
   if (!sprintId) {
     return;
@@ -1035,6 +1065,16 @@ async function assertSprintInProject(
       message: 'Sprint not found in this project',
       statusCode: 400,
     });
+  }
+  if (sprint.archivedAt && sprint.id !== currentSprintId) {
+    const label = await deliveryKeyLabel(
+      database,
+      projectId,
+      sprint.issueKeyType,
+      sprint.issueNumber,
+      sprint.name,
+    );
+    throw archivedDeliveryLinkError('sprint', label);
   }
 }
 
@@ -1897,13 +1937,28 @@ export async function updateTask(
   });
 
   if (input.milestoneId !== undefined) {
-    await assertMilestoneInProject(database, existing.projectId, input.milestoneId);
+    await assertMilestoneInProject(
+      database,
+      existing.projectId,
+      input.milestoneId,
+      existing.milestoneId,
+    );
   }
   if (input.userStoryId !== undefined) {
-    await assertUserStoryInProject(database, existing.projectId, input.userStoryId);
+    await assertUserStoryInProject(
+      database,
+      existing.projectId,
+      input.userStoryId,
+      existing.userStoryId,
+    );
   }
   if (input.sprintId !== undefined) {
-    await assertSprintInProject(database, existing.projectId, input.sprintId);
+    await assertSprintInProject(
+      database,
+      existing.projectId,
+      input.sprintId,
+      existing.sprintId,
+    );
   }
   const nextCloudAgentId =
     input.cloudAgentId === undefined
