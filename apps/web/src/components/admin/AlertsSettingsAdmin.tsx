@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useId, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { AnchoredPopover } from '../ui/TableFilterControl';
 import {
   Badge,
   Button,
@@ -30,6 +31,78 @@ const ALERT_TYPES: OpsAlertType[] = [
   'api.error_spike',
   'disk.low',
 ];
+
+function AlertTestTypePicker({
+  value,
+  disabled,
+  label,
+  options,
+  onChange,
+}: {
+  value: OpsAlertType;
+  disabled: boolean;
+  label: string;
+  options: Array<{ value: OpsAlertType; label: string }>;
+  onChange: (value: OpsAlertType) => void;
+}) {
+  const panelId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const close = useCallback((restoreFocus: boolean) => {
+    setOpen(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  }, []);
+  const current = options.find((option) => option.value === value)?.label ?? value;
+
+  return (
+    <>
+      <Button
+        ref={triggerRef}
+        type="button"
+        variant="secondary"
+        className="kh-ops-alert-type-trigger"
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        onClick={() => setOpen((currentOpen) => !currentOpen)}
+      >
+        {current}
+      </Button>
+      {open && triggerRef.current ? (
+        <AnchoredPopover
+          id={panelId}
+          anchor={triggerRef.current}
+          label={label}
+          className="kh-ops-alert-type-menu"
+          initialFocus="[aria-selected='true']"
+          onClose={close}
+        >
+          <div role="listbox" aria-label={label}>
+            {options.map((option) => {
+              const selected = option.value === value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="option"
+                  className="kh-ops-choice"
+                  aria-selected={selected}
+                  onClick={() => {
+                    onChange(option.value);
+                    close(true);
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </AnchoredPopover>
+      ) : null}
+    </>
+  );
+}
 
 const TYPE_LABEL: Record<OpsAlertType, string> = {
   'backup.stale': 'alertTypeBackupStale',
@@ -541,15 +614,16 @@ export function AlertsSettingsAdmin({
           </span>
           <div className="flex flex-wrap items-end gap-2">
             <Field label={t('alertTestType')}>
-              <Select
+              <AlertTestTypePicker
                 value={testType}
                 disabled={pending}
-                onChange={(event) => setTestType(event.target.value as OpsAlertType)}
-              >
-                {ALERT_TYPES.map((type) => (
-                  <option key={type} value={type}>{t(TYPE_LABEL[type])}</option>
-                ))}
-              </Select>
+                label={t('alertTestType')}
+                options={ALERT_TYPES.map((type) => ({
+                  value: type,
+                  label: t(TYPE_LABEL[type]),
+                }))}
+                onChange={setTestType}
+              />
             </Field>
             <Button type="button" variant="secondary" disabled={pending} onClick={() => void sendTest()}>
               {t('alertTest')}

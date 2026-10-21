@@ -4462,6 +4462,69 @@ a.kh-ops-record-link:hover {
   border-top: 1px solid var(--kh-line);
 }
 
+.kh-ops-alert-type-trigger::after {
+  content: '';
+  width: 0.42rem;
+  height: 0.42rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-0.12rem) rotate(45deg);
+}
+
+.kh-ops-popover.kh-ops-alert-type-menu {
+  position: fixed;
+  top: var(--kh-pop-top, 0);
+  left: var(--kh-pop-left, 0);
+  z-index: var(--kh-z-popover);
+  width: max-content;
+  min-width: 12rem;
+  max-height: min(24rem, calc(100vh - 1rem));
+  margin-top: 0;
+  overflow: auto;
+  gap: 4px;
+  padding: 6px;
+  background: var(--kh-panel-solid);
+  color: var(--kh-ink);
+}
+
+.kh-ops-alert-type-menu [role='listbox'] {
+  display: grid;
+  gap: 4px;
+}
+
+.kh-ops-alert-type-menu .kh-ops-choice {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  outline: none;
+  box-shadow: none;
+}
+
+.kh-ops-alert-type-menu .kh-ops-choice::-moz-focus-inner {
+  border: 0;
+  padding: 0;
+}
+
+.kh-ops-alert-type-menu .kh-ops-choice:hover {
+  border-color: transparent;
+  background: var(--kh-neutral-soft);
+}
+
+.kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true'],
+.kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true']:hover,
+.kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true']:focus,
+.kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true']:focus-visible {
+  border: 1px solid var(--kh-ink);
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+}
+
 .kh-ops-narrow-form {
   max-width: 840px;
 }

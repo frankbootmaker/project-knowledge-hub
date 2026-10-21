@@ -37,12 +37,16 @@ export function AnchoredPopover({
   label,
   onClose,
   children,
+  className,
+  initialFocus,
 }: {
   id: string;
   anchor: HTMLElement;
   label: string;
   onClose: (restoreFocus: boolean) => void;
   children: ReactNode;
+  className?: string;
+  initialFocus?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -83,9 +87,13 @@ export function AnchoredPopover({
 
   useEffect(() => {
     const panel = panelRef.current;
-    const focusable = panel?.querySelector<HTMLElement>(
-      'input, button, [href], select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
+    const preferred = initialFocus
+      ? panel?.querySelector<HTMLElement>(initialFocus)
+      : null;
+    const focusable = preferred
+      ?? panel?.querySelector<HTMLElement>(
+        'input, button, [href], select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
     (focusable ?? panel)?.focus();
     function onKey(event: KeyboardEvent) {
       if (event.key === 'Escape') {
@@ -128,13 +136,13 @@ export function AnchoredPopover({
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('mousedown', onPointer);
     };
-  }, [anchor, onClose]);
+  }, [anchor, initialFocus, onClose]);
 
   return createPortal(
     <div
       ref={panelRef}
       id={id}
-      className="kh-ops-popover kh-ops-table-filter"
+      className={cn('kh-ops-popover', className ?? 'kh-ops-table-filter')}
       role="dialog"
       aria-label={label}
       tabIndex={-1}
