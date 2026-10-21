@@ -1,15 +1,27 @@
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import {
-  isBlobCredentialHeaderError,
-  sanitizeS3Credential,
-} from './credentials.js';
-import type { BlobObject, BlobPutInput, BlobStore, BlobStoreConfig } from './types.js';
+import { isBlobCredentialHeaderError, sanitizeS3Credential } from './credentials.js';
+import type { BlobHead, BlobObject, BlobPutInput, BlobStore, BlobStoreConfig } from './types.js';
+
+function normalizeEtag(value: string | undefined): string | null {
+  if (!value) return null;
+  const stripped = value.replaceAll('"', '').trim();
+  return stripped.length > 0 ? stripped : null;
+}
+
+function encodeCopySource(bucket: string, key: string): string {
+  return `${bucket}/${key
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')}`;
+}
 
 function asBuffer(body: unknown): Buffer | null {
   if (!body) return null;
@@ -29,18 +41,16 @@ async function streamToBuffer(body: {
 
 export function createS3BlobStore(
   config: Extract<BlobStoreConfig, { provider: 's3' }>,
-): BlobStore {
-  const accessKeyId = sanitizeS3Credential(config.accessKeyId);
-  const secretAccessKey = sanitizeS3Credential(config.secretAccessKey);
-  const client = new S3Client({
+  client: S3Client = new S3Client({
     region: config.region,
     endpoint: config.endpoint,
     forcePathStyle: config.forcePathStyle,
     credentials: {
-      accessKeyId,
-      secretAccessKey,
+      accessKeyId: sanitizeS3Credential(config.accessKeyId),
+      secretAccessKey: sanitizeS3Credential(config.secretAccessKey),
     },
-  });
+  }),
+): BlobStore {
 
   const withPrefix = (key: string): string => {
     const cleaned = key.replace(/^\/+/, '');
@@ -96,22 +106,61 @@ export function createS3BlobStore(
         }),
       );
     },
-    async list(prefix: string): Promise<BlobObject[]> {
-      const fullPrefix = withPrefix(prefix);
-      const result = await client.send(
-        new ListObjectsV2Command({
+    async head(key: string): Promise<BlobHead | null> {
+      try {
+        const result = await client.send(
+          new HeadObjectCommand({
+            Bucket: config.bucket,
+            Key: withPrefix(key),
+          }),
+        );
+        return {
+          sizeBytes: result.ContentLength ?? 0,
+          etag: normalizeEtag(result.ETag),
+        };
+      } catch (error) {
+        const name = error instanceof Error ? error.name : '';
+        const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+          ?.httpStatusCode;
+        if (name === 'NotFound' || name === 'NoSuchKey' || status === 404) return null;
+        throw error;
+      }
+    },
+    async copy(fromKey: string, toKey: string) {
+      const destinationKey = withPrefix(toKey);
+      await client.send(
+        new CopyObjectCommand({
           Bucket: config.bucket,
-          Prefix: fullPrefix,
-          MaxKeys: 200,
+          Key: destinationKey,
+          CopySource: encodeCopySource(config.bucket, withPrefix(fromKey)),
         }),
       );
-      return (result.Contents ?? [])
-        .filter((item) => Boolean(item.Key))
-        .map((item) => ({
-          key: stripPrefix(item.Key!),
-          sizeBytes: item.Size,
-          lastModified: item.LastModified,
-        }));
+    },
+    async list(prefix: string): Promise<BlobObject[]> {
+      const fullPrefix = withPrefix(prefix);
+      const objects: BlobObject[] = [];
+      let continuationToken: string | undefined;
+      for (let page = 0; page < 1000; page += 1) {
+        const result = await client.send(
+          new ListObjectsV2Command({
+            Bucket: config.bucket,
+            Prefix: fullPrefix,
+            MaxKeys: 1000,
+            ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+          }),
+        );
+        for (const item of result.Contents ?? []) {
+          if (!item.Key) continue;
+          objects.push({
+            key: stripPrefix(item.Key),
+            sizeBytes: item.Size,
+            lastModified: item.LastModified,
+          });
+        }
+        if (!result.IsTruncated || !result.NextContinuationToken) break;
+        continuationToken = result.NextContinuationToken;
+      }
+      return objects;
     },
   };
 }

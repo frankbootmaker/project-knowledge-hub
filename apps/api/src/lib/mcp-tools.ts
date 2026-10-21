@@ -105,6 +105,7 @@ import {
   createWorkspaceMedia,
   getWorkspaceMediaById,
   listWorkspaceMedia,
+  mediaByteLocation,
   readMediaBytes,
   toPublicMedia,
   type PublicWorkspaceMedia,
@@ -3199,10 +3200,11 @@ export function createMcpToolHandlers(
       });
 
       const { store: blobStore } = await app.getBlobStore();
+      const location = mediaByteLocation(row);
       const bytes = await readMediaBytes(
         app.env.MEDIA_UPLOAD_DIR,
-        row.workspaceId,
-        row.id,
+        location.workspaceId,
+        location.mediaId,
         { blobStore },
       );
       if (!bytes) {

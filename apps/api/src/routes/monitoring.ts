@@ -17,7 +17,6 @@ import {
   listDumpArtifacts,
   readSchedulerHeartbeat,
   readStamp,
-  rotateDumpArtifacts,
   saveUploadedDump,
   stampSummary,
 } from '../lib/backups.js';
@@ -34,9 +33,19 @@ import {
 } from '../lib/backup-schedule.js';
 import {
   readOffsiteStamp,
-  syncPendingOffsiteDump,
   uploadDumpOffsiteOrThrow,
 } from '../lib/backup-offsite.js';
+import { applyBackupRetention } from '../lib/backup-maintenance.js';
+import {
+  readOffsiteErrorStamp,
+  readRotationStamp,
+  retainOffsiteBackups,
+  runOffsiteBackupCycle,
+  stampAgeSeconds,
+  writeOffsiteErrorStamp,
+  type OffsiteRotationResult,
+  type RotationStamp,
+} from '@project-knowledge-hub/blob-store';
 import {
   countErrorAuditEvents,
   getActiveSessionCount,
@@ -48,6 +57,7 @@ import {
   getRecentErrorAuditEvents,
   getSchemaVersionLabel,
   isBackupStale,
+  isOffsiteStale,
   listActiveWorkspacesForMonitoring,
 } from '../lib/monitoring.js';
 import { enqueueWorkspaceEmbeddingReindex } from '../lib/embedding-jobs.js';
@@ -65,6 +75,10 @@ const retentionBodySchema = z.object({
   keepMonthly: z.coerce.number().int().min(0).max(36),
   autoRotate: z.boolean(),
   runNow: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+const rotateBodySchema = z.object({
+  dryRun: z.boolean().optional(),
 });
 const scheduleBodySchema = z.object({
   enabled: z.boolean(),
@@ -76,6 +90,11 @@ const scheduleBodySchema = z.object({
       { message: 'intervalSeconds must be a supported preset' },
     ),
 });
+
+function rotationView(stamp: RotationStamp | null) {
+  if (!stamp) return { stamp: null, ageSeconds: null as number | null };
+  return { stamp, ageSeconds: stampAgeSeconds(stamp.at) };
+}
 
 function sinceForRange(range: '1h' | '24h' | '7d'): Date {
   const now = Date.now();
@@ -143,6 +162,9 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       lastImport,
       lastFailure,
       lastOffsite,
+      lastOffsiteError,
+      lastLocalRotation,
+      lastS3Rotation,
       artifacts,
       retention,
       schedule,
@@ -168,6 +190,9 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         readStamp(backupDir, 'last-import.json'),
         readStamp(backupDir, 'last-failure.json'),
         readOffsiteStamp(backupDir),
+        readOffsiteErrorStamp(backupDir),
+        readRotationStamp(backupDir, 'local'),
+        readRotationStamp(backupDir, 's3'),
         listDumpArtifacts(backupDir),
         readRetentionPolicy(backupDir, envRetentionDefaults(app.env)),
         readSchedulePolicy(backupDir, envScheduleDefaults(app.env)),
@@ -196,6 +221,21 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const lastSuccessSummary = stampSummary(lastSuccess);
     const staleAfterHours = app.env.BACKUP_STALE_AFTER_HOURS;
     const staleBackup = isBackupStale(lastSuccessSummary.ageSeconds, staleAfterHours);
+    const offsiteStaleAfterHours = app.env.BACKUP_OFFSITE_STALE_AFTER_HOURS;
+    const lastOffsiteAge = lastOffsite
+      ? stampSummary({
+          kind: lastOffsite.kind,
+          at: lastOffsite.at,
+          artifact: lastOffsite.artifact,
+          schemaVersion: lastOffsite.schemaVersion,
+          hostname: lastOffsite.hostname,
+        }).ageSeconds
+      : null;
+    const staleOffsite = isOffsiteStale(
+      lastOffsiteAge,
+      offsiteStaleAfterHours,
+      offsiteEnabled,
+    );
     const schedulerHeartbeatSummary = schedulerHeartbeat
       ? {
           stamp: schedulerHeartbeat,
@@ -230,6 +270,8 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         ...pending,
         staleBackup,
         staleBackupAfterHours: staleAfterHours,
+        staleOffsite,
+        staleOffsiteAfterHours: offsiteStaleAfterHours,
         onDutyAdmins,
       },
       sessions: { active: activeSessions },
@@ -258,17 +300,18 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         lastImport: stampSummary(lastImport),
         lastFailure: stampSummary(lastFailure),
         lastOffsite: lastOffsite
+          ? { stamp: lastOffsite, ageSeconds: lastOffsiteAge }
+          : { stamp: null, ageSeconds: null },
+        lastOffsiteError: lastOffsiteError
           ? {
-              stamp: lastOffsite,
-              ageSeconds: stampSummary({
-                kind: lastOffsite.kind,
-                at: lastOffsite.at,
-                artifact: lastOffsite.artifact,
-                schemaVersion: lastOffsite.schemaVersion,
-                hostname: lastOffsite.hostname,
-              }).ageSeconds,
+              stamp: lastOffsiteError,
+              ageSeconds: stampAgeSeconds(lastOffsiteError.at),
             }
           : { stamp: null, ageSeconds: null },
+        lastLocalRotation: rotationView(lastLocalRotation),
+        lastS3Rotation: rotationView(lastS3Rotation),
+        staleOffsite,
+        staleOffsiteAfterHours: offsiteStaleAfterHours,
         artifacts,
         totalBytes,
         maxUploadBytes: app.env.BACKUP_MAX_UPLOAD_BYTES,
@@ -309,7 +352,8 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     let offsite: { key: string; stamp: { at: string; key: string } } | null = null;
     let offsiteError: string | null = null;
     const { store: blobStore, backupOffsite } = await app.getBlobStore();
-    if (backupOffsite && blobStore.provider !== 'disabled') {
+    const offsiteActive = Boolean(backupOffsite && blobStore.provider !== 'disabled');
+    if (offsiteActive) {
       try {
         const uploaded = await uploadDumpOffsiteOrThrow({
           blobStore,
@@ -321,6 +365,10 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       } catch (error) {
         offsiteError =
           error instanceof Error ? error.message : 'Offsite upload failed';
+        await writeOffsiteErrorStamp(app.env.BACKUP_DIR, {
+          message: offsiteError,
+          artifact: result.artifact.name,
+        }).catch(() => undefined);
         request.log.warn(
           { err: error, artifact: result.artifact.name },
           'Local dump succeeded; offsite upload failed',
@@ -332,9 +380,16 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       app.env.BACKUP_DIR,
       envRetentionDefaults(app.env),
     );
-    let rotation: { kept: number; deleted: string[] } | null = null;
+    let rotation: { kept: number; deleted: string[]; dryRun: boolean } | null = null;
+    let offsiteRotation: OffsiteRotationResult | null = null;
     if (policy.autoRotate) {
-      rotation = await rotateDumpArtifacts(app.env.BACKUP_DIR, policy);
+      const applied = await applyBackupRetention({
+        backupDir: app.env.BACKUP_DIR,
+        policy,
+        blobStore: offsiteActive ? blobStore : null,
+      });
+      rotation = applied.rotation;
+      offsiteRotation = applied.offsiteRotation;
     }
 
     const organization = await getDefaultOrganization(app.database);
@@ -351,6 +406,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         rotation,
         offsite,
         offsiteError,
+        offsiteRotation,
       },
       ipAddress: request.ip,
     });
@@ -361,6 +417,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       rotation,
       offsite,
       offsiteError,
+      offsiteRotation,
     };
   });
 
@@ -377,9 +434,19 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       autoRotate: body.autoRotate,
     });
 
-    let rotation: { kept: number; deleted: string[] } | null = null;
+    let rotation: { kept: number; deleted: string[]; dryRun: boolean } | null = null;
+    let offsiteRotation: OffsiteRotationResult | null = null;
     if (body.runNow) {
-      rotation = await rotateDumpArtifacts(app.env.BACKUP_DIR, policy);
+      const { store, backupOffsite } = await app.getBlobStore();
+      const applied = await applyBackupRetention({
+        backupDir: app.env.BACKUP_DIR,
+        policy,
+        blobStore:
+          backupOffsite && store.provider !== 'disabled' ? store : null,
+        dryRun: body.dryRun,
+      });
+      rotation = applied.rotation;
+      offsiteRotation = applied.offsiteRotation;
     }
 
     const organization = await getDefaultOrganization(app.database);
@@ -390,11 +457,15 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       action: 'backup.retention_update',
       entityType: 'database_backup',
       entityId: 'retention',
-      metadata: { policy, rotation },
+      metadata: { policy, rotation, offsiteRotation },
       ipAddress: request.ip,
     });
 
-    return { retention: { ...policy, source: 'file' as const }, rotation };
+    return {
+      retention: { ...policy, source: 'file' as const },
+      rotation,
+      offsiteRotation,
+    };
   });
 
   app.put('/api/v1/admin/monitoring/backups/schedule', async (request) => {
@@ -428,25 +499,42 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const principal = requireAuthenticated(request);
     requireSystemAdmin(principal);
 
+    const body = rotateBodySchema.parse(request.body ?? {});
     const { policy } = await readRetentionPolicy(
       app.env.BACKUP_DIR,
       envRetentionDefaults(app.env),
     );
-    const rotation = await rotateDumpArtifacts(app.env.BACKUP_DIR, policy);
+    const { store, backupOffsite } = await app.getBlobStore();
+    const applied = await applyBackupRetention({
+      backupDir: app.env.BACKUP_DIR,
+      policy,
+      blobStore: backupOffsite && store.provider !== 'disabled' ? store : null,
+      dryRun: body.dryRun,
+    });
 
     const organization = await getDefaultOrganization(app.database);
     await writeAuditEvent(app.database, {
       organizationId: organization?.id ?? null,
       actorType: 'user',
       actorId: principal.userId,
-      action: 'backup.rotate',
+      action: body.dryRun ? 'backup.rotate_dry_run' : 'backup.rotate',
       entityType: 'database_backup',
       entityId: 'retention',
-      metadata: { policy, rotation },
+      metadata: {
+        policy,
+        rotation: applied.rotation,
+        offsiteRotation: applied.offsiteRotation,
+        dryRun: Boolean(body.dryRun),
+      },
       ipAddress: request.ip,
     });
 
-    return { retention: { ...policy }, rotation };
+    return {
+      retention: { ...policy },
+      dryRun: Boolean(body.dryRun),
+      rotation: applied.rotation,
+      offsiteRotation: applied.offsiteRotation,
+    };
   });
 
   app.post('/api/v1/admin/monitoring/backups/:name/offsite', async (request) => {
@@ -457,12 +545,45 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     const schemaVersion = await getSchemaVersionLabel(app.database);
     const { store: blobStore } = await app.getBlobStore();
 
-    const uploaded = await uploadDumpOffsiteOrThrow({
-      blobStore,
-      backupDir: app.env.BACKUP_DIR,
-      name: params.name,
-      schemaVersion,
-    });
+    let uploaded: Awaited<ReturnType<typeof uploadDumpOffsiteOrThrow>>;
+    try {
+      uploaded = await uploadDumpOffsiteOrThrow({
+        blobStore,
+        backupDir: app.env.BACKUP_DIR,
+        name: params.name,
+        schemaVersion,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Offsite upload failed';
+      await writeOffsiteErrorStamp(app.env.BACKUP_DIR, {
+        message,
+        artifact: params.name,
+      }).catch(() => undefined);
+      const { policy } = await readRetentionPolicy(
+        app.env.BACKUP_DIR,
+        envRetentionDefaults(app.env),
+      );
+      if (policy.autoRotate && blobStore.provider !== 'disabled') {
+        await retainOffsiteBackups({
+          blobStore,
+          backupDir: app.env.BACKUP_DIR,
+          policy,
+        });
+      }
+      throw error;
+    }
+
+    const { policy } = await readRetentionPolicy(
+      app.env.BACKUP_DIR,
+      envRetentionDefaults(app.env),
+    );
+    if (policy.autoRotate && blobStore.provider !== 'disabled') {
+      await retainOffsiteBackups({
+        blobStore,
+        backupDir: app.env.BACKUP_DIR,
+        policy,
+      });
+    }
 
     const organization = await getDefaultOrganization(app.database);
     await writeAuditEvent(app.database, {
@@ -485,10 +606,16 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
     requireSystemAdmin(principal);
     const schemaVersion = await getSchemaVersionLabel(app.database);
     const { store: blobStore } = await app.getBlobStore();
-    const result = await syncPendingOffsiteDump({
+    const { policy } = await readRetentionPolicy(
+      app.env.BACKUP_DIR,
+      envRetentionDefaults(app.env),
+    );
+    const result = await runOffsiteBackupCycle({
       blobStore,
       backupDir: app.env.BACKUP_DIR,
       schemaVersion,
+      policy,
+      prune: policy.autoRotate,
     });
     return result;
   });

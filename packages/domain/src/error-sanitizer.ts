@@ -34,6 +34,39 @@ type DatabaseErrorInfo = {
  * Handles drizzle-orm's DrizzleQueryError (which wraps the driver error in .cause)
  * and direct postgres.js PostgresError instances.
  */
+function errorText(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  let depth = 0;
+  while (current && depth < 6) {
+    if (
+      typeof current === 'object' &&
+      current &&
+      'message' in current &&
+      typeof current.message === 'string'
+    ) {
+      parts.push(current.message);
+    }
+    if (typeof current === 'object' && current && 'cause' in current) {
+      current = (current as { cause?: unknown }).cause;
+      depth += 1;
+    } else {
+      break;
+    }
+  }
+  return parts.join('\n');
+}
+
+/**
+ * Delete (and cascading delete) foreign-key failures say the key is still
+ * referenced. Insert and update failures say the key is not present.
+ * Mirrored in web archive.cannotDeleteReferenced / referencedRecordMissing.
+ */
+function isForeignKeyOnDelete(error: unknown, detail?: string): boolean {
+  if (detail && /still referenced/i.test(detail)) return true;
+  return /failed query:\s*delete\b/i.test(errorText(error));
+}
+
 function findDatabaseError(error: unknown, maxDepth = 5): DatabaseErrorInfo | null {
   let current: unknown = error;
   let depth = 0;
@@ -143,6 +176,15 @@ export function sanitizeError(
           logPayload,
         };
       case '23503':
+        if (isForeignKeyOnDelete(error, dbError.detail)) {
+          return {
+            statusCode: 409,
+            code: 'STILL_REFERENCED',
+            message: 'Cannot delete: still referenced by other records',
+            correlationId,
+            logPayload,
+          };
+        }
         return {
           statusCode: 400,
           code: 'INVALID_REFERENCE',

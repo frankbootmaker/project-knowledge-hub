@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Retention for knowledge-hub-*.dump artifacts under BACKUP_DIR.
-# Policy (defaults): keep 7 daily, 4 weekly, 3 monthly; delete older.
+# Same policy as packages/blob-store/src/retention.ts:
+#   daily: at most one dump per UTC day for keepDaily days, always plus the newest
+#   then ≤keepWeekly one-per-ISO-week, then ≤keepMonthly one-per-month
 # Admin → Monitoring may write BACKUP_DIR/retention.json (overrides env).
 #
 # Env:
@@ -9,10 +11,13 @@
 #   BACKUP_KEEP_WEEKLY=4
 #   BACKUP_KEEP_MONTHLY=3
 #   BACKUP_FORCE_ROTATE=1   # run even when autoRotate is false
-#   BACKUP_DRY_RUN=1        # print deletions only
+#   BACKUP_DRY_RUN=1        # print deletions only; does not write last-local-rotation.json
+#   BACKUP_NOW_EPOCH        # optional unix seconds; pins the clock (tests). Default: date -u +%s
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/db-ops-common.sh
+source "${SCRIPT_DIR}/lib/db-ops-common.sh"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 BACKUP_DIR="${BACKUP_DIR:-${ROOT_DIR}/backups}"
 KEEP_DAILY="${BACKUP_KEEP_DAILY:-7}"
@@ -77,20 +82,92 @@ if [[ ${#FILES[@]} -eq 0 ]]; then
 fi
 
 now_epoch="$(date -u +%s)"
+if [[ "${BACKUP_NOW_EPOCH:-}" =~ ^[0-9]+$ ]]; then
+  now_epoch="${BACKUP_NOW_EPOCH}"
+fi
+
 declare -A KEEP=()
+declare -A SEEN_DAY=()
 declare -A SEEN_WEEK=()
 declare -A SEEN_MONTH=()
+declare -a MTIMES=()
+declare -a DAY_KEYS=()
+declare -a WEEK_KEYS=()
+declare -a MONTH_KEYS=()
+daily_count=0
 weekly_count=0
 monthly_count=0
 
-for f in "${FILES[@]}"; do
-  mtime="$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")"
+# One process for every dump. Per-file date(1)/stat(1) forks are slow enough
+# under a loaded CI runner to blow the retention parity test's default timeout.
+read_dump_meta() {
+  local mtime day_key week_key month_key f meta_file
+  if command -v python3 >/dev/null 2>&1; then
+    meta_file="$(mktemp)"
+    if ! python3 - "${FILES[@]}" >"$meta_file" <<'PY'
+import os
+import sys
+from datetime import datetime, timezone
+
+for path in sys.argv[1:]:
+    mtime = int(os.stat(path).st_mtime)
+    dt = datetime.fromtimestamp(mtime, timezone.utc)
+    iso_year, iso_week, _iso_weekday = dt.isocalendar()
+    sys.stdout.write(
+        f"{mtime}\t{dt:%Y-%m-%d}\t{iso_year}-W{iso_week:02d}\t{dt:%Y-%m}\n"
+    )
+PY
+    then
+      rm -f "$meta_file"
+      echo "Failed to read backup mtimes in ${BACKUP_DIR}" >&2
+      exit 1
+    fi
+    while IFS=$'\t' read -r mtime day_key week_key month_key; do
+      [[ -n "$mtime" ]] || continue
+      MTIMES+=("$mtime")
+      DAY_KEYS+=("$day_key")
+      WEEK_KEYS+=("$week_key")
+      MONTH_KEYS+=("$month_key")
+    done <"$meta_file"
+    rm -f "$meta_file"
+    return 0
+  fi
+
+  for f in "${FILES[@]}"; do
+    mtime="$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")"
+    day_key="$(date -u -d "@${mtime}" +%Y-%m-%d 2>/dev/null || date -u -r "$mtime" +%Y-%m-%d)"
+    week_key="$(date -u -d "@${mtime}" +%G-W%V 2>/dev/null || date -u -r "$mtime" +%G-W%V)"
+    month_key="$(date -u -d "@${mtime}" +%Y-%m 2>/dev/null || date -u -r "$mtime" +%Y-%m)"
+    MTIMES+=("$mtime")
+    DAY_KEYS+=("$day_key")
+    WEEK_KEYS+=("$week_key")
+    MONTH_KEYS+=("$month_key")
+  done
+}
+
+read_dump_meta
+if [[ ${#MTIMES[@]} -ne ${#FILES[@]} ]]; then
+  echo "Failed to read backup mtimes in ${BACKUP_DIR}" >&2
+  exit 1
+fi
+
+# Always keep the newest dump, even when it is older than the daily window.
+KEEP["${FILES[0]}"]=1
+
+for i in "${!FILES[@]}"; do
+  f="${FILES[$i]}"
+  mtime="${MTIMES[$i]}"
   age_days=$(( (now_epoch - mtime) / 86400 ))
-  week_key="$(date -u -d "@${mtime}" +%G-W%V 2>/dev/null || date -u -r "$mtime" +%G-W%V)"
-  month_key="$(date -u -d "@${mtime}" +%Y-%m 2>/dev/null || date -u -r "$mtime" +%Y-%m)"
+  day_key="${DAY_KEYS[$i]}"
+  week_key="${WEEK_KEYS[$i]}"
+  month_key="${MONTH_KEYS[$i]}"
 
   if (( age_days < KEEP_DAILY )); then
-    KEEP["$f"]=1
+    if [[ -z "${SEEN_DAY[$day_key]:-}" ]] && (( daily_count < KEEP_DAILY )); then
+      KEEP["$f"]=1
+      SEEN_DAY["$day_key"]=1
+      daily_count=$((daily_count + 1))
+    fi
     continue
   fi
 
@@ -131,4 +208,9 @@ for f in "${FILES[@]}"; do
   deleted=$((deleted + 1))
 done
 
-echo "Retention in ${BACKUP_DIR}: kept=${kept} deleted=${deleted} (daily<=${KEEP_DAILY}d, weekly=${KEEP_WEEKLY}, monthly=${KEEP_MONTHLY})"
+echo "Retention in ${BACKUP_DIR}: kept=${kept} deleted=${deleted} (daily<=${KEEP_DAILY} one/day, weekly=${KEEP_WEEKLY}, monthly=${KEEP_MONTHLY}, dry_run=${DRY_RUN})"
+if [[ "$DRY_RUN" != "1" ]]; then
+  db_ops_rotation_stamp_write \
+    "${BACKUP_DIR}/last-local-rotation.json" \
+    "local_rotation" "$kept" "$deleted" ""
+fi

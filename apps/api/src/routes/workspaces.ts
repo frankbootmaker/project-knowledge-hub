@@ -24,6 +24,7 @@ import {
   writeAuditEvent,
 } from '../lib/identity.js';
 import { listWorkspaceMembers } from '../lib/project-stakeholders.js';
+import { purgeWorkspace } from '../lib/workspace-purge.js';
 
 const createWorkspaceSchema = z.object({
   name: z.string().min(1).max(120),
@@ -369,7 +370,10 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
     return { workspace: archived ? toPublicWorkspace(archived) : null };
   });
 
-  /** Permanent delete — cascades projects, systems, records, git connections, memberships. */
+  /**
+   * Permanent delete. Cascades projects, systems, records, git connections, and
+   * memberships. Cross-workspace item media returns 409 with the blocking items.
+   */
   app.post('/api/v1/workspaces/:workspaceId/purge', async (request, reply) => {
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
@@ -391,7 +395,7 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
       });
     }
 
-    await app.database.db.delete(workspaces).where(eq(workspaces.id, workspace.id));
+    await purgeWorkspace(app.database, workspace.id);
 
     await writeAuditEvent(app.database, {
       organizationId: workspace.organizationId,

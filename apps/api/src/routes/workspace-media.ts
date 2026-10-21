@@ -20,6 +20,7 @@ import {
   createWorkspaceMedia,
   getWorkspaceMediaById,
   listWorkspaceMedia,
+  mediaByteLocation,
   readMediaBytes,
   toPublicMedia,
   updateWorkspaceMedia,
@@ -58,10 +59,11 @@ async function sendMediaBytes(
   signed: boolean,
 ) {
   const { store: blobStore } = await app.getBlobStore();
+  const location = mediaByteLocation(row);
   const buffer = await readMediaBytes(
     app.env.MEDIA_UPLOAD_DIR,
-    row.workspaceId,
-    row.id,
+    location.workspaceId,
+    location.mediaId,
     { blobStore },
   );
   if (!buffer) {

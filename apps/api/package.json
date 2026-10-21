@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "lint": "eslint src --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "relocate-workspace-media": "tsx src/scripts/relocate-workspace-media.ts"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.0",

@@ -87,7 +87,10 @@ ln -sfn "$(basename "$OUT")" "${BACKUP_DIR}/latest.dump" 2>/dev/null \
   || true
 
 if [[ "$RUN_ROTATE" == "1" ]]; then
-  BACKUP_DIR="$BACKUP_DIR" "${SCRIPT_DIR}/rotate-backups.sh" || {
+  if ! BACKUP_DIR="$BACKUP_DIR" "${SCRIPT_DIR}/rotate-backups.sh"; then
     echo "Warning: retention rotation failed (dump still kept)." >&2
-  }
+    db_ops_rotation_stamp_write \
+      "${BACKUP_DIR}/last-local-rotation.json" \
+      "local_rotation" "" "" "retention rotation failed"
+  fi
 fi

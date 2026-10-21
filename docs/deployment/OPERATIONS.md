@@ -74,7 +74,7 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 ### Ops-0 — Scheduled local backup + export/import path — **done**
 
 * Compose service `db-backup` (Dokploy + local `compose.yaml`): loop `pg_dump -Fc` when due (default interval `BACKUP_INTERVAL_SECONDS=86400`). Scripts are copied into the image at build time (`infrastructure/docker/db-backup.Dockerfile`) so redeploys do not break a bind mount of the git checkout. Overdue dumps run on catch-up; the loop polls about once a minute so Admin schedule changes apply without a full-interval sleep. Admin → Monitoring overrides enable/interval via `BACKUP_DIR/schedule.json` and shows a scheduler heartbeat.
-* Retention via `rotate-backups.sh` / Admin `retention.json`: `BACKUP_KEEP_DAILY` / `_WEEKLY` / `_MONTHLY` (defaults 7 / 4 / 3).
+* Retention via `rotate-backups.sh` / Admin `retention.json`: `BACKUP_KEEP_DAILY` / `_WEEKLY` / `_MONTHLY` (defaults 7 / 4 / 3). The daily tier keeps **at most one dump per UTC day** for that many days, and always keeps the newest dump. Weekly and monthly tiers stay one-per-period. Local files and S3 objects under `{BLOB_KEY_PREFIX|APP_ENV}/backups/` use the same rules and run independently. S3 pruning still runs when that cycle's upload fails, and it never deletes the newest successful offsite object.
 * Dumps on named volume `knowledge_hub_backups` (path `/backups` in the sidecar).
 * Volume ownership: API/worker use uid **1001**; `db-backup` and container entrypoints chown `/backups` so Monitoring export/delete work.
 * **Export:** `export-db.sh` (= `backup-db.sh`); artifacts `knowledge-hub-*.dump`, symlink `latest.dump`.
@@ -87,8 +87,8 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 
 * `BLOB_PROVIDER=s3` + bucket/credentials; objects at `{BLOB_KEY_PREFIX|APP_ENV}/backups/…`.
 * After API **Export now**, dump is uploaded when `BACKUP_OFFSITE=true` (default).
-* Worker sync (same backup volume) uploads pending `last-success` dumps on an interval (`BACKUP_OFFSITE_SYNC_INTERVAL_MS`).
-* Stamp: `/backups/last-offsite.json`; Monitoring shows last offsite age + **Push offsite** per file.
+* Worker sync (same backup volume) uploads pending `last-success` dumps on an interval (`BACKUP_OFFSITE_SYNC_INTERVAL_MS`), then prunes S3 even if the upload failed.
+* Stamps: `/backups/last-offsite.json`, `/backups/last-offsite-error.json` (last error and time), `/backups/last-local-rotation.json`, `/backups/last-s3-rotation.json` (kept/deleted counts or the error). Monitoring and `get_platform_status` show those, and raise an alert when offsite is enabled and the copy is missing or older than `BACKUP_OFFSITE_STALE_AFTER_HOURS` (default 48).
 * Provider-managed encryption at rest (bucket SSE/KMS) — client-side encrypt later if needed.
 * Azure Blob (`NF-007`) on Admin → **Storage** when **Entra ID** sign-in (`NF-012`) lands.
 
@@ -97,6 +97,19 @@ Workspace- or project-scoped export/import (move one tenant without cloning the 
 * Profile avatars use `BlobStore` when `BLOB_PROVIDER=s3` (keys `{prefix}/avatars/{userId}`); served via `/api/v1/avatars/:userId` (no public S3 URLs).
 * When provider is `disabled`, avatars stay on `AVATAR_UPLOAD_DIR` (Compose volume). Local file is used as read fallback and optional backfill when migrating to S3.
 * **Knowledge media (NF-013):** workspace library JPEG/PNG/WebP at `{prefix}/media/{workspaceId}/{mediaId}`; embed via `/api/v1/media/:mediaId` (auth). Local fallback `MEDIA_UPLOAD_DIR`. MCP `upload_workspace_media` returns a Markdown snippet.
+* **Relocate media after a project move (PRO-B-31):** migration `0075` retargets item attachments that still point at another workspace's media and sets `storage_workspace_id` / `storage_media_id` so reads keep working. It does not copy objects. Run the relocator once on the API container after that migration, with the same env and the media volume mounted. Dry-run first. Re-run until `failed` and `sourceDeleteFailed` are both 0. Do this before anyone deletes the old workspace prefix by hand. Purge does not delete media files; the relocator does, and only after a verified copy.
+
+  ```bash
+  # from a checkout that has the API env (DATABASE_URL, MEDIA_UPLOAD_DIR, BLOB_*)
+  pnpm --filter @project-knowledge-hub/api relocate-workspace-media -- --dry-run
+  pnpm --filter @project-knowledge-hub/api relocate-workspace-media
+
+  # on the dev API container (workdir /app), after the image that contains this build
+  node apps/api/dist/scripts/relocate-workspace-media.js --dry-run
+  node apps/api/dist/scripts/relocate-workspace-media.js
+  ```
+
+  Optional: `--limit=50` processes one batch and exits, `--media-id=<uuid>` repeats for a single row. A copy or verification failure is logged (`source kept`) and the row stays pending, so the next run resumes it. The process exits 1 when any row failed or a source delete failed after the copy. A crash between the database update and the source delete can leave an unreferenced object at the old key; the row already reads the new key, and a later run will not delete that leftover.
 * Document/import file pipelines and Doc Factory exports still later.
 
 ### Ops-3 — Admin maintenance UI
@@ -169,7 +182,10 @@ Minimal interface (implementation later):
 | --- | --- |
 | Manual export / backup | `POSTGRES_CONTAINER=… POSTGRES_PASSWORD=… ./infrastructure/scripts/export-db.sh` |
 | Or TCP (sidecar-style) | `POSTGRES_HOST=127.0.0.1 POSTGRES_PASSWORD=… BACKUP_DIR=./backups ./infrastructure/scripts/backup-db.sh` |
-| Retention only | `BACKUP_DIR=./backups ./infrastructure/scripts/rotate-backups.sh` |
+| Retention only (deletes) | `BACKUP_DIR=./backups ./infrastructure/scripts/rotate-backups.sh` |
+| Retention dry-run (local, no deletes) | `BACKUP_DRY_RUN=1 BACKUP_DIR=./backups ./infrastructure/scripts/rotate-backups.sh` |
+| Local + S3 dry-run (no deletes) | `pnpm --filter @project-knowledge-hub/api exec tsx src/cli/prune-backups.ts` |
+| Local + S3 apply | `pnpm --filter @project-knowledge-hub/api exec tsx src/cli/prune-backups.ts --apply` |
 | Import (replace) | `CONFIRM_IMPORT=REPLACE POSTGRES_CONTAINER=… ./infrastructure/scripts/import-db.sh ./backups/latest.dump` (schema wipe default; add `WIPE_DATABASE=1` to recreate DB) |
 | Low-level restore | `./infrastructure/scripts/restore-db.sh ./backups/foo.dump` (prefer `import-db.sh`) |
 
@@ -187,10 +203,13 @@ Set `BACKUP_ENABLED=false` (or Admin → Monitoring → disable schedule) to idl
 | --- | --- | --- |
 | `BACKUP_ENABLED` | `true` | Sidecar dumps when true; Admin can toggle via Monitoring (`schedule.json`) |
 | `BACKUP_INTERVAL_SECONDS` | `86400` | Seconds between dumps (≥ 60); Admin presets override via `schedule.json` |
-| `BACKUP_KEEP_DAILY` | `7` | Keep all dumps younger than N days |
+| `BACKUP_KEEP_DAILY` | `7` | Keep at most one dump per UTC day for N days, always plus the newest |
 | `BACKUP_KEEP_WEEKLY` | `4` | Then keep ≤N one-per-ISO-week |
 | `BACKUP_KEEP_MONTHLY` | `3` | Then keep ≤N one-per-month; older deleted |
-| `BACKUP_RUN_ON_START` | `1` | Dump once when sidecar starts |
+| `BACKUP_RUN_ON_START` | `1` | Consider a dump when the sidecar starts |
+| `BACKUP_STARTUP_MIN_AGE_SECONDS` | schedule interval | Skip that startup dump when last success is younger than this. Unset uses `BACKUP_INTERVAL_SECONDS` / `schedule.json`. `0` always dumps. A skip still runs local retention |
+| `BACKUP_OFFSITE_STALE_AFTER_HOURS` | `48` | Alert when offsite is enabled and the last successful copy is missing or older than this |
+| `BACKUP_DRY_RUN` | `0` | `1` makes `rotate-backups.sh` print deletions only. The API CLI dry-runs unless `--apply` is passed |
 | `BACKUP_FAILURE_RETRY_SECONDS` | `900` | Wait before retry after a failed dump |
 | `BACKUP_SCHEDULER_POLL_SECONDS` | `60` | How often the sidecar re-reads `schedule.json` while waiting |
 | `BACKUP_DIR` | `./backups` or `/backups` | Artifact + stamp directory |
