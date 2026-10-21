@@ -4529,6 +4529,11 @@ button.kh-ops-setup-card {
   margin-top: 12px;
 }
 
+.kh-ops-scope-list.kh-ops-scope-list--inline {
+  gap: 4px;
+  margin-top: 0;
+}
+
 .kh-ops-scope-checks {
   display: grid;
   grid-template-columns: 1fr 1fr;
