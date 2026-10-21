@@ -31,6 +31,7 @@ export {
   listActiveUsersForAlerts,
   listRecipientUsers,
   loadEffectiveAlertSettings,
+  mergeStoredOpsAlertSettings,
   parseStoredOpsAlertSettings,
   readAuditRetentionSnapshot,
   readStoredOpsAlertSettings,

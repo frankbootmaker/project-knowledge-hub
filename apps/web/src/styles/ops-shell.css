@@ -1684,6 +1684,58 @@ a.kh-ops-health-card:hover {
   text-align: right;
 }
 
+/* Flat disclosure rows inside an ops panel. The marker stays a small triangle. */
+.kh-ops-disclosure {
+  border-bottom: 1px solid var(--kh-line);
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+.kh-ops-disclosure:first-of-type {
+  border-top: 1px solid var(--kh-line);
+}
+
+.kh-ops-disclosure:last-of-type {
+  border-bottom: 0;
+}
+
+.kh-ops-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.kh-ops-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.kh-ops-disclosure > summary::before {
+  content: '';
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--kh-ink-muted);
+}
+
+.kh-ops-disclosure[open] > summary::before {
+  border-top: 5px solid var(--kh-ink-muted);
+  border-right: 4px solid transparent;
+  border-bottom: 0;
+  border-left: 4px solid transparent;
+}
+
+.kh-ops-disclosure > summary .kh-ops-panel-meta {
+  margin: 0 0 0 auto;
+}
+
 .kh-ops-record-head {
   padding: 20px;
   border-bottom: 1px solid var(--kh-line);
