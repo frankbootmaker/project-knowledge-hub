@@ -5920,6 +5920,9 @@ img.kh-ops-media-preview {
 .kh-date-field,
 .kh-date-range {
   position: relative;
+}
+
+.kh-date-range {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
@@ -5927,16 +5930,52 @@ img.kh-ops-media-preview {
 }
 
 .kh-date-range-field {
-  display: flex;
   min-width: 9rem;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.75rem;
-  color: var(--kh-ink-muted);
 }
 
-.kh-date-open {
-  padding-inline: 0.6rem;
+.kh-date-control {
+  position: relative;
+  display: block;
+}
+
+.kh-date-control > .kh-input {
+  padding-right: 2.25rem;
+}
+
+/* Same place as the native calendar glyph on the exchange-rate date field. */
+.kh-date-icon {
+  position: absolute;
+  top: 50%;
+  right: 0.2rem;
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--kh-ink-muted);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.kh-date-icon:hover:not(:disabled) {
+  background: var(--kh-selected-hover-bg);
+  color: var(--kh-ink);
+}
+
+.kh-date-icon:focus-visible {
+  outline: 2px solid var(--kh-accent);
+  outline-offset: 1px;
+}
+
+.kh-date-icon:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .kh-date-popover,
@@ -5989,6 +6028,10 @@ img.kh-ops-media-preview {
 }
 
 .kh-date-day:hover:not(:disabled) {
+  background: var(--kh-selected-hover-bg);
+}
+
+.kh-date-day.is-in-range {
   background: var(--kh-selected-hover-bg);
 }
 
