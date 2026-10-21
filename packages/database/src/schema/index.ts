@@ -1736,6 +1736,53 @@ export const aiUsageEvents = pgTable(
 );
 
 /**
+ * Per-model theoretical API prices. workspace_id null is a seeded default.
+ * Amounts are USD (or another ISO code) per 1,000,000 tokens.
+ * model may be an exact id or a glob (`claude*sonnet*`).
+ */
+export const aiModelPrices = pgTable(
+  'ai_model_prices',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, {
+      onDelete: 'cascade',
+    }),
+    model: text('model').notNull(),
+    inputPerMillion: numeric('input_per_million', {
+      precision: 14,
+      scale: 6,
+      mode: 'number',
+    }).notNull(),
+    cacheWritePerMillion: numeric('cache_write_per_million', {
+      precision: 14,
+      scale: 6,
+      mode: 'number',
+    }).notNull(),
+    cacheReadPerMillion: numeric('cache_read_per_million', {
+      precision: 14,
+      scale: 6,
+      mode: 'number',
+    }).notNull(),
+    outputPerMillion: numeric('output_per_million', {
+      precision: 14,
+      scale: 6,
+      mode: 'number',
+    }).notNull(),
+    currency: text('currency').notNull(),
+    effectiveFrom: date('effective_from', { mode: 'string' }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('ai_model_prices_scope_uidx').on(
+      sql`coalesce(${table.workspaceId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
+      table.model,
+      table.effectiveFrom,
+    ),
+    index('ai_model_prices_workspace_idx').on(table.workspaceId),
+  ],
+);
+
+/**
  * Directed predecessor link between two delivery items in one project.
  * Successors are the inverse of these rows; they are not stored separately.
  */

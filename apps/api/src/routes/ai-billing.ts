@@ -101,7 +101,9 @@ export async function registerAiBillingRoutes(
       .object({
         from: z.string().optional(),
         to: z.string().optional(),
-        range: z.enum(['last12', 'year', 'all']).optional(),
+        range: z.enum(['last12', 'year', 'quarter', 'month', 'all']).optional(),
+        grain: z.enum(['month', 'week', 'day']).optional(),
+        timeZone: z.string().max(80).optional(),
         workspaceId: z.string().optional(),
         provider: z.string().max(80).optional(),
         type: z.string().optional(),
@@ -130,11 +132,14 @@ export async function registerAiBillingRoutes(
     const to = blank(query.to);
     const provider = blank(query.provider);
     const period = blank(query.period);
-    const fetchWindow = platformAiCostFetchWindow({
+    const windowQuery = {
       ...(from ? { from } : {}),
       ...(to ? { to } : {}),
       ...(query.range ? { range: query.range } : {}),
-    });
+      ...(query.grain ? { grain: query.grain } : {}),
+      ...(blank(query.timeZone) ? { timeZone: blank(query.timeZone) } : {}),
+    };
+    const fetchWindow = platformAiCostFetchWindow(windowQuery);
     const report = await loadPlatformAiCost(app.database, {
       ...(fetchWindow.from ? { from: fetchWindow.from } : {}),
       ...(fetchWindow.to ? { to: fetchWindow.to } : {}),
@@ -146,11 +151,7 @@ export async function registerAiBillingRoutes(
         ? { reportingCurrency: blank(query.reportingCurrency) }
         : {}),
     });
-    return presentPlatformAiCost(report, {
-      ...(from ? { from } : {}),
-      ...(to ? { to } : {}),
-      ...(query.range ? { range: query.range } : {}),
-    });
+    return presentPlatformAiCost(report, windowQuery);
   });
 
   app.get(
@@ -165,7 +166,9 @@ export async function registerAiBillingRoutes(
         .object({
           from: z.string().optional(),
           to: z.string().optional(),
-          range: z.enum(['last12', 'year', 'all']).optional(),
+          range: z.enum(['last12', 'year', 'quarter', 'month', 'all']).optional(),
+          grain: z.enum(['month', 'week', 'day']).optional(),
+          timeZone: z.string().max(80).optional(),
         })
         .parse(request.query);
       const from = blank(query.from);
@@ -178,6 +181,8 @@ export async function registerAiBillingRoutes(
         ...(from ? { from } : {}),
         ...(to ? { to } : {}),
         ...(query.range ? { range: query.range } : {}),
+        ...(query.grain ? { grain: query.grain } : {}),
+        ...(blank(query.timeZone) ? { timeZone: blank(query.timeZone) } : {}),
       });
     },
   );

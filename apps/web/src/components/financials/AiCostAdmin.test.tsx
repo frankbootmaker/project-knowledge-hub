@@ -98,7 +98,7 @@ describe('AiCostAdmin cost entry form', () => {
     act(() => {
       add?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    const dates = [...document.body.querySelectorAll('input[type="date"]')];
+    const dates = [...document.body.querySelectorAll('[data-date-field]')];
     expect(dates).toHaveLength(2);
     const saveClosed = [...document.body.querySelectorAll('button')].find(
       (button) => button.textContent === 'save',

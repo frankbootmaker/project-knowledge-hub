@@ -19,6 +19,12 @@ import {
   listUnassignedUsageRows,
   previewAiUsageCsv,
 } from '../lib/ai-usage-import.js';
+import {
+  deleteAiModelPrice,
+  listAiModelPrices,
+  loadImportedTheoretical,
+  upsertAiModelPrice,
+} from '../lib/ai-usage-pricing.js';
 import { upsertProjectCostSnapshot } from '../lib/project-budget.js';
 
 const csvBody = z.object({
@@ -136,5 +142,75 @@ export async function registerAiUsageImportRoutes(
       ipAddress: request.ip,
     });
     return { import: result.usageImport };
+  });
+
+  app.get('/api/v1/workspaces/:workspaceId/ai-model-prices', async (request) => {
+    const principal = requireAuthenticated(request);
+    const params = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    requireWorkspaceView(principal, params.workspaceId);
+    return { prices: await listAiModelPrices(app.database, params.workspaceId) };
+  });
+
+  app.put('/api/v1/workspaces/:workspaceId/ai-model-prices', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    const body = z
+      .object({
+        model: z.string(),
+        inputPerMillion: z.number(),
+        cacheWritePerMillion: z.number(),
+        cacheReadPerMillion: z.number(),
+        outputPerMillion: z.number(),
+        currency: z.string(),
+        effectiveFrom: z.string(),
+      })
+      .parse(request.body);
+    requireWorkspaceAdmin(principal, params.workspaceId);
+    const price = await upsertAiModelPrice(app.database, params.workspaceId, body);
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrganizationId(app.database, params.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'ai_model_price.saved',
+      entityType: 'ai_model_price',
+      entityId: price.id,
+      metadata: { workspaceId: params.workspaceId, model: price.model },
+      ipAddress: request.ip,
+    });
+    return { price };
+  });
+
+  app.delete(
+    '/api/v1/workspaces/:workspaceId/ai-model-prices/:priceId',
+    async (request) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({ workspaceId: z.string().uuid(), priceId: z.string().uuid() })
+        .parse(request.params);
+      requireWorkspaceAdmin(principal, params.workspaceId);
+      await deleteAiModelPrice(app.database, params.workspaceId, params.priceId);
+      await writeAuditEvent(app.database, {
+        organizationId: await workspaceOrganizationId(app.database, params.workspaceId),
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'ai_model_price.deleted',
+        entityType: 'ai_model_price',
+        entityId: params.priceId,
+        metadata: { workspaceId: params.workspaceId },
+        ipAddress: request.ip,
+      });
+      return { ok: true };
+    },
+  );
+
+  app.post('/api/v1/workspaces/:workspaceId/ai-model-prices/reprice', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    requireWorkspaceAdmin(principal, params.workspaceId);
+    const priced = await loadImportedTheoretical(app.database, params.workspaceId);
+    return { months: priced.months, unpricedModels: priced.unpricedModels };
   });
 }

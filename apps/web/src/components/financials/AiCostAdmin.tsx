@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
+  addCalendarDays,
+  lastDayOfMonth,
   projectCurrencySchema,
   summarizeAiBillingMonth,
   splitBillingEntryByMonth,
@@ -13,8 +15,13 @@ import {
 import { formatAiBillingMonth, formatServiceDate } from '../../lib/ai-billing-month';
 import { formatMoney, parseOptionalNumber } from '../../lib/project-currency';
 import { AiBillingChart, AiBillingChartLegend } from '../AiBillingChart';
-import { Button, ErrorText, Field, Input, Modal, Select, useToast } from '../ui';
-import { AiCostPeriodForm, type AiCostViewRange } from './AiCostPeriodForm';
+import { Button, DateField, ErrorText, Field, Input, Modal, Select, useToast } from '../ui';
+import {
+  AiCostGrainToggle,
+  AiCostPeriodForm,
+  type AiCostGrain,
+  type AiCostViewRange,
+} from './AiCostPeriodForm';
 
 type BillingType = 'subscription' | 'plan_change' | 'on_demand';
 
@@ -233,7 +240,15 @@ export function AiCostAdmin({
   systems,
   from,
   to,
+  fromDay,
+  toDay,
   range = 'last12',
+  grain = 'month',
+  grainAdjusted = false,
+  monthly,
+  originalMonthly,
+  theoretical = [],
+  unpricedModels = [],
 }: {
   workspaceId: string;
   workspaceSlug: string;
@@ -247,7 +262,20 @@ export function AiCostAdmin({
   systems: AiSystemPrice[];
   from?: string;
   to?: string;
+  fromDay?: string;
+  toDay?: string;
   range?: AiCostViewRange;
+  grain?: AiCostGrain;
+  grainAdjusted?: boolean;
+  monthly?: AiCostChartPoint[];
+  originalMonthly?: AiCostChartPoint[];
+  theoretical?: Array<{
+    currency: string;
+    linked: number;
+    unassigned: number;
+    total: number;
+  }>;
+  unpricedModels?: Array<{ model: string }>;
 }) {
   const t = useTranslations('financials');
   const tCommon = useTranslations('common');
@@ -274,9 +302,15 @@ export function AiCostAdmin({
   const [rates, setRates] = useState<Record<string, Record<string, string>>>({});
 
   const sourceChart = showOriginal ? (originalChart ?? chart) : chart;
+  const sourceTable = showOriginal
+    ? (originalMonthly ?? originalChart ?? chart)
+    : (monthly ?? chart);
   const visibleChart = showOriginal
     ? sourceChart.filter((row) => row.currency === currency)
     : sourceChart;
+  const visibleTable = showOriginal
+    ? sourceTable.filter((row) => row.currency === currency)
+    : sourceTable;
   const chartCurrency =
     visibleChart.length > 0 &&
     visibleChart.every((row) => row.currency === visibleChart[0]?.currency)
@@ -292,6 +326,42 @@ export function AiCostAdmin({
     onDemand: visibleChart.reduce((sum, row) => sum + row.onDemand, 0),
     theoreticalApiCost: visibleChart.reduce((sum, row) => sum + row.theoreticalApiCost, 0),
   });
+  const tableTotal = summarizeAiBillingMonth({
+    period: 'total',
+    currency: chartCurrency,
+    subscription: visibleTable.reduce((sum, row) => sum + row.subscription, 0),
+    planChange: visibleTable.reduce((sum, row) => sum + row.planChange, 0),
+    onDemand: visibleTable.reduce((sum, row) => sum + row.onDemand, 0),
+    theoreticalApiCost: visibleTable.reduce((sum, row) => sum + row.theoreticalApiCost, 0),
+  });
+  const [timeZone, setTimeZone] = useState('UTC');
+  useEffect(() => {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (zone) setTimeZone(zone);
+  }, []);
+  const costAction = `/workspaces/${workspaceSlug}/financials`;
+  const grainPreserve: Record<string, string> = { tz: timeZone };
+  if (range !== 'custom') grainPreserve.range = range;
+  else {
+    if (fromDay) grainPreserve.from = fromDay;
+    if (toDay) grainPreserve.to = toDay;
+  }
+  function openBucket(period: string) {
+    const params = new URLSearchParams();
+    params.set('tz', timeZone);
+    if (/^\d{4}-\d{2}$/.test(period)) {
+      params.set('from', `${period}-01`);
+      params.set('to', lastDayOfMonth(period));
+    } else if (grain === 'week') {
+      params.set('from', period);
+      params.set('to', addCalendarDays(period, 6));
+    } else {
+      params.set('from', period);
+      params.set('to', period);
+    }
+    params.set('grain', 'day');
+    router.push(`${costAction}?${params.toString()}`);
+  }
   const chartLabels = {
     subscription: t('type.subscription'),
     planChange: t('type.plan_change'),
@@ -591,10 +661,13 @@ export function AiCostAdmin({
     <div className="grid gap-3">
       {from && to ? (
         <AiCostPeriodForm
-          action={`/workspaces/${workspaceSlug}/financials`}
+          action={costAction}
           from={from}
           to={to}
+          fromDay={fromDay}
+          toDay={toDay}
           range={range}
+          preserve={{ grain, tz: timeZone }}
         />
       ) : null}
       {error && !draft ? <ErrorText>{error}</ErrorText> : null}
@@ -648,12 +721,38 @@ export function AiCostAdmin({
       <section className="kh-ops-panel">
         <div className="kh-ops-panel-head">
           <h2 className="kh-ops-panel-title">{t('chartTitle')}</h2>
+          <AiCostGrainToggle
+            action={costAction}
+            grain={grain}
+            adjusted={grainAdjusted}
+            preserve={grainPreserve}
+          />
         </div>
+        {theoretical.length > 0 || unpricedModels.length > 0 ? (
+          <div className="grid gap-1 px-3 pt-3 text-[13px] text-ink-muted">
+            {theoretical.map((row) => (
+              <p key={row.currency} className="m-0">
+                {row.currency} · {t('theoreticalLinked')}:{' '}
+                {formatMoney(row.linked, row.currency, locale)} · {t('theoreticalUnassigned')}:{' '}
+                {formatMoney(row.unassigned, row.currency, locale)}
+              </p>
+            ))}
+            {unpricedModels.length > 0 ? (
+              <p className="m-0">
+                {t('unpricedModels')}: {unpricedModels.map((row) => row.model).join(', ')}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <div className="kh-ops-chart-wrap">
           <AiBillingChartLegend
             periods={visibleChart.map((row) => ({ ...row, legacyToken: 0 }))}
             labels={chartLabels}
           />
+          <p className="m-0 px-3 text-[13px] text-ink-muted">
+            {t('paid')}: {formatMoney(chartTotal.paidCost, chartCurrency, locale)} ·{' '}
+            {t('theoretical')}: {formatMoney(chartTotal.theoreticalApiCost, chartCurrency, locale)}
+          </p>
           {visibleChart.length === 0 ? (
             <p className="kh-ops-empty">{t('chartEmpty')}</p>
           ) : (
@@ -668,11 +767,14 @@ export function AiCostAdmin({
                 locale={locale}
                 currency={chartCurrency}
                 labels={chartLabels}
+                onActivate={openBucket}
               />
               <div className="kh-ops-table-wrap">
                 <table className="kh-ops-data-table">
                   <caption className="kh-ops-panel-meta px-3 py-2 text-left">
                     {t('overviewTitle')}
+                    {' · '}
+                    {t('tableNote')}
                   </caption>
                   <thead>
                     <tr>
@@ -687,7 +789,7 @@ export function AiCostAdmin({
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleChart.map((row) => {
+                    {visibleTable.map((row) => {
                       const summary = summarizeAiBillingMonth({
                         period: row.period,
                         currency: row.currency,
@@ -728,25 +830,25 @@ export function AiCostAdmin({
                     <tr>
                       <th scope="row">{t('total')}</th>
                       <td className="kh-ops-num">
-                        {formatMoney(chartTotal.subscription, chartCurrency, locale)}
+                        {formatMoney(tableTotal.subscription, chartCurrency, locale)}
                       </td>
                       <td className="kh-ops-num">
-                        {formatMoney(chartTotal.planChange, chartCurrency, locale)}
+                        {formatMoney(tableTotal.planChange, chartCurrency, locale)}
                       </td>
                       <td className="kh-ops-num">
-                        {formatMoney(chartTotal.onDemand, chartCurrency, locale)}
+                        {formatMoney(tableTotal.onDemand, chartCurrency, locale)}
                       </td>
                       <td className="kh-ops-num">
-                        {formatMoney(chartTotal.paidCost, chartCurrency, locale)}
+                        {formatMoney(tableTotal.paidCost, chartCurrency, locale)}
                       </td>
                       <td className="kh-ops-num">
-                        {formatMoney(chartTotal.theoreticalApiCost, chartCurrency, locale)}
+                        {formatMoney(tableTotal.theoreticalApiCost, chartCurrency, locale)}
                       </td>
                       <td className="kh-ops-num">
-                        {formatMoney(chartTotal.difference, chartCurrency, locale)}
+                        {formatMoney(tableTotal.difference, chartCurrency, locale)}
                       </td>
                       <td className="kh-ops-num">
-                        {chartTotal.ratio == null ? '—' : chartTotal.ratio.toFixed(3)}
+                        {tableTotal.ratio == null ? '—' : tableTotal.ratio.toFixed(3)}
                       </td>
                     </tr>
                   </tfoot>
@@ -1081,18 +1183,14 @@ export function AiCostAdmin({
           <div className="kh-ops-form-grid">
             {error ? <div className="kh-ops-field-span"><ErrorText>{error}</ErrorText></div> : null}
             <Field label={t('serviceStart')}>
-              <Input
-                type="date"
+              <DateField
                 value={draft.servicePeriodStart}
                 disabled={pending}
-                onChange={(event) =>
-                  setDraft({ ...draft, servicePeriodStart: event.target.value })
-                }
+                onChange={(iso) => setDraft({ ...draft, servicePeriodStart: iso })}
               />
             </Field>
             <Field label={t('serviceEnd')}>
-              <Input
-                type="date"
+              <DateField
                 value={draft.servicePeriodEnd}
                 min={
                   draft.servicePeriodStart
@@ -1100,9 +1198,8 @@ export function AiCostAdmin({
                     : undefined
                 }
                 disabled={pending}
-                onChange={(event) =>
-                  setDraft({ ...draft, servicePeriodEnd: event.target.value })
-                }
+                invalid={rangeInvalid}
+                onChange={(iso) => setDraft({ ...draft, servicePeriodEnd: iso })}
               />
               <span className="mt-1 block text-[13px] font-normal normal-case tracking-normal text-ink-muted">
                 {t('serviceEndHint')}

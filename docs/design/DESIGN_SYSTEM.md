@@ -249,6 +249,12 @@ from client components. Tones: `success` (default), `danger`, `info`.
 
 Record durable UI / design-system changes here (newest first).
 
+### 2026-10-21
+
+* **AI cost period** — Workspace and platform Financials add This quarter and This month beside This year (`LinkButton` presets). The active preset stays filled until the from/to dates change. From and to use a shared calendar (`DateField` / `DateRangeFields`): a calendar button opens a popover, a typed date still applies, and the same calendar can pick one day or a day range. Day buttons use the UI sans. Service start and service end in the cost-entry dialog use the same single-day field, and the end cannot be on or before the start.
+* **AI cost chart grain** — Month, Week, and Day sit in the chart header. Day view wider than 92 days switches to weeks and says so. Subscription cost is spread evenly across service days, so a week or day chart of one range sums to the same total. The monthly overview table stays in calendar months; a partial day range includes only those days. Clicking a bar drills a month or week into days. Labels use the locale day form (`Oct 19`, `19. Okt.`, `okt. 19.`).
+* **Theoretical model prices** — Usage import shows linked and unassigned theoretical cost, the CSV paid amount beside it, and models without a price. Workspace admins edit the per-model price table on that tab (pattern, four rates per 1M tokens, currency, effective date) with save, delete, and recompute actions.
+
 ### 2026-10-20
 
 * **Backup retention status** — Admin → Backups shows the last offsite error, local and S3 rotation results, and an offsite-age alert on the existing offsite `StatusRow`s. A secondary `Button` dry-runs retention. No new control style.

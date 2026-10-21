@@ -694,6 +694,12 @@ export type McpToolHandlers = {
     to?: string;
     reportingCurrency?: string;
   }) => Promise<unknown>;
+  getAiUsageTheoreticalCost: (input: {
+    workspaceId: string;
+    from?: string;
+    to?: string;
+  }) => Promise<unknown>;
+  listAiModelPrices: (input: { workspaceId: string }) => Promise<unknown>;
   createAiBillingEntry: (input: {
     workspaceId: string;
     period?: string;
@@ -3339,6 +3345,30 @@ export function createKnowledgeHubMcpServer(
   const listBillingOutput = { entries: z.array(billingEntryOutput()) };
   const createBillingOutput = { entry: billingEntryOutput() };
   const updateBillingOutput = { entry: billingEntryOutput() };
+
+  server.tool(
+    'get_ai_usage_theoretical_cost',
+    'Per-month theoretical API cost for imported usage and task usage that was not replaced by an import. linked is allocated to a project task. unassigned is workspace-level. Amounts are in the workspace reporting currency. Unpriced models are listed and are not treated as zero without a flag. from and to are YYYY-MM or YYYY-MM-DD. Requires pm:read. Via call_hub_tool.',
+    {
+      workspaceId: z.string().uuid(),
+      from: z.string().optional(),
+      to: z.string().optional(),
+    },
+    async (args) =>
+      wrap('get_ai_usage_theoretical_cost', 'pm:read', () =>
+        handlers.getAiUsageTheoreticalCost(args),
+      )(),
+  );
+
+  server.tool(
+    'list_ai_model_prices',
+    'List default and workspace AI model prices used for theoretical API cost. Rates are per 1,000,000 tokens for input, cache write, cache read, and output. A workspace row overrides a default with the same pattern. Requires pm:read. Via call_hub_tool.',
+    {
+      workspaceId: z.string().uuid(),
+    },
+    async (args) =>
+      wrap('list_ai_model_prices', 'pm:read', () => handlers.listAiModelPrices(args))(),
+  );
 
   server.tool(
     'get_platform_ai_cost',
