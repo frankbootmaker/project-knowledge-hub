@@ -4,7 +4,11 @@
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AiBillingChart, AiBillingChartLegend } from './AiBillingChart';
+import {
+  AiBillingChart,
+  AiBillingChartLegend,
+  type AiBillingPeriodPoint,
+} from './AiBillingChart';
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -43,7 +47,7 @@ const labels = {
   scheduled: 'scheduled',
 };
 
-const periods = [
+const periods: AiBillingPeriodPoint[] = [
   {
     period: '2026-09',
     paidCost: 0,
@@ -67,6 +71,12 @@ const periods = [
     ratio: 1.167,
   },
 ];
+
+function octoberOn(period: string): AiBillingPeriodPoint {
+  const october = periods[1];
+  if (!october) throw new Error('October fixture is required');
+  return { ...october, period };
+}
 
 describe('AiBillingChart', () => {
   it('shows currency ticks, a locale month, and a tooltip that matches the month', () => {
@@ -102,6 +112,23 @@ describe('AiBillingChart', () => {
     const line = container.querySelector('.kh-ops-ai-cost-line');
     expect(sub).toBeTruthy();
     expect(line).toBeTruthy();
+    expect(container.querySelector('.kh-ops-ai-cost-month-vertical')).toBeNull();
+  });
+
+  it('turns week and day labels upright so they do not share a line', () => {
+    const container = render(
+      <AiBillingChart
+        periods={[octoberOn('2026-10-06'), octoberOn('2026-10-13')]}
+        ariaLabel="AI cost"
+        locale="en"
+        currency="USD"
+        labels={labels}
+      />,
+    );
+    const vertical = [...container.querySelectorAll('.kh-ops-ai-cost-month-vertical')];
+    expect(vertical).toHaveLength(2);
+    expect(vertical[0]?.getAttribute('transform')).toContain('rotate(-90');
+    expect(vertical[0]?.textContent).toBe('Oct 6');
   });
 
   it('greys a series that is zero in every month', () => {

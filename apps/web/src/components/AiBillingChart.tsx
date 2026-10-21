@@ -31,6 +31,8 @@ export type AiBillingChartLabels = {
 
 const WIDTH = 760;
 const HEIGHT = 248;
+/** Room under the plot for a vertical day or week label such as "19. Okt.". */
+const VERTICAL_LABEL_PAD = 72;
 
 function seriesValue(
   row: AiBillingPeriodPoint,
@@ -151,12 +153,18 @@ export function AiBillingChart({
 }) {
   const tipId = useId();
   const [active, setActive] = useState<number | null>(null);
-  const height = HEIGHT;
-  const pad = { top: 22, right: 16, bottom: 42, left: 78 };
-  const innerW = WIDTH - pad.left - pad.right;
-  const innerH = height - pad.top - pad.bottom;
   const rows = periods.slice().sort((a, b) => a.period.localeCompare(b.period));
   if (rows.length === 0) return null;
+  const verticalLabels = rows.some((row) => /^\d{4}-\d{2}-\d{2}$/.test(row.period));
+  const height = verticalLabels ? HEIGHT + (VERTICAL_LABEL_PAD - 42) : HEIGHT;
+  const pad = {
+    top: 22,
+    right: 16,
+    bottom: verticalLabels ? VERTICAL_LABEL_PAD : 42,
+    left: 78,
+  };
+  const innerW = WIDTH - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
   const labelsOn = showValueLabels ?? rows.length <= 8;
 
   const positiveOf = (row: AiBillingPeriodPoint) =>
@@ -329,15 +337,31 @@ export function AiBillingChart({
                   {money(figures.paidCost)}
                 </text>
               ) : null}
-              <text
-                x={center}
-                y={height - (row.scheduled ? 18 : 10)}
-                textAnchor="middle"
-                className="kh-ops-ai-cost-month"
-              >
-                {label}
-              </text>
-              {row.scheduled ? (
+              {verticalLabels ? (
+                <text
+                  x={center}
+                  y={pad.top + innerH + 8}
+                  textAnchor="end"
+                  transform={`rotate(-90 ${center} ${pad.top + innerH + 8})`}
+                  className={
+                    row.scheduled
+                      ? 'kh-ops-ai-cost-scheduled kh-ops-ai-cost-month-vertical'
+                      : 'kh-ops-ai-cost-month kh-ops-ai-cost-month-vertical'
+                  }
+                >
+                  {label}
+                </text>
+              ) : (
+                <text
+                  x={center}
+                  y={height - (row.scheduled ? 18 : 10)}
+                  textAnchor="middle"
+                  className="kh-ops-ai-cost-month"
+                >
+                  {label}
+                </text>
+              )}
+              {!verticalLabels && row.scheduled ? (
                 <text
                   x={center}
                   y={height - 6}

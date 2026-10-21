@@ -1214,6 +1214,46 @@ a.kh-section-shortcut[aria-current='location'] {
   background: var(--kh-panel-solid);
 }
 
+/* Period From/To sit beside the date box so the box lines up with the presets. */
+.kh-ops-period-field {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: auto;
+}
+
+.kh-ops-period-field > span {
+  white-space: nowrap;
+}
+
+.kh-ops-period-field > .kh-input {
+  width: auto;
+  height: var(--kh-button-height);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.kh-ops-fx-date {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.kh-ops-fx-date > .kh-input[type='date'] {
+  width: 12rem;
+  min-width: 12rem;
+  color: var(--kh-ink);
+}
+
+.kh-ops-fx-date > .kh-input[type='date']::-webkit-datetime-edit,
+.kh-ops-fx-date > .kh-input[type='date']::-webkit-datetime-edit-fields-wrapper,
+.kh-ops-fx-date > .kh-input[type='date']::-webkit-datetime-edit-text,
+.kh-ops-fx-date > .kh-input[type='date']::-webkit-datetime-edit-month-field,
+.kh-ops-fx-date > .kh-input[type='date']::-webkit-datetime-edit-day-field,
+.kh-ops-fx-date > .kh-input[type='date']::-webkit-datetime-edit-year-field {
+  color: var(--kh-ink);
+}
+
 .kh-ops-table-wrap {
   overflow-x: auto;
 }
@@ -1332,6 +1372,37 @@ a.kh-section-shortcut[aria-current='location'] {
   border-bottom: 1px solid var(--kh-line);
   text-align: left;
   white-space: nowrap;
+}
+
+/* Grant rows wrap at spaces. Tags, status, and actions stay whole.
+   Ids have no spaces, so they break inside a capped width. */
+.kh-ops-data-table.kh-ops-wrap-table th,
+.kh-ops-data-table.kh-ops-wrap-table td {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: break-word;
+  vertical-align: top;
+}
+
+.kh-ops-data-table.kh-ops-wrap-table .kh-ops-tag,
+.kh-ops-data-table.kh-ops-wrap-table .kh-ops-cell-status,
+.kh-ops-data-table.kh-ops-wrap-table .kh-ops-cell-actions button {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.kh-ops-data-table.kh-ops-wrap-table .kh-ops-scope-list--inline {
+  max-width: 12rem;
+}
+
+.kh-ops-grant-wrap {
+  display: inline-block;
+  max-width: 12rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
 }
 
 .kh-ops-table-wrap--sticky .kh-ops-data-table thead th {
@@ -1642,6 +1713,58 @@ a.kh-ops-health-card:hover {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+/* Flat disclosure rows inside an ops panel. The marker stays a small triangle. */
+.kh-ops-disclosure {
+  border-bottom: 1px solid var(--kh-line);
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+.kh-ops-disclosure:first-of-type {
+  border-top: 1px solid var(--kh-line);
+}
+
+.kh-ops-disclosure:last-of-type {
+  border-bottom: 0;
+}
+
+.kh-ops-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.kh-ops-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.kh-ops-disclosure > summary::before {
+  content: '';
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--kh-ink-muted);
+}
+
+.kh-ops-disclosure[open] > summary::before {
+  border-top: 5px solid var(--kh-ink-muted);
+  border-right: 4px solid transparent;
+  border-bottom: 0;
+  border-left: 4px solid transparent;
+}
+
+.kh-ops-disclosure > summary .kh-ops-panel-meta {
+  margin: 0 0 0 auto;
 }
 
 .kh-ops-record-head {
@@ -3516,6 +3639,10 @@ a.kh-ops-choice {
   font-size: 10px;
 }
 
+.kh-ops-ai-cost-month-vertical {
+  font-size: 9px;
+}
+
 .kh-ops-ai-cost-value {
   fill: var(--kh-ink);
 }
@@ -4335,6 +4462,69 @@ a.kh-ops-record-link:hover {
   border-top: 1px solid var(--kh-line);
 }
 
+.kh-ops-alert-type-trigger::after {
+  content: '';
+  width: 0.42rem;
+  height: 0.42rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-0.12rem) rotate(45deg);
+}
+
+.kh-ops-popover.kh-ops-alert-type-menu {
+  position: fixed;
+  top: var(--kh-pop-top, 0);
+  left: var(--kh-pop-left, 0);
+  z-index: var(--kh-z-popover);
+  width: max-content;
+  min-width: 12rem;
+  max-height: min(24rem, calc(100vh - 1rem));
+  margin-top: 0;
+  overflow: auto;
+  gap: 4px;
+  padding: 6px;
+  background: var(--kh-panel-solid);
+  color: var(--kh-ink);
+}
+
+.kh-ops-alert-type-menu [role='listbox'] {
+  display: grid;
+  gap: 4px;
+}
+
+.kh-ops-alert-type-menu .kh-ops-choice {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  outline: none;
+  box-shadow: none;
+}
+
+.kh-ops-alert-type-menu .kh-ops-choice::-moz-focus-inner {
+  border: 0;
+  padding: 0;
+}
+
+.kh-ops-alert-type-menu .kh-ops-choice:hover {
+  border-color: transparent;
+  background: var(--kh-neutral-soft);
+}
+
+.kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true'],
+.kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true']:hover,
+.kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true']:focus,
+.kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true']:focus-visible {
+  border: 1px solid var(--kh-ink);
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+}
+
 .kh-ops-narrow-form {
   max-width: 840px;
 }
@@ -4400,6 +4590,11 @@ button.kh-ops-setup-card {
   flex-wrap: wrap;
   gap: 5px;
   margin-top: 12px;
+}
+
+.kh-ops-scope-list.kh-ops-scope-list--inline {
+  gap: 4px;
+  margin-top: 0;
 }
 
 .kh-ops-scope-checks {
@@ -4691,6 +4886,11 @@ a.kh-ops-admin-link-card {
   letter-spacing: normal;
   line-height: 1.45;
   text-transform: none;
+}
+
+button.kh-ops-tag {
+  cursor: pointer;
+  color: inherit;
 }
 
 .kh-ops-markdown-view {

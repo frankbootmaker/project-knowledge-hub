@@ -177,6 +177,21 @@ export function parseStoredOpsAlertSettings(
   }
 }
 
+/** Retention days alone do not count. The alerts badge stays on the environment. */
+function hasAlertFieldOverride(stored: StoredOpsAlertSettings | null): boolean {
+  if (!stored) return false;
+  if (stored.diskFreeRatioMin !== undefined) return true;
+  if (stored.diskFreeGbMin !== undefined) return true;
+  if (stored.staleAfterHours !== undefined) return true;
+  if (stored.offsiteStaleAfterHours !== undefined) return true;
+  if (stored.errorSpikeThreshold !== undefined) return true;
+  if (stored.errorSpikeWindowMinutes !== undefined) return true;
+  if (stored.webhookMode !== undefined) return true;
+  if (stored.webhookUrl) return true;
+  if (stored.recipients && Object.keys(stored.recipients).length > 0) return true;
+  return false;
+}
+
 export function resolveEffectiveAlertSettings(
   stored: StoredOpsAlertSettings | null,
   env: AlertEnvSource,
@@ -191,7 +206,7 @@ export function resolveEffectiveAlertSettings(
   }
   const auditFromDb = stored?.auditRetentionDays;
   return {
-    source: stored ? 'override' : 'env',
+    source: hasAlertFieldOverride(stored) ? 'override' : 'env',
     diskFreeRatioMin: pick(stored?.diskFreeRatioMin, env.ALERT_DISK_FREE_RATIO_MIN),
     diskFreeGbMin: pick(stored?.diskFreeGbMin, env.ALERT_DISK_FREE_GB_MIN),
     staleAfterHours: pick(stored?.staleAfterHours, env.BACKUP_STALE_AFTER_HOURS),
@@ -236,6 +251,44 @@ export async function loadEffectiveAlertSettings(
 }> {
   const stored = await readStoredOpsAlertSettings(database);
   return { stored, effective: resolveEffectiveAlertSettings(stored, env) };
+}
+
+export function mergeStoredOpsAlertSettings(
+  stored: StoredOpsAlertSettings | null,
+  patch: Omit<Partial<StoredOpsAlertSettings>, 'auditRetentionDays'> & {
+    auditRetentionDays?: number | null;
+  },
+): StoredOpsAlertSettings | null {
+  const next: StoredOpsAlertSettings = { ...(stored ?? {}) };
+  const assign = <K extends keyof StoredOpsAlertSettings>(
+    key: K,
+    value: StoredOpsAlertSettings[K] | undefined,
+  ) => {
+    if (value !== undefined) next[key] = value;
+  };
+  assign('diskFreeRatioMin', patch.diskFreeRatioMin);
+  assign('diskFreeGbMin', patch.diskFreeGbMin);
+  assign('staleAfterHours', patch.staleAfterHours);
+  assign('offsiteStaleAfterHours', patch.offsiteStaleAfterHours);
+  assign('errorSpikeThreshold', patch.errorSpikeThreshold);
+  assign('errorSpikeWindowMinutes', patch.errorSpikeWindowMinutes);
+  if (patch.webhookMode !== undefined) {
+    next.webhookMode = patch.webhookMode;
+    if (patch.webhookMode !== 'custom') delete next.webhookUrl;
+  }
+  if (
+    patch.webhookUrl !== undefined
+    && (patch.webhookMode ?? next.webhookMode) === 'custom'
+  ) {
+    const url = patch.webhookUrl.trim();
+    if (url) next.webhookUrl = url;
+    else delete next.webhookUrl;
+  }
+  if (patch.auditRetentionDays === null) delete next.auditRetentionDays;
+  else assign('auditRetentionDays', patch.auditRetentionDays);
+  if (patch.recipients !== undefined) next.recipients = patch.recipients;
+  const hasValue = Object.values(next).some((value) => value !== undefined);
+  return hasValue ? next : null;
 }
 
 export async function saveStoredOpsAlertSettings(

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  mergeStoredOpsAlertSettings,
   parseStoredOpsAlertSettings,
   recipientsFromSpec,
   resolveEffectiveAlertSettings,
@@ -125,5 +126,26 @@ describe('ops alert settings', () => {
     });
     expect(plan.source).toBe('admins');
     expect(plan.recipients.map((row) => row.email)).toEqual(['admin@example.com']);
+  });
+
+  it('keeps alert settings on the environment when only retention is saved', () => {
+    const stored = mergeStoredOpsAlertSettings(null, { auditRetentionDays: 30 });
+    const effective = resolveEffectiveAlertSettings(stored, env);
+    expect(effective.source).toBe('env');
+    expect(effective.diskFreeGbMin).toBe(10);
+    expect(effective.auditRetentionDays).toBe(30);
+    expect(effective.auditRetentionSource).toBe('override');
+  });
+
+  it('clears retention without dropping saved alert thresholds', () => {
+    const stored = mergeStoredOpsAlertSettings(
+      { diskFreeGbMin: 20, auditRetentionDays: 30 },
+      { auditRetentionDays: null },
+    );
+    const effective = resolveEffectiveAlertSettings(stored, env);
+    expect(stored).toEqual({ diskFreeGbMin: 20 });
+    expect(effective.source).toBe('override');
+    expect(effective.auditRetentionDays).toBe(90);
+    expect(effective.auditRetentionSource).toBe('env');
   });
 });

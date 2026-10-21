@@ -71,6 +71,8 @@ export async function registerExchangeRateRoutes(app: FastifyInstance): Promise<
       app.database,
       [from, to],
       globalThis.fetch,
+      new Date(),
+      { force: true },
     );
     return {
       from,

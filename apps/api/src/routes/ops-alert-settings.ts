@@ -7,6 +7,7 @@ import {
   listActiveAdminRecipients,
   listRecipientUsers,
   loadEffectiveAlertSettings,
+  mergeStoredOpsAlertSettings,
   recipientsFromSpec,
   saveStoredOpsAlertSettings,
   type OpsAlertType,
@@ -28,7 +29,6 @@ import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
 import { resolveMailConfig } from '../lib/mail-settings.js';
 import {
   getOpsAlertAdminView,
-  storedFromUpdate,
 } from '../lib/ops-alert-admin.js';
 
 const recipientSchema = z.object({
@@ -48,19 +48,29 @@ const recipientsSchema = z.object({
 });
 
 const updateSchema = z.object({
-  diskFreeRatioMin: z.coerce.number().min(0).max(1),
-  diskFreeGbMin: z.coerce.number().min(0).max(100000),
-  staleAfterHours: z.coerce.number().int().min(1).max(168),
-  offsiteStaleAfterHours: z.coerce.number().int().min(1).max(24 * 30),
-  errorSpikeThreshold: z.coerce.number().int().min(0).max(1_000_000),
-  errorSpikeWindowMinutes: z.coerce.number().int().min(1).max(1440),
-  webhookMode: z.enum(['env', 'custom', 'disabled']),
-  webhookUrl: z.string().max(2000).optional().default(''),
-  auditRetentionDays: z.coerce.number().int().min(0).max(3650),
-  recipients: recipientsSchema,
+  diskFreeRatioMin: z.coerce.number().min(0).max(1).optional(),
+  diskFreeGbMin: z.coerce.number().min(0).max(100000).optional(),
+  staleAfterHours: z.coerce.number().int().min(1).max(168).optional(),
+  offsiteStaleAfterHours: z.coerce.number().int().min(1).max(24 * 30).optional(),
+  errorSpikeThreshold: z.coerce.number().int().min(0).max(1_000_000).optional(),
+  errorSpikeWindowMinutes: z.coerce.number().int().min(1).max(1440).optional(),
+  webhookMode: z.enum(['env', 'custom', 'disabled']).optional(),
+  webhookUrl: z.string().max(2000).optional(),
+  auditRetentionDays: z.union([
+    z.null(),
+    z.coerce.number().int().min(0).max(3650),
+  ]).optional(),
+  recipients: recipientsSchema.optional(),
 }).superRefine((value, ctx) => {
+  const present = Object.entries(value).some(([, item]) => item !== undefined);
+  if (!present) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'At least one setting is required',
+    });
+  }
   if (value.webhookMode !== 'custom') return;
-  const url = value.webhookUrl.trim();
+  const url = value.webhookUrl?.trim() ?? '';
   if (!url) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -119,16 +129,20 @@ export async function registerOpsAlertSettingsRoutes(
     const principal = requireAuthenticated(request);
     requireSystemAdmin(principal);
     const body = updateSchema.parse(request.body);
-    const stored = storedFromUpdate({
+    const { stored: existing } = await loadEffectiveAlertSettings(app.database, app.env);
+    const stored = mergeStoredOpsAlertSettings(existing, {
       ...body,
-      webhookUrl: body.webhookUrl,
-      recipients: normalizeRecipients(body.recipients),
+      recipients: body.recipients ? normalizeRecipients(body.recipients) : undefined,
     });
-    await saveStoredOpsAlertSettings(app.database, stored, principal.userId);
+    if (stored) {
+      await saveStoredOpsAlertSettings(app.database, stored, principal.userId);
+    } else {
+      await clearStoredOpsAlertSettings(app.database);
+    }
 
     const organization = await getDefaultOrganization(app.database);
     const configuredTypes = OPS_ALERT_TYPES.filter(
-      (type) => stored.recipients?.[type]?.configured,
+      (type) => stored?.recipients?.[type]?.configured,
     );
     await writeAuditEvent(app.database, {
       organizationId: organization?.id ?? null,
@@ -138,13 +152,13 @@ export async function registerOpsAlertSettingsRoutes(
       entityType: 'platform_settings',
       entityId: OPS_ALERT_SETTINGS_KEY,
       metadata: {
-        diskFreeRatioMin: stored.diskFreeRatioMin,
-        diskFreeGbMin: stored.diskFreeGbMin,
-        staleAfterHours: stored.staleAfterHours,
-        offsiteStaleAfterHours: stored.offsiteStaleAfterHours,
-        errorSpikeThreshold: stored.errorSpikeThreshold,
-        webhookMode: stored.webhookMode,
-        auditRetentionDays: stored.auditRetentionDays,
+        diskFreeRatioMin: stored?.diskFreeRatioMin,
+        diskFreeGbMin: stored?.diskFreeGbMin,
+        staleAfterHours: stored?.staleAfterHours,
+        offsiteStaleAfterHours: stored?.offsiteStaleAfterHours,
+        errorSpikeThreshold: stored?.errorSpikeThreshold,
+        webhookMode: stored?.webhookMode,
+        auditRetentionDays: stored?.auditRetentionDays,
         configuredTypes,
       },
       ipAddress: request.ip,

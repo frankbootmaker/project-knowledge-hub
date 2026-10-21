@@ -31,18 +31,22 @@ function focusableIn(root: HTMLElement): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((node) => node.tabIndex !== -1);
 }
 
-function FilterPopover({
+export function AnchoredPopover({
   id,
   anchor,
   label,
   onClose,
   children,
+  className,
+  initialFocus,
 }: {
   id: string;
   anchor: HTMLElement;
   label: string;
   onClose: (restoreFocus: boolean) => void;
   children: ReactNode;
+  className?: string;
+  initialFocus?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -83,9 +87,13 @@ function FilterPopover({
 
   useEffect(() => {
     const panel = panelRef.current;
-    const focusable = panel?.querySelector<HTMLElement>(
-      'input, button, [href], select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
+    const preferred = initialFocus
+      ? panel?.querySelector<HTMLElement>(initialFocus)
+      : null;
+    const focusable = preferred
+      ?? panel?.querySelector<HTMLElement>(
+        'input, button, [href], select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
     (focusable ?? panel)?.focus();
     function onKey(event: KeyboardEvent) {
       if (event.key === 'Escape') {
@@ -128,13 +136,13 @@ function FilterPopover({
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('mousedown', onPointer);
     };
-  }, [anchor, onClose]);
+  }, [anchor, initialFocus, onClose]);
 
   return createPortal(
     <div
       ref={panelRef}
       id={id}
-      className="kh-ops-popover kh-ops-table-filter"
+      className={cn('kh-ops-popover', className ?? 'kh-ops-table-filter')}
       role="dialog"
       aria-label={label}
       tabIndex={-1}
@@ -213,7 +221,7 @@ export function TableFilterControl({
         {filtersActive ? <span className="kh-ops-filter-dot" aria-hidden /> : null}
       </Button>
       {open && triggerRef.current ? (
-        <FilterPopover
+        <AnchoredPopover
           id={panelId}
           anchor={triggerRef.current}
           label={t('filters')}
@@ -256,7 +264,7 @@ export function TableFilterControl({
               {t('clearFilters')}
             </Button>
           </div>
-        </FilterPopover>
+        </AnchoredPopover>
       ) : null}
     </>
   );

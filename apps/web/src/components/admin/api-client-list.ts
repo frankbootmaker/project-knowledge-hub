@@ -91,16 +91,24 @@ export function filterApiClients<T extends ApiClientListFields>(
   now: number,
 ): T[] {
   const needle = query.query.trim().toLowerCase();
-  const usersById = new Map(users.map((user) => [user.id, user]));
   const matched = clients.filter((client) => {
     const status = apiClientListStatus(client, now);
     if (query.status !== 'all' && status !== query.status) return false;
     if (query.scope !== 'all' && !client.scopes.includes(query.scope)) return false;
     if (!needle) return true;
-    const user = client.actingUserId ? usersById.get(client.actingUserId) : undefined;
-    return apiClientSearchHaystack(client, user).includes(needle);
+    return apiClientSearchBlob(client, users).includes(needle);
   });
   return [...matched].sort((left, right) => compareApiClients(left, right, query.sort));
+}
+
+export function apiClientSearchBlob(
+  client: ApiClientListFields,
+  users: readonly ActingUserLookup[],
+): string {
+  const user = client.actingUserId
+    ? users.find((item) => item.id === client.actingUserId)
+    : undefined;
+  return apiClientSearchHaystack(client, user);
 }
 
 function apiClientSearchHaystack(

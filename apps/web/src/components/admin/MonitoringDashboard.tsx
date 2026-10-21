@@ -11,10 +11,15 @@ import {
   Select,
   useToast,
 } from '../ui';
+import { AuditRetentionAdmin } from './AuditRetentionAdmin';
 import {
   AlertsSettingsAdmin,
   type OpsAlertAdminView,
 } from './AlertsSettingsAdmin';
+import {
+  MonitoringAdminTabs,
+  type MonitoringAdminTab,
+} from './MonitoringAdminTabs';
 import type { MonitoringPayload } from './monitoring-types';
 
 export type { MonitoringPayload } from './monitoring-types';
@@ -41,12 +46,14 @@ export function MonitoringDashboard({
   initial,
   initialRange,
   initialAlerts,
+  tab,
 }: {
   title: string;
   description: string;
   initial: MonitoringPayload;
   initialRange: '1h' | '24h' | '7d';
   initialAlerts: OpsAlertAdminView | null;
+  tab: MonitoringAdminTab;
 }) {
   const t = useTranslations('admin');
   const router = useRouter();
@@ -58,16 +65,24 @@ export function MonitoringDashboard({
   const [reindexWorkspaceId, setReindexWorkspaceId] = useState('');
 
   useEffect(() => {
-    const hash = window.location.hash.replace(/^#/, '');
-    if (hash === 'backups') {
-      router.replace('/admin/backups');
-      return;
-    }
-    const scrollToHash = () => {
-      const id = window.location.hash.replace(/^#/, '');
-      if (!id || id === 'backups') {
-        return;
+    const openHashedTab = () => {
+      const hash = window.location.hash.replace(/^#/, '');
+      if (hash === 'backups') {
+        router.replace('/admin/backups');
+        return true;
       }
+      if ((hash === 'alerts' || hash === 'maintenance') && tab !== hash) {
+        const params = new URLSearchParams(window.location.search);
+        params.set('tab', hash);
+        router.replace(`/admin/monitoring?${params.toString()}`);
+        return true;
+      }
+      return false;
+    };
+    const scrollToHash = () => {
+      if (openHashedTab()) return;
+      const id = window.location.hash.replace(/^#/, '');
+      if (!id || id === 'backups') return;
       document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
     const timer = window.setTimeout(scrollToHash, 0);
@@ -76,7 +91,7 @@ export function MonitoringDashboard({
       window.clearTimeout(timer);
       window.removeEventListener('hashchange', scrollToHash);
     };
-  }, [router]);
+  }, [router, tab]);
 
   const overallOk = data.overall === 'healthy';
   const backupAge = formatAge(
@@ -237,6 +252,17 @@ export function MonitoringDashboard({
         }
       />
 
+      <MonitoringAdminTabs
+        active={tab}
+        range={range}
+        label={t('monitoringTabsLabel')}
+        labels={{
+          dashboard: t('monitoringTabDashboard'),
+          maintenance: t('monitoringNavMaintenance'),
+          alerts: t('alertSettingsTitle'),
+        }}
+      />
+
       {error ? <ErrorText>{error}</ErrorText> : null}
       {data.loadError ? (
         <div className="kh-ops-status-row" role="alert">
@@ -246,6 +272,8 @@ export function MonitoringDashboard({
         </div>
       ) : null}
 
+      {tab === 'dashboard' ? (
+      <>
       <section id="health" className="kh-ops-health-grid scroll-mt-6">
         <div className="kh-ops-health-card">
           <small>{t('monitoringApi')}</small>
@@ -285,8 +313,6 @@ export function MonitoringDashboard({
           </span>
         </a>
       </section>
-
-      <AlertsSettingsAdmin initial={initialAlerts} />
 
       <div className="kh-ops-admin-workspace">
         <div className="kh-ops-admin-stack">
@@ -536,57 +562,6 @@ export function MonitoringDashboard({
               </table>
             </div>
           </section>
-
-          <section id="maintenance" className="kh-ops-panel scroll-mt-6 overflow-hidden">
-            <div className="kh-ops-panel-head">
-              <div className="min-w-0">
-                <h2 className="kh-ops-panel-title">{t('monitoringMaintenanceTitle')}</h2>
-                <p className="kh-ops-panel-sub">
-                  {t('monitoringEmbeddingProvider', {
-                    provider: data.maintenance.embeddingProvider,
-                  })}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-ink">{t('monitoringReindexRun')}</div>
-                <p className="m-0 mt-1 text-xs text-ink-muted">
-                  {t('monitoringMaintenanceBlurb')}
-                </p>
-              </div>
-              <div className="kh-ops-maintenance-controls">
-                <Select
-                  className="kh-ops-inline-control"
-                  aria-label={t('monitoringReindexWorkspace')}
-                  value={reindexWorkspaceId}
-                  disabled={pending}
-                  onChange={(event) => setReindexWorkspaceId(event.target.value)}
-                >
-                  <option value="">{t('monitoringReindexAll')}</option>
-                  {data.maintenance.workspaces.map((workspace) => (
-                    <option key={workspace.id} value={workspace.id}>
-                      {workspace.name}
-                    </option>
-                  ))}
-                </Select>
-                <Button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => void runReindex()}
-                >
-                  {t('monitoringReindexRun')}
-                </Button>
-              </div>
-            </div>
-            <p className="m-0 border-t border-line px-3 py-3 text-sm text-ink-muted">
-              {t('monitoringPurgeHint')}
-              {' '}
-              <a className="text-brand no-underline hover:underline" href="/admin/archive">
-                {t('monitoringArchiveLink')}
-              </a>
-            </p>
-          </section>
         </div>
 
         <aside>
@@ -692,6 +667,66 @@ export function MonitoringDashboard({
           </section>
         </aside>
       </div>
+      </>
+      ) : null}
+
+      {tab === 'maintenance' ? (
+        <>
+        <section id="maintenance" className="kh-ops-panel scroll-mt-6 overflow-hidden">
+          <div className="kh-ops-panel-head">
+            <div className="min-w-0">
+              <h2 className="kh-ops-panel-title">{t('monitoringMaintenanceTitle')}</h2>
+              <p className="kh-ops-panel-sub">
+                {t('monitoringEmbeddingProvider', {
+                  provider: data.maintenance.embeddingProvider,
+                })}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-ink">{t('monitoringReindexRun')}</div>
+              <p className="m-0 mt-1 text-xs text-ink-muted">
+                {t('monitoringMaintenanceBlurb')}
+              </p>
+            </div>
+            <div className="kh-ops-maintenance-controls">
+              <Select
+                className="kh-ops-inline-control"
+                aria-label={t('monitoringReindexWorkspace')}
+                value={reindexWorkspaceId}
+                disabled={pending}
+                onChange={(event) => setReindexWorkspaceId(event.target.value)}
+              >
+                <option value="">{t('monitoringReindexAll')}</option>
+                {data.maintenance.workspaces.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}
+                  </option>
+                ))}
+              </Select>
+              <Button
+                type="button"
+                disabled={pending}
+                onClick={() => void runReindex()}
+              >
+                {t('monitoringReindexRun')}
+              </Button>
+            </div>
+          </div>
+          <p className="m-0 border-t border-line px-3 py-3 text-sm text-ink-muted">
+            {t('monitoringPurgeHint')}
+            {' '}
+            <a className="text-brand no-underline hover:underline" href="/admin/archive">
+              {t('monitoringArchiveLink')}
+            </a>
+          </p>
+        </section>
+        <AuditRetentionAdmin initial={initialAlerts} />
+        </>
+      ) : null}
+
+      {tab === 'alerts' ? <AlertsSettingsAdmin initial={initialAlerts} /> : null}
     </div>
   );
 }

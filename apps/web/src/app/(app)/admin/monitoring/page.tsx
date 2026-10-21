@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import { MonitoringDashboard } from '../../../../components/admin/MonitoringDashboard';
+import { parseMonitoringAdminTab } from '../../../../components/admin/MonitoringAdminTabs';
 import type { OpsAlertAdminView } from '../../../../components/admin/AlertsSettingsAdmin';
 import type { MonitoringPayload } from '../../../../components/admin/monitoring-types';
 import { apiFetch } from '../../../../lib/session';
@@ -95,6 +96,7 @@ export default async function AdminMonitoringPage({
   const rawRange = typeof params.range === 'string' ? params.range : '24h';
   const range =
     rawRange === '1h' || rawRange === '7d' || rawRange === '24h' ? rawRange : '24h';
+  const tab = parseMonitoringAdminTab(params.tab);
 
   const [response, alertResponse] = await Promise.all([
     apiFetch(`/api/v1/admin/monitoring?range=${range}`),
@@ -125,6 +127,7 @@ export default async function AdminMonitoringPage({
       initial={payload}
       initialRange={range}
       initialAlerts={initialAlerts}
+      tab={tab}
     />
   );
 }

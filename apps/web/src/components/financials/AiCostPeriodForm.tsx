@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { isIsoDay } from '@project-knowledge-hub/domain';
-import { Button, LinkButton } from '../ui';
-import { DateRangeFields } from '../ui/DateField';
+import { Button, Field, Input, LinkButton } from '../ui';
 
 export type AiCostViewRange = 'last12' | 'year' | 'quarter' | 'month' | 'all' | 'custom';
 
@@ -37,15 +36,21 @@ export function AiCostPeriodForm({
   const t = useTranslations('financials');
   const [timeZone, setTimeZone] = useState(preserve.tz || 'UTC');
   const [activeRange, setActiveRange] = useState<AiCostViewRange>(range);
-  const initialFrom = isIsoDay(fromDay ?? '') ? (fromDay as string) : isIsoDay(from) ? from : '';
-  const initialTo = isIsoDay(toDay ?? '') ? (toDay as string) : isIsoDay(to) ? to : '';
-  const [fromValue, setFromValue] = useState(initialFrom);
-  const [toValue, setToValue] = useState(initialTo);
+  const resolvedFrom = isIsoDay(fromDay ?? '') ? (fromDay as string) : isIsoDay(from) ? from : '';
+  const resolvedTo = isIsoDay(toDay ?? '') ? (toDay as string) : isIsoDay(to) ? to : '';
+  const [fromValue, setFromValue] = useState(resolvedFrom);
+  const [toValue, setToValue] = useState(resolvedTo);
 
   useEffect(() => {
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (zone) setTimeZone(zone);
   }, []);
+
+  useEffect(() => {
+    setFromValue(resolvedFrom);
+    setToValue(resolvedTo);
+    setActiveRange(range);
+  }, [resolvedFrom, resolvedTo, range]);
 
   const labels: Record<(typeof PRESETS)[number], string> = {
     last12: t('presetLast12'),
@@ -67,11 +72,12 @@ export function AiCostPeriodForm({
 
   return (
     <form method="get" action={action} className="kh-ops-toolbar flex-wrap">
-      <div className="flex flex-wrap items-end gap-2" role="group" aria-label={t('period')}>
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('period')}>
         {PRESETS.map((preset) => (
           <LinkButton
             key={preset}
             href={presetHref(preset)}
+            scroll={false}
             variant={activeRange === preset ? 'primary' : 'secondary'}
             aria-current={activeRange === preset ? 'true' : undefined}
           >
@@ -79,17 +85,30 @@ export function AiCostPeriodForm({
           </LinkButton>
         ))}
       </div>
-      <DateRangeFields
-        from={fromValue}
-        to={toValue}
-        fromLabel={t('from')}
-        toLabel={t('to')}
-        onChange={(next) => {
-          setFromValue(next.from);
-          setToValue(next.to);
-          setActiveRange('custom');
-        }}
-      />
+      <Field label={t('from')} className="kh-ops-period-field">
+        <Input
+          type="date"
+          value={fromValue}
+          onChange={(event) => {
+            const next = event.target.value;
+            setFromValue(next);
+            setToValue((current) => (current && next && current < next ? next : current));
+            setActiveRange('custom');
+          }}
+        />
+      </Field>
+      <Field label={t('to')} className="kh-ops-period-field">
+        <Input
+          type="date"
+          value={toValue}
+          onChange={(event) => {
+            const next = event.target.value;
+            setToValue(next);
+            setFromValue((current) => (current && next && next < current ? next : current));
+            setActiveRange('custom');
+          }}
+        />
+      </Field>
       {activeRange !== 'custom' ? <input type="hidden" name="range" value={activeRange} /> : null}
       {activeRange === 'custom' && fromValue ? (
         <input type="hidden" name="from" value={fromValue} />
@@ -101,7 +120,7 @@ export function AiCostPeriodForm({
       {Object.entries(preserve).map(([key, value]) =>
         value && key !== 'tz' ? <input key={key} type="hidden" name={key} value={value} /> : null,
       )}
-      <Button type="submit" variant="secondary" className="self-end">
+      <Button type="submit" variant="secondary">
         {t('apply')}
       </Button>
     </form>
