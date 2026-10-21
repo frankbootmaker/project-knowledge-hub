@@ -11,7 +11,7 @@ type FilePickerProps = {
   className?: string;
   /** Current file name to display (controlled). */
   fileName?: string | null;
-  onFileChange: (file: File | null) => void;
+  onFileChange: (file: File | null, text?: string | null) => void;
   id?: string;
   name?: string;
 } & Pick<InputHTMLAttributes<HTMLInputElement>, 'aria-label'>;
@@ -48,8 +48,17 @@ export function FilePicker({
         tabIndex={-1}
         aria-label={ariaLabel ?? t('browse')}
         onChange={(event) => {
-          onFileChange(event.target.files?.[0] ?? null);
-          event.target.value = '';
+          const input = event.currentTarget;
+          const file = input.files?.[0] ?? null;
+          if (!file) {
+            input.value = '';
+            onFileChange(null, null);
+            return;
+          }
+          void file.text().then((text) => {
+            onFileChange(file, text);
+            input.value = '';
+          });
         }}
       />
       <Button

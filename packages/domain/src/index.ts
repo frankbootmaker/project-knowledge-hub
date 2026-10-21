@@ -1517,9 +1517,52 @@ export {
   type AiCostChartSourcePoint,
   type AiCostCoverageEntry,
   type AiCostRange,
+  type AiCostResolvedWindow,
   type AiCostViewRange,
   type PlatformAiCostMonthRow,
 } from './ai-billing-chart.js';
+
+export {
+  AI_COST_DAY_LIMIT,
+  AI_COST_GRAINS,
+  aggregateAiCostBuckets,
+  calendarMonthWindow,
+  calendarQuarterWindow,
+  firstDayOfMonth,
+  formatAiCostDayLabel,
+  isAiCostGrain,
+  isIsoDay,
+  isIsoMonth,
+  lastDayOfMonth,
+  listCalendarDays,
+  paidDaysFromBillingEntries,
+  resolveAiCostGrain,
+  splitBillingEntryByDay,
+  weekStartMonday,
+  zonedCalendarParts,
+  type AiCostBucket,
+  type AiCostDayAmount,
+  type AiCostGrain,
+  type BillingDaySlice,
+} from './ai-cost-granularity.js';
+
+export {
+  DEFAULT_AI_MODEL_PRICES,
+  importedCloudAgentIds,
+  matchAiModelPrice,
+  modelPatternMatches,
+  parseUsagePaidAmount,
+  priceImportedUsage,
+  taskSupersededByImport,
+  theoreticalMonths,
+  theoreticalTokenCost,
+  type AiModelPrice,
+  type ImportedUsageForPrice,
+  type PricedImportedUsage,
+  type TheoreticalMonthSplit,
+  type UnpricedModel,
+  type UsageTokenCounts,
+} from './ai-model-price.js';
 
 export {
   AI_COST_NOTES_MAX,

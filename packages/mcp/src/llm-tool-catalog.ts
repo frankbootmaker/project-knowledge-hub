@@ -3072,6 +3072,44 @@ const EXTRA_HUB_TOOLS: Array<{
     },
   },
   {
+    name: 'get_ai_usage_theoretical_cost',
+    description:
+      'Per-month theoretical API cost. linked is allocated to a project task. unassigned is workspace-level imported usage with no task. Amounts are in the workspace reporting currency. Unpriced models are listed instead of being treated as a silent zero. from and to accept YYYY-MM or YYYY-MM-DD. Requires pm:read. Via call_hub_tool.',
+    scope: 'pm:read',
+    write: false,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId'],
+      properties: {
+        workspaceId: uuidProp('Workspace id. Required.'),
+        from: {
+          type: 'string',
+          description: 'Optional range start, YYYY-MM or YYYY-MM-DD.',
+        },
+        to: {
+          type: 'string',
+          description: 'Optional range end, YYYY-MM or YYYY-MM-DD.',
+        },
+      },
+    },
+  },
+  {
+    name: 'list_ai_model_prices',
+    description:
+      'List default and workspace AI model prices (input, cache write, cache read, output per 1,000,000 tokens). A workspace row overrides a matching default. Requires pm:read. Via call_hub_tool.',
+    scope: 'pm:read',
+    write: false,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId'],
+      properties: {
+        workspaceId: uuidProp('Workspace id. Required.'),
+      },
+    },
+  },
+  {
     name: 'get_platform_ai_cost',
     description:
       'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts from the token-rate currency at usageOccurredAt, else completedAt, else updatedAt. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. Defaults to the last 12 months. System administrator only. Requires pm:read. Via call_hub_tool.',

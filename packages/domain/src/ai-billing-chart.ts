@@ -1,15 +1,24 @@
 import {
   assertAiBillingPeriod,
   currentAiBillingPeriod,
-  defaultAiBillingWindow,
   listAiBillingPeriods,
   resolveAiBillingWindow,
+  shiftAiBillingPeriod,
   splitBillingEntryByMonth,
   summarizeAiBillingMonth,
   type AiBillingMonthSummary,
 } from './ai-billing.js';
+import {
+  calendarMonthWindow,
+  calendarQuarterWindow,
+  firstDayOfMonth,
+  isIsoDay,
+  isIsoMonth,
+  lastDayOfMonth,
+  zonedCalendarParts,
+} from './ai-cost-granularity.js';
 
-export const AI_COST_RANGES = ['last12', 'year', 'all'] as const;
+export const AI_COST_RANGES = ['last12', 'year', 'quarter', 'month', 'all'] as const;
 
 export type AiCostRange = (typeof AI_COST_RANGES)[number];
 
@@ -83,10 +92,42 @@ function isAiCostRange(value: string): value is AiCostRange {
   return (AI_COST_RANGES as readonly string[]).includes(value);
 }
 
+export type AiCostResolvedWindow = {
+  /** First month the window touches, YYYY-MM. */
+  from: string;
+  /** Last month the window touches, YYYY-MM. */
+  to: string;
+  /** Inclusive first day. Presets use the month edges in the user's zone. */
+  fromDay: string;
+  /** Inclusive last day. */
+  toDay: string;
+  range: AiCostViewRange;
+};
+
+function monthBound(value: string): string | null {
+  if (isIsoMonth(value)) return value;
+  if (isIsoDay(value)) return value.slice(0, 7);
+  return null;
+}
+
+function withDays(
+  window: { from: string; to: string; range: AiCostViewRange },
+  fromDay?: string | null,
+  toDay?: string | null,
+): AiCostResolvedWindow {
+  return {
+    ...window,
+    fromDay: fromDay && isIsoDay(fromDay) ? fromDay : firstDayOfMonth(window.from),
+    toDay: toDay && isIsoDay(toDay) ? toDay : lastDayOfMonth(window.to),
+  };
+}
+
 /**
  * Shared window for the workspace and platform AI Cost pages.
- * Explicit from/to wins. Otherwise last 12 months, this calendar year, or
- * every month that already has data (future months only when covered).
+ * Explicit from/to wins (YYYY-MM or YYYY-MM-DD). Otherwise last 12 months,
+ * this calendar year, this quarter, this month, or every month that already
+ * has data. Quarter and month use the calendar in `timeZone` (UTC when the
+ * zone is missing or invalid).
  */
 export function resolveAiCostViewWindow(
   input: {
@@ -94,19 +135,36 @@ export function resolveAiCostViewWindow(
     to?: string | null;
     range?: string | null;
     knownPeriods?: readonly string[];
+    timeZone?: string | null;
   },
   now = new Date(),
-): { from: string; to: string; range: AiCostViewRange } {
-  const from = input.from?.trim() ?? '';
-  const to = input.to?.trim() ?? '';
-  if (from || to) {
-    const window = resolveAiBillingWindow({ from: from || null, to: to || null }, now);
-    return { ...window, range: 'custom' };
+): AiCostResolvedWindow {
+  const fromRaw = input.from?.trim() ?? '';
+  const toRaw = input.to?.trim() ?? '';
+  const fromMonth = monthBound(fromRaw);
+  const toMonth = monthBound(toRaw);
+  if (fromMonth || toMonth) {
+    const window = resolveAiBillingWindow(
+      { from: fromMonth, to: toMonth },
+      now,
+    );
+    const fromDay = isIsoDay(fromRaw) ? fromRaw : firstDayOfMonth(window.from);
+    const toDay = isIsoDay(toRaw) ? toRaw : lastDayOfMonth(window.to);
+    return withDays({ ...window, range: 'custom' }, fromDay, toDay);
   }
   const range = input.range?.trim() ?? '';
+  const zoned = zonedCalendarParts(now, input.timeZone);
   if (range === 'year') {
-    const year = currentAiBillingPeriod(now).slice(0, 4);
-    return { from: `${year}-01`, to: `${year}-12`, range: 'year' };
+    const year = String(zoned.year);
+    return withDays({ from: `${year}-01`, to: `${year}-12`, range: 'year' });
+  }
+  if (range === 'quarter') {
+    const quarter = calendarQuarterWindow(zoned.year, zoned.month);
+    return { ...quarter, range: 'quarter' };
+  }
+  if (range === 'month') {
+    const month = calendarMonthWindow(zoned.year, zoned.month);
+    return { ...month, range: 'month' };
   }
   if (range === 'all') {
     const known = [...(input.knownPeriods ?? [])]
@@ -114,21 +172,26 @@ export function resolveAiCostViewWindow(
       .sort((a, b) => a.localeCompare(b));
     const current = currentAiBillingPeriod(now);
     if (known.length === 0) {
-      return { from: current, to: current, range: 'all' };
+      return withDays({ from: current, to: current, range: 'all' });
     }
     const earliest = known[0] ?? current;
     const latest = known[known.length - 1] ?? current;
-    return {
+    return withDays({
       from: earliest,
       to: latest > current ? latest : current,
       range: 'all',
-    };
+    });
   }
-  const window = defaultAiBillingWindow(now);
-  return {
+  const zonedPeriod = `${zoned.year}-${String(zoned.month).padStart(2, '0')}`;
+  const to = range === 'last12' || !isAiCostRange(range) ? zonedPeriod : currentAiBillingPeriod(now);
+  const window = {
+    from: shiftAiBillingPeriod(to, -11),
+    to,
+  };
+  return withDays({
     ...window,
     range: isAiCostRange(range) ? range : 'last12',
-  };
+  });
 }
 
 function pointKey(period: string, currency: string): string {
