@@ -535,10 +535,10 @@
       "breakpoints": true
     },
     {
-      "idx": 76,
+      "idx": 77,
       "version": "7",
-      "when": 1793923200000,
-      "tag": "0076_ai_model_prices",
+      "when": 1794009600000,
+      "tag": "0077_ai_model_prices",
       "breakpoints": true
     }
   ]
