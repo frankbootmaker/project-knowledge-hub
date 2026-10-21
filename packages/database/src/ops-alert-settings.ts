@@ -255,7 +255,9 @@ export async function loadEffectiveAlertSettings(
 
 export function mergeStoredOpsAlertSettings(
   stored: StoredOpsAlertSettings | null,
-  patch: Partial<StoredOpsAlertSettings> & { auditRetentionDays?: number | null },
+  patch: Omit<Partial<StoredOpsAlertSettings>, 'auditRetentionDays'> & {
+    auditRetentionDays?: number | null;
+  },
 ): StoredOpsAlertSettings | null {
   const next: StoredOpsAlertSettings = { ...(stored ?? {}) };
   const assign = <K extends keyof StoredOpsAlertSettings>(
