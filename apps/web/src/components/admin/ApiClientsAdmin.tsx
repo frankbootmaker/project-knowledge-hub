@@ -447,7 +447,6 @@ export function ApiClientsAdmin({
         label: clientStatusLabel(value),
       })),
     // clientStatusLabel only reads translation keys.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [t],
   );
   const scopeOptions = useMemo(
@@ -634,7 +633,6 @@ export function ApiClientsAdmin({
       },
     ];
     // Row actions close over the latest setters. pending refreshes the disabled state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locale, organizations, pending, scopeOptions, statusOptions, t, users, workspaces]);
 
   useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
