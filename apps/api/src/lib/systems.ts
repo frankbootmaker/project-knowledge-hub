@@ -14,7 +14,9 @@ import {
   systemCriticalitySchema,
   systemItCostModeSchema,
   projectCurrencySchema,
+  retiredSystemTokenRateField,
   systemItDetailsSchema,
+  systemTokenRatesRetiredMessage,
   systemStatusSchema,
   type AiCostMode,
   type SystemCriticality,
@@ -214,6 +216,16 @@ export type CreateSystemInput = {
   metadata?: Record<string, unknown> | null;
 };
 
+function rejectRetiredTokenRates(input: object): void {
+  const field = retiredSystemTokenRateField(input);
+  if (!field) return;
+  throw new AppError({
+    code: 'TOKEN_RATES_RETIRED',
+    message: systemTokenRatesRetiredMessage(field),
+    statusCode: 400,
+  });
+}
+
 function parseRateCurrency(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
   if (value == null || value.trim() === '') return null;
@@ -225,6 +237,7 @@ export async function createSystem(
   input: CreateSystemInput,
   opts: { defaultOwnerUserId: string; createdBy: string },
 ): Promise<PublicSystem> {
+  rejectRetiredTokenRates(input);
   const [workspace] = await database.db
     .select()
     .from(workspaces)
@@ -380,6 +393,7 @@ export async function updateSystem(
   input: UpdateSystemInput,
   opts?: { createdBy?: string | null },
 ): Promise<PublicSystem> {
+  rejectRetiredTokenRates(input);
   const system = await getSystemRow(database, systemId, {
     includeArchived: true,
   });

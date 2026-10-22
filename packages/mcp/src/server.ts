@@ -1508,7 +1508,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'create_system',
-    'Create a catalogue system (IT resource) in an allowlisted workspace. Prefer linking projectId when the system serves a project. Fill itDetails whenever known. Set itCostMode (flat|one_time|note_only) plus fees so OpEx rolls into project budget AC. Money/rate fields accept number or string; returned as JSON numbers. aiTokenRateCurrency is the currency of AI token list prices; omit it to use the project currency. Requires catalogue:write.',
+    'Create a catalogue system (IT resource) in an allowlisted workspace. Prefer linking projectId when the system serves a project. Fill itDetails whenever known. Set itCostMode (flat|one_time|note_only) plus fees so OpEx rolls into project budget AC. Money fields accept number or string; returned as JSON numbers. Token list prices are the model price catalog (per 1,000,000 tokens), not fields on the system. Sending aiTokenRateCurrency returns TOKEN_RATES_RETIRED. Requires catalogue:write.',
     {
       workspaceId: z.string().uuid(),
       projectId: z.string().uuid().nullable().optional(),
@@ -1545,7 +1545,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_system',
-    'Update a catalogue system (fields, IT inventory itDetails, IT OpEx itCostMode/fees, AI token rates, tags). Money/rate fields accept number or string; returned as JSON numbers. aiTokenRateCurrency is the currency of AI token list prices; null uses the project currency. Does not archive/purge. itDetails updates are merged by key: omitted keys are preserved, keys set to null are removed, and array fields (ports, endpoints, ipAddresses, dependencies) are replaced entirely. Requires catalogue:write.',
+    'Update a catalogue system (fields, IT inventory itDetails, IT OpEx itCostMode/fees, tags). Money fields accept number or string; returned as JSON numbers. Token list prices are the model price catalog (per 1,000,000 tokens). Sending aiTokenRateCurrency returns TOKEN_RATES_RETIRED. Does not archive/purge. itDetails updates are merged by key: omitted keys are preserved, keys set to null are removed, and array fields (ports, endpoints, ipAddresses, dependencies) are replaced entirely. Requires catalogue:write.',
     {
       systemId: z.string().uuid(),
       projectId: z.string().uuid().nullable().optional(),
@@ -1849,7 +1849,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_project_budget_summary',
-    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financialRag, riskRag, riskReasons, burndown snapshots, and epic cost rollups. riskRag counts open or mitigating RAID only (closed, accepted, cancelled, and archived stay out) and uses the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons explains that colour (count, severity, kind, cause, and dueInDays when cause is due_soon) and is empty when green. Includes person vs AI vs IT-system OpEx. aiAc and aiPaidAc are the allocated paid AI cost: ledger rows for that month, or the aiFlatMonthlyFee fallback (plus legacy token cost for api/mixed) when the month has no ledger rows. A cost entry with service dates is split across those months by days before allocation; an entry without service dates stays entirely in its period. aiTheoreticalApiCost is tokens times API list prices, converted from aiTokenRateCurrency (or the project currency when that is null) at usageOccurredAt, else completedAt, else updatedAt, and is not added to AC. aiPeriods is paid vs theoretical by month. aiPaidAc is in the project currency: each pool share is converted at the entry paid-at date, or the service start when paid-at is missing, using one rate for every project in that pool. aiPaidReporting and aiTheoreticalReporting are those figures in the workspace reporting currency (default EUR). aiCostFx lists originalAmount, originalCurrency, amount, currency, rate, rateDate, and source. aiBillingEntries keep the original amount and currency and include convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. aiFlatAc and aiTokenAc stay the legacy parts. All money fields are JSON numbers. Requires pm:read.',
+    'Get project EVM summary (BAC/EV/AC/CPI/SPI), financialRag, riskRag, riskReasons, burndown snapshots, and epic cost rollups. riskRag counts open or mitigating RAID only (closed, accepted, cancelled, and archived stay out) and uses the same 7-day window as timeline health. Red: a critical item that is overdue, due within 7 days, or kind issue; or a high item that is overdue. Amber: any other critical item (later due date or none), any other high item, or any overdue item. Green otherwise. riskReasons explains that colour (count, severity, kind, cause, and dueInDays when cause is due_soon) and is empty when green. Includes person vs AI vs IT-system OpEx. aiAc and aiPaidAc are the allocated paid AI cost: ledger rows for that month, or the aiFlatMonthlyFee fallback (plus legacy token cost for api/mixed) when the month has no ledger rows. A cost entry with service dates is split across those months by days before allocation; an entry without service dates stays entirely in its period. aiTheoreticalApiCost is task tokens priced from the model catalog (workspace pattern, then global, per 1,000,000 tokens) using the task model at usageOccurredAt, else completedAt, else updatedAt. A model with no row is unpriced and listed, not counted as a silent zero. Imported usage for the same cloud agent replaces the task. It is not added to AC. aiPeriods is paid vs theoretical by month. aiPaidAc is in the project currency: each pool share is converted at the entry paid-at date, or the service start when paid-at is missing, using one rate for every project in that pool. aiPaidReporting and aiTheoreticalReporting are those figures in the workspace reporting currency (default EUR). aiCostFx lists originalAmount, originalCurrency, amount, currency, rate, rateDate, and source. aiBillingEntries keep the original amount and currency and include convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. aiFlatAc and aiTokenAc stay the legacy parts. All money fields are JSON numbers. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -1928,7 +1928,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_system',
-    'Get a catalogue system by id including description, tags, owner, environment, version, criticality, and itDetails inventory. Money/rate fields (itFlatMonthlyFee, itBudgetAllocation, aiFlatMonthlyFee, aiTokenRatePer1k, aiTokenRateInputPer1k, aiTokenRateOutputPer1k, aiTokenRateCachePer1k, aiBudgetAllocation) returned as JSON numbers. aiTokenRateCurrency is the token list-price currency, or null when prices use the project currency. aiCostNotes is a short string. Requires systems:read.',
+    'Get a catalogue system by id including description, tags, owner, environment, version, criticality, and itDetails inventory. Money fields (itFlatMonthlyFee, itBudgetAllocation, aiFlatMonthlyFee, aiBudgetAllocation) are JSON numbers. Per-system token rates are retired and are not used to price usage. Prices live on the model catalog (per 1,000,000 tokens). aiCostNotes is a short string. Requires systems:read.',
     { systemId: z.string().uuid() },
     async (args) =>
       wrap('get_system', 'systems:read', () => handlers.getSystem(args), {
@@ -2998,7 +2998,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'report_project_task_ai_usage',
-    'Record AI token usage on a task (prefer when marking done), then refresh the cost snapshot. tokensUsed alone bills the blended aiTokenRatePer1k and clears any stored breakdown (legacy). tokensInput, tokensOutput, tokensCache (cache read), and tokensCacheWrite bill split rates; a null split rate falls back to the blended rate. tokensUsed is stored as the sum when omitted and must equal the sum when both are sent. That product is the theoretical API cost. Optional modelId, pricingTier, usageOccurredAt, and billingPeriod (YYYY-MM) place the tokens for paid-cost allocation and do not change flat-fee accrual. Billable for api/mixed only when the month has no billing-ledger entries; flat ignores tokens; note_only records usage at $0. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentId links imported Cursor usage with that id onto this task. Requires pm:write.',
+    'Record AI token usage on a task (prefer when marking done), then refresh the cost snapshot. Send modelId. Tokens are priced from the model catalog (per 1,000,000 tokens): workspace pattern, then global. No matching row is unpriced and listed, not a silent zero. tokensUsed alone uses the blended catalog rate and clears any stored breakdown. tokensInput, tokensOutput, tokensCache (cache read), and tokensCacheWrite use the split rates. tokensUsed is stored as the sum when omitted and must equal the sum when both are sent. That product is the theoretical API cost. Optional pricingTier, usageOccurredAt, and billingPeriod (YYYY-MM) place the tokens for paid-cost allocation and do not change flat-fee accrual. Billable for api/mixed only when the month has no billing-ledger entries; flat ignores tokens; note_only records usage at $0. Imported usage for the same cloudAgentId replaces this task so it is not counted twice. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       taskId: entityRef,
       tokensUsed: tokenCountSchema.optional(),
@@ -3354,7 +3354,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_project_stakeholders',
-    'List project stakeholders (people, open roles, AI assistants, RACI-derived) with role description and competencies. Money/rate/hour fields (hourlyRate, allocatedDailyHours, contractedBudget, aiFlatMonthlyFee, aiTokenRatePer1k, aiTokenRateInputPer1k, aiTokenRateOutputPer1k, aiTokenRateCachePer1k, aiBudgetAllocation) returned as JSON numbers. AI rows include aiTokenRateCurrency (null means the project currency) and aiCostNotes. Requires pm:read.',
+    'List project stakeholders (people, open roles, AI assistants, RACI-derived) with role description and competencies. Money and hour fields (hourlyRate, allocatedDailyHours, contractedBudget, aiFlatMonthlyFee, aiBudgetAllocation) are JSON numbers. Per-system token rates are retired. Task tokens use the model catalog (per 1,000,000 tokens). AI rows include aiCostNotes. Requires pm:read.',
     { projectId: z.string().uuid() },
     async (args) =>
       wrap(
@@ -3479,7 +3479,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_project_ai_assistant_cost',
-    'Set AI assistant cost mode (flat|api|mixed|note_only) on a project AI system. aiTokenRatePer1k is the blended per-1k fallback. Optional aiTokenRateInputPer1k, aiTokenRateOutputPer1k, and aiTokenRateCachePer1k bill a usage breakdown; null falls back to the blended rate. aiTokenRateCurrency is the currency of those list prices; null uses the project currency. Theoretical cost converts from that currency at usageOccurredAt, else completedAt, else updatedAt. Mixed AC is the flat monthly fee accrued over the project dates plus token cost. aiCostNotes is a short note (max 500). Money fields accept number or string. Requires pm:write.',
+    'Set AI assistant cost mode (flat|api|mixed|note_only) on a project AI system. Token prices are not set here. Use upsert_ai_model_price (per 1,000,000 tokens). Sending aiTokenRatePer1k, aiTokenRateInputPer1k, aiTokenRateOutputPer1k, aiTokenRateCachePer1k, or aiTokenRateCurrency returns TOKEN_RATES_RETIRED. Theoretical cost uses the catalog row for the task model at usageOccurredAt, else completedAt, else updatedAt. Mixed AC is the flat monthly fee accrued over the project dates plus that token cost. aiCostNotes is a short note (max 500). Money fields accept number or string. Requires pm:write.',
     {
       systemId: z.string().uuid(),
       aiCostMode: z

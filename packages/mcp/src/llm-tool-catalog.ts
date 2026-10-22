@@ -1718,13 +1718,6 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
             documentationUrl: { type: 'string' },
           },
         },
-        aiTokenRateCurrency: {
-          type: 'string',
-          minLength: 3,
-          maxLength: 3,
-          nullable: true,
-          description: 'Currency of AI token list prices. Null uses the project currency.',
-        },
         tags: {
           type: 'array',
           maxItems: 30,
@@ -1775,13 +1768,6 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           nullable: true,
           additionalProperties: true,
           properties: {},
-        },
-        aiTokenRateCurrency: {
-          type: 'string',
-          minLength: 3,
-          maxLength: 3,
-          nullable: true,
-          description: 'Currency of AI token list prices. Null uses the project currency.',
         },
         tags: {
           type: 'array',
@@ -3106,7 +3092,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'update_project_ai_assistant_cost',
     description:
-      'Set AI assistant cost mode on a project AI system. systemId is required. aiTokenRateCurrency is the list-price currency; null uses the project currency. Theoretical cost converts from that currency at the usage date. Requires pm:write.',
+      'Set AI assistant cost mode (flat, api, mixed, note_only) and the flat fee. Token prices are the model catalog, per 1,000,000 tokens (upsert_ai_model_price). Per-system per-1k rate fields are rejected. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3121,17 +3107,6 @@ const EXTRA_HUB_TOOLS: Array<{
           nullable: true,
         },
         aiFlatMonthlyFee: money,
-        aiTokenRatePer1k: money,
-        aiTokenRateInputPer1k: money,
-        aiTokenRateOutputPer1k: money,
-        aiTokenRateCachePer1k: money,
-        aiTokenRateCurrency: {
-          type: 'string',
-          minLength: 3,
-          maxLength: 3,
-          nullable: true,
-          description: 'Currency of the token list prices. Null uses the project currency.',
-        },
         aiCostNotes: { type: 'string', maxLength: 500, nullable: true },
         aiBudgetAllocation: money,
       },
