@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
-/** Add a tab here when a later financials view (for example AI usage import) lands. */
-export const FINANCIALS_TABS = ['ai-cost', 'usage-import'] as const;
+/** Workspace Financials. Model rates sits beside Usage import. */
+export const FINANCIALS_TABS = ['ai-cost', 'usage-import', 'model-rates'] as const;
 
 export type FinancialsTab = (typeof FINANCIALS_TABS)[number];
 

@@ -12,6 +12,7 @@ import {
   resolveAiCostViewWindow,
   roundAiMoney,
   shiftAiBillingPeriod,
+  zonedCalendarParts,
   type AiCostBucket,
   type AiCostChartMonth,
   type AiCostDayAmount,
@@ -364,10 +365,20 @@ export function presentWorkspaceAiCost(
     originalTheoreticalDays: _originalTheoreticalDays,
     chart: _chart,
     originalChart: _original,
+    pools,
     ...rest
   } = overview;
+  const zoned = zonedCalendarParts(now, query.timeZone);
+  const currentPeriod = `${zoned.year}-${String(zoned.month).padStart(2, '0')}`;
+  const visiblePools = pools
+    .filter((pool) => pool.period >= window.from && pool.period <= window.to)
+    .map((pool) => ({
+      ...pool,
+      scheduled: pool.period > currentPeriod,
+    }));
   return {
     ...rest,
+    pools: visiblePools,
     from: window.from,
     to: window.to,
     fromDay: window.fromDay,

@@ -133,6 +133,73 @@ describe('presentWorkspaceAiCost grains', () => {
     expect(presented.grainAdjusted).toBe(true);
   });
 
+  it('hides a future allocation month unless the window includes it (PRO-B-38)', () => {
+    const base = overview();
+    const share = (amount: number) => ({
+      projectId: 'p1',
+      name: 'Hub',
+      slug: 'hub',
+      tokens: 0,
+      overridePercent: null,
+      amount,
+      method: 'equal' as const,
+      originalAmount: amount,
+      projectAmount: amount,
+      projectCurrency: 'EUR',
+      reportingAmount: amount,
+      fxRate: 1,
+      fxRateDate: '2026-10-06',
+      fxSource: 'identity',
+    });
+    base.pools = [
+      {
+        period: '2026-10',
+        currency: 'EUR',
+        originalCurrency: 'EUR',
+        aiSystemId: null,
+        aiSystemName: null,
+        paidTotal: 201.96,
+        originalPaidTotal: 201.96,
+        fxRate: 1,
+        fxRateDate: '2026-10-06',
+        fxSource: 'identity',
+        projects: [share(28.85)],
+      },
+      {
+        period: '2026-11',
+        currency: 'EUR',
+        originalCurrency: 'EUR',
+        aiSystemId: null,
+        aiSystemName: null,
+        paidTotal: 28.63,
+        originalPaidTotal: 28.63,
+        fxRate: 1,
+        fxRateDate: '2026-10-06',
+        fxSource: 'identity',
+        projects: [share(4.09)],
+      },
+    ];
+    const onOctober = new Date('2026-10-22T12:00:00.000Z');
+    const october = presentWorkspaceAiCost(base, {}, onOctober);
+    expect(october.pools.map((pool) => pool.period)).toEqual(['2026-10']);
+    expect(october.pools[0]?.scheduled).toBe(false);
+    const explicit = presentWorkspaceAiCost(
+      base,
+      { from: '2026-10', to: '2026-11' },
+      onOctober,
+    );
+    expect(explicit.pools.map((pool) => pool.period)).toEqual(['2026-10', '2026-11']);
+    expect(explicit.pools[1]?.scheduled).toBe(true);
+    const budapest = presentWorkspaceAiCost(
+      base,
+      { timeZone: 'Europe/Budapest' },
+      new Date('2026-10-31T23:30:00.000Z'),
+    );
+    expect(budapest.to).toBe('2026-11');
+    expect(budapest.pools.map((pool) => pool.period)).toEqual(['2026-10', '2026-11']);
+    expect(budapest.pools.find((pool) => pool.period === '2026-11')?.scheduled).toBe(false);
+  });
+
   it('rejects an impossible from or to before using the default window (PRO-B-36)', () => {
     expect(() => presentWorkspaceAiCost(overview(), { from: 'oct' }, NOW)).toThrow(AppError);
     expect(() => presentWorkspaceAiCost(overview(), { to: '2026-02-30' }, NOW)).toThrow(

@@ -76,6 +76,202 @@ export type AiBillingAllocationShare = {
   method: AiBillingAllocationMethod;
 };
 
+/**
+ * Effective share of a pool, in the same order as `projects`.
+ * Equal splits are 100/n among projects that received money (two decimals,
+ * largest remainder, so seven projects are 14.29 and 14.28 and sum to 100).
+ * Token rows use the token weights. A manual row keeps its stored percent.
+ * The shares sum to 100 when the pool is fully allocated.
+ */
+export function allocationDisplayPercents(
+  projects: readonly {
+    method: AiBillingAllocationMethod;
+    tokens: number;
+    overridePercent: number | null;
+    amount: number;
+  }[],
+  paidTotal: number,
+): number[] {
+  if (projects.length === 0) return [];
+  const manual = projects.map((project) => project.method === 'override');
+  if (!manual.some(Boolean)) {
+    return defaultDisplayPercents(100, projects, paidTotal);
+  }
+  const storedSum = projects.reduce(
+    (sum, project) =>
+      project.method === 'override'
+        ? sum + roundStoredPercent(project.overridePercent ?? 0)
+        : sum,
+    0,
+  );
+  const rest = projects.filter((project) => project.method !== 'override');
+  const restPercents = defaultDisplayPercents(
+    roundAiMoney(100 - storedSum),
+    rest,
+    paidTotal,
+  );
+  let cursor = 0;
+  const combined = projects.map((project) => {
+    if (project.method === 'override') {
+      return roundStoredPercent(project.overridePercent ?? 0);
+    }
+    const value = restPercents[cursor] ?? 0;
+    cursor += 1;
+    return value;
+  });
+  return lockPercentTotal(combined, manual);
+}
+
+function roundStoredPercent(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+/** Put a sub-cent remainder on a calculated share so a full pool reads 100. */
+function lockPercentTotal(values: number[], manual: readonly boolean[]): number[] {
+  const sum = values.reduce((total, value) => total + value, 0);
+  const delta = Math.round((100 - sum) * 1000) / 1000;
+  if (delta === 0) return values;
+  let index = manual.findIndex((isManual) => !isManual);
+  if (index < 0) return values;
+  for (let i = index + 1; i < values.length; i += 1) {
+    if (manual[i]) continue;
+    if ((values[i] ?? 0) > (values[index] ?? 0)) index = i;
+  }
+  const next = [...values];
+  next[index] = Math.round(((next[index] ?? 0) + delta) * 1000) / 1000;
+  return next;
+}
+
+function defaultDisplayPercents(
+  total: number,
+  projects: readonly {
+    method: AiBillingAllocationMethod;
+    tokens: number;
+    amount: number;
+  }[],
+  paidTotal: number,
+): number[] {
+  if (projects.length === 0) return [];
+  const tokenSplit = projects.some(
+    (project) => project.method === 'tokens' && project.tokens > 0,
+  );
+  if (tokenSplit) {
+    return splitAiMoney(
+      total,
+      projects.map((project) => project.tokens),
+    );
+  }
+  const zeroPool = paidTotal === 0;
+  const weights = projects.map((project) => {
+    if (project.method === 'tokens') return 0;
+    if (zeroPool) return 1;
+    return project.amount !== 0 ? 1 : 0;
+  });
+  if (weights.every((weight) => weight <= 0)) return projects.map(() => 0);
+  return splitAiMoney(total, weights);
+}
+
+/** Calendar month of a usage timestamp. UTC, so a local midnight does not roll forward. */
+export function utcUsagePeriod(occurredAt: Date): string | null {
+  if (Number.isNaN(occurredAt.getTime())) return null;
+  const month = String(occurredAt.getUTCMonth() + 1).padStart(2, '0');
+  return `${occurredAt.getUTCFullYear()}-${month}`;
+}
+
+export type AllocationTokenTask = {
+  projectId: string;
+  aiSystemId: string | null;
+  cloudAgentId: string | null;
+  /** Task billing month. Null when the task has no billing period or usage time. */
+  period: string | null;
+  tokens: number;
+};
+
+export type AllocationTokenEvent = {
+  projectId: string | null;
+  aiSystemId: string | null;
+  cloudAgentId: string | null;
+  occurredAt: Date;
+  tokens: number;
+};
+
+export type AllocationTokenSlice = {
+  projectId: string;
+  aiSystemId: string | null;
+  period: string;
+  tokens: number;
+};
+
+/**
+ * Tokens that count toward one project's share of a month.
+ * An imported cloud-agent row replaces that task's single billing period and
+ * is counted in the UTC month of each event, on the linked project or the
+ * task's project. A task with no imported cloud agent keeps its own period.
+ * Unassigned events (no project and no matching task) stay out.
+ */
+export function allocationTokenSlices(input: {
+  tasks: readonly AllocationTokenTask[];
+  events: readonly AllocationTokenEvent[];
+}): AllocationTokenSlice[] {
+  const taskByAgent = new Map<
+    string,
+    { projectId: string; aiSystemId: string | null }
+  >();
+  for (const task of input.tasks) {
+    const agent = task.cloudAgentId?.trim();
+    if (!agent || taskByAgent.has(agent)) continue;
+    taskByAgent.set(agent, {
+      projectId: task.projectId,
+      aiSystemId: task.aiSystemId,
+    });
+  }
+  const importedAgents = new Set<string>();
+  for (const event of input.events) {
+    const agent = event.cloudAgentId?.trim();
+    if (agent) importedAgents.add(agent);
+  }
+  const totals = new Map<string, AllocationTokenSlice>();
+  const add = (
+    projectId: string,
+    aiSystemId: string | null,
+    period: string,
+    tokens: number,
+  ) => {
+    if (!(tokens > 0)) return;
+    const key = `${projectId}|${period}|${aiSystemId ?? ''}`;
+    const current = totals.get(key) ?? {
+      projectId,
+      aiSystemId,
+      period,
+      tokens: 0,
+    };
+    current.tokens += tokens;
+    totals.set(key, current);
+  };
+  for (const event of input.events) {
+    const agent = event.cloudAgentId?.trim() ?? '';
+    if (!agent) continue;
+    const task = taskByAgent.get(agent);
+    const projectId = event.projectId ?? task?.projectId ?? null;
+    if (!projectId) continue;
+    const period = utcUsagePeriod(event.occurredAt);
+    if (!period) continue;
+    add(
+      projectId,
+      event.aiSystemId ?? task?.aiSystemId ?? null,
+      period,
+      event.tokens,
+    );
+  }
+  for (const task of input.tasks) {
+    const agent = task.cloudAgentId?.trim() ?? '';
+    if (agent && importedAgents.has(agent)) continue;
+    if (!task.period || !(task.tokens > 0)) continue;
+    add(task.projectId, task.aiSystemId, task.period, task.tokens);
+  }
+  return [...totals.values()];
+}
+
 export function roundAiMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }

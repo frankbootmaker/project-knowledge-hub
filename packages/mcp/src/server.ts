@@ -23,6 +23,7 @@ import {
 } from './audit-error.js';
 import { openMcpToolOutputSchemas } from './open-output-schema.js';
 import {
+  aiModelPriceToolDescription,
   dependencyLagDaysSchema,
   hoursPerWorkdaySchema,
   isoDateNullableSchema,
@@ -723,6 +724,26 @@ export type McpToolHandlers = {
     to?: string;
   }) => Promise<unknown>;
   listAiModelPrices: (input: { workspaceId: string }) => Promise<unknown>;
+  upsertAiModelPrice: (input: {
+    scope: 'global' | 'workspace';
+    workspaceId?: string;
+    model: string;
+    inputPerMillion: number;
+    outputPerMillion: number;
+    cacheReadPerMillion: number;
+    cacheWritePerMillion: number;
+    blendedPerMillion: number;
+    currency: string;
+    effectiveFrom: string;
+    sourceNote: string;
+  }) => Promise<unknown>;
+  retireAiModelPrice: (input: {
+    scope: 'global' | 'workspace';
+    workspaceId?: string;
+    priceId?: string;
+    model?: string;
+    effectiveFrom?: string;
+  }) => Promise<unknown>;
   createAiBillingEntry: (input: {
     workspaceId: string;
     period?: string;
@@ -3553,14 +3574,63 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
+  const modelPriceRate = z
+    .number()
+    .min(0)
+    .max(1_000_000)
+    .describe('Amount per 1,000,000 tokens (unit per_1m_tokens).');
   server.tool(
     'list_ai_model_prices',
-    'List default and workspace AI model prices used for theoretical API cost. Rates are per 1,000,000 tokens for input, cache write, cache read, and output. A workspace row overrides a default with the same pattern. Requires pm:read. Via call_hub_tool.',
+    aiModelPriceToolDescription('list'),
     {
       workspaceId: z.string().uuid(),
     },
     async (args) =>
       wrap('list_ai_model_prices', 'pm:read', () => handlers.listAiModelPrices(args))(),
+  );
+
+  server.tool(
+    'upsert_ai_model_price',
+    aiModelPriceToolDescription('upsert'),
+    {
+      scope: z.enum(['global', 'workspace']),
+      workspaceId: z
+        .string()
+        .uuid()
+        .optional()
+        .describe('Required when scope is workspace.'),
+      model: z.string().min(1).max(80).describe('Pattern or exact model id.'),
+      inputPerMillion: modelPriceRate,
+      outputPerMillion: modelPriceRate,
+      cacheReadPerMillion: modelPriceRate,
+      cacheWritePerMillion: modelPriceRate,
+      blendedPerMillion: modelPriceRate.describe(
+        'Undifferentiated rate per 1,000,000 tokens. A blank split rate falls back to this.',
+      ),
+      currency: z.string().length(3),
+      effectiveFrom: z.string().describe('YYYY-MM-DD the price takes effect.'),
+      sourceNote: z
+        .string()
+        .min(1)
+        .max(500)
+        .describe('Provider price page or short note. Required.'),
+    },
+    async (args) =>
+      wrap('upsert_ai_model_price', 'pm:write', () => handlers.upsertAiModelPrice(args))(),
+  );
+
+  server.tool(
+    'retire_ai_model_price',
+    aiModelPriceToolDescription('retire'),
+    {
+      scope: z.enum(['global', 'workspace']),
+      workspaceId: z.string().uuid().optional(),
+      priceId: z.string().uuid().optional(),
+      model: z.string().min(1).max(80).optional(),
+      effectiveFrom: z.string().optional(),
+    },
+    async (args) =>
+      wrap('retire_ai_model_price', 'pm:write', () => handlers.retireAiModelPrice(args))(),
   );
 
   server.tool(

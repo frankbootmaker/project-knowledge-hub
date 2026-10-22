@@ -3744,9 +3744,34 @@ a.kh-ops-choice {
 
 .kh-ops-data-table tfoot th,
 .kh-ops-data-table tfoot td {
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   background: var(--kh-surface);
   border-top: 1px solid var(--kh-line-strong);
+}
+
+.kh-ops-data-table .kh-ops-percent-input {
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.kh-ops-data-table .kh-ops-percent-computed {
+  color: var(--kh-ink-muted);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in oklch, var(--kh-ink-muted), var(--kh-surface) 92%);
+}
+
+.kh-ops-data-table .kh-ops-percent-computed::placeholder {
+  color: var(--kh-ink-muted);
+  opacity: 1;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
 .kh-ops-data-table tfoot .kh-ops-num {

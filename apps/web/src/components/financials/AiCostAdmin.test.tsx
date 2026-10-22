@@ -1,10 +1,12 @@
 /**
  * @vitest-environment happy-dom
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AiCostAdmin, type AiBillingEntryRow } from './AiCostAdmin';
+import { AiCostAdmin, type AiBillingEntryRow, type AiCostPool } from './AiCostAdmin';
 import { ToastProvider } from '../ui/Toast';
 import de from '../../../messages/de.json';
 import en from '../../../messages/en.json';
@@ -183,5 +185,103 @@ describe('AiCostAdmin cost entry form', () => {
       (input) => input.value === 'Acme Ledger',
     );
     expect(custom).toBeTruthy();
+  });
+});
+
+function allocationProject(
+  name: string,
+  patch: Partial<AiCostPool['projects'][number]>,
+): AiCostPool['projects'][number] {
+  return {
+    projectId: name,
+    name,
+    slug: name,
+    tokens: 0,
+    overridePercent: null,
+    amount: 0,
+    method: 'equal',
+    ...patch,
+  };
+}
+
+describe('AiCostAdmin allocation percents (PRO-B-38)', () => {
+  it('shows the effective share as a placeholder and totals each month', () => {
+    const amounts = [28.86, 28.85, 28.85, 28.85, 28.85, 28.85, 28.85];
+    const october: AiCostPool = {
+      period: '2026-10',
+      currency: 'EUR',
+      aiSystemId: null,
+      aiSystemName: null,
+      paidTotal: 201.96,
+      projects: amounts.map((amount, index) =>
+        allocationProject(`p${index}`, { amount, method: 'equal' }),
+      ),
+    };
+    const november: AiCostPool = {
+      period: '2026-11',
+      scheduled: true,
+      currency: 'EUR',
+      aiSystemId: null,
+      aiSystemName: null,
+      paidTotal: 100,
+      projects: [
+        allocationProject('manual', {
+          method: 'override',
+          overridePercent: 40,
+          amount: 40,
+        }),
+        allocationProject('light', { method: 'tokens', tokens: 1, amount: 15 }),
+        allocationProject('heavy', { method: 'tokens', tokens: 3, amount: 45 }),
+      ],
+    };
+    renderAdmin(
+      <AiCostAdmin
+        workspaceId="ws-1"
+        workspaceSlug="lab"
+        canMutate
+        entries={[]}
+        chart={[]}
+        pools={[october, november]}
+        systems={[]}
+      />,
+    );
+    const inputs = [
+      ...document.body.querySelectorAll('input[type="number"]'),
+    ] as HTMLInputElement[];
+    expect(inputs).toHaveLength(10);
+    expect(inputs.slice(0, 7).every((input) => input.value === '')).toBe(true);
+    expect(inputs.slice(0, 7).map((input) => input.placeholder)).toEqual([
+      '14.29',
+      '14.29',
+      '14.29',
+      '14.29',
+      '14.28',
+      '14.28',
+      '14.28',
+    ]);
+    for (const input of inputs.slice(0, 7)) {
+      expect(input.className).toContain('kh-ops-percent-input');
+      expect(input.className).toContain('kh-ops-percent-computed');
+    }
+    expect(inputs[7]?.value).toBe('40');
+    expect(inputs[7]?.className.includes('kh-ops-percent-computed')).toBe(false);
+    expect(inputs[8]?.placeholder).toBe('15.00');
+    expect(inputs[9]?.placeholder).toBe('45.00');
+    const footers = [...document.body.querySelectorAll('tfoot')];
+    expect(footers).toHaveLength(2);
+    expect(footers[0]?.textContent).toContain('100%');
+    expect(footers[0]?.textContent).toContain('201.96');
+    expect(footers[1]?.textContent).toContain('100%');
+    const novemberCells = [...(footers[1]?.querySelectorAll('td') ?? [])].map((cell) =>
+      cell.textContent?.trim(),
+    );
+    expect(novemberCells[0]).toBe('4');
+    expect(document.body.textContent).toContain('scheduled');
+    const css = readFileSync(join(process.cwd(), 'src/styles/ops-shell.css'), 'utf8');
+    const start = css.indexOf('.kh-ops-data-table .kh-ops-percent-input');
+    const rule = css.slice(start, css.indexOf('.kh-ops-cost-split', start));
+    expect(rule).toContain('var(--font-sans)');
+    expect(rule).toContain('tabular-nums');
+    expect(rule).not.toContain('monospace');
   });
 });

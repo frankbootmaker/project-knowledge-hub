@@ -4,7 +4,6 @@ import { Fragment, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Button, ErrorText, Field, FilePicker, useToast } from '../ui';
-import { ModelPriceAdmin } from './ModelPriceAdmin';
 import { formatMoney } from '../../lib/project-currency';
 
 export type UsageImportSummary = {
@@ -223,7 +222,6 @@ export function UsageImportAdmin({
           ) : (
             <p className="m-0 text-sm text-ink-muted">{t('usageAdminOnly')}</p>
           )}
-          {canImport ? <ModelPriceAdmin workspaceId={workspaceId} /> : null}
           {error ? <ErrorText>{error}</ErrorText> : null}
           {preview ? (
             <>

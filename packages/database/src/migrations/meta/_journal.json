@@ -554,6 +554,13 @@
       "when": 1794096000000,
       "tag": "0078_backfill_done_completed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1794182400000,
+      "tag": "0079_ai_model_price_catalog",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   addCalendarDays,
+  allocationDisplayPercents,
   lastDayOfMonth,
   projectCurrencySchema,
   summarizeAiBillingMonth,
@@ -82,6 +83,7 @@ export type AiCostPoolProject = {
 
 export type AiCostPool = {
   period: string;
+  scheduled?: boolean;
   currency: string;
   originalCurrency?: string;
   aiSystemId: string | null;
@@ -197,8 +199,14 @@ function toLocalInput(iso: string | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function rateText(value: number | null): string {
-  return value == null ? '' : String(value);
+function formatShare(value: number): string {
+  return (Math.round(value * 100) / 100).toFixed(2);
+}
+
+function formatPercentTotal(values: readonly number[]): string {
+  const sum = Math.round(values.reduce((total, value) => total + value, 0) * 100) / 100;
+  if (sum === 100) return '100%';
+  return `${sum.toFixed(2)}%`;
 }
 
 function fxDetail(
@@ -286,7 +294,6 @@ export function AiCostAdmin({
   const [draft, setDraft] = useState<EntryDraft | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [percents, setPercents] = useState<Record<string, string>>({});
-  const [rates, setRates] = useState<Record<string, Record<string, string>>>({});
 
   const sourceChart = showOriginal ? (originalChart ?? chart) : chart;
   const sourceTable = showOriginal
@@ -537,60 +544,6 @@ export function AiCostAdmin({
       };
       if (!response.ok) throw new Error(payload.error?.message || t('saveFailed'));
       pushToast(t('allocationSaved'), 'success');
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('saveFailed'));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  function rateValue(system: AiSystemPrice, field: string, current: number | null): string {
-    return rates[system.id]?.[field] ?? rateText(current);
-  }
-
-  function setRate(systemId: string, field: string, value: string) {
-    setRates((prev) => ({
-      ...prev,
-      [systemId]: { ...prev[systemId], [field]: value },
-    }));
-  }
-
-  async function saveRates(system: AiSystemPrice) {
-    const fields = [
-      ['aiTokenRatePer1k', system.aiTokenRatePer1k],
-      ['aiTokenRateInputPer1k', system.aiTokenRateInputPer1k],
-      ['aiTokenRateOutputPer1k', system.aiTokenRateOutputPer1k],
-      ['aiTokenRateCachePer1k', system.aiTokenRateCachePer1k],
-      ['aiTokenRateCacheWritePer1k', system.aiTokenRateCacheWritePer1k],
-    ] as const;
-    const body: Record<string, number | null> = {};
-    for (const [field, current] of fields) {
-      const raw = rateValue(system, field, current);
-      const parsed = parseOptionalNumber(raw);
-      if (parsed === undefined) {
-        setError(t('rateInvalid'));
-        return;
-      }
-      body[field] = parsed;
-    }
-    setPending(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/v1/systems/${system.id}`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: window.location.origin,
-        },
-        body: JSON.stringify(body),
-      });
-      const payload = (await response.json().catch(() => ({}))) as {
-        error?: { message?: string };
-      };
-      if (!response.ok) throw new Error(payload.error?.message || t('saveFailed'));
-      pushToast(t('ratesSaved'), 'success');
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('saveFailed'));
@@ -965,7 +918,17 @@ export function AiCostAdmin({
         {visiblePools.length === 0 ? (
           <p className="kh-ops-empty">{t('allocationEmpty')}</p>
         ) : (
-          visiblePools.map((pool) => (
+          visiblePools.map((pool) => {
+            const shares = allocationDisplayPercents(
+              pool.projects.map((project) => ({
+                method: project.method,
+                tokens: project.tokens,
+                overridePercent: project.overridePercent,
+                amount: project.amount,
+              })),
+              pool.paidTotal,
+            );
+            return (
             <div
               key={`${pool.period}-${pool.originalCurrency ?? pool.currency}-${pool.aiSystemId ?? 'workspace'}`}
             >
@@ -973,7 +936,7 @@ export function AiCostAdmin({
                 className="kh-ops-panel-meta m-0 px-3 pt-3"
                 title={fxDetail(pool.fxSource, pool.fxRateDate, pool.fxRate, t)}
               >
-                {pool.period}
+                {monthLabel(pool.period, pool.scheduled)}
                 {' · '}
                 {pool.aiSystemName ?? t('workspacePool')}
                 {' · '}
@@ -997,8 +960,11 @@ export function AiCostAdmin({
                     </tr>
                   </thead>
                   <tbody>
-                    {pool.projects.map((project) => {
+                    {pool.projects.map((project, index) => {
                       const key = percentKey(pool, project.projectId);
+                      const share = shares[index] ?? 0;
+                      const manual = project.method === 'override';
+                      const drafted = percents[key] != null;
                       return (
                         <tr key={project.projectId}>
                           <td>
@@ -1018,13 +984,19 @@ export function AiCostAdmin({
                                 min="0"
                                 max="100"
                                 step="0.01"
-                                className="ml-auto w-24"
+                                className={
+                                  manual || drafted
+                                    ? 'kh-ops-percent-input ml-auto w-24'
+                                    : 'kh-ops-percent-input kh-ops-percent-computed ml-auto w-24'
+                                }
                                 value={
                                   percents[key] ??
-                                  (project.overridePercent == null
-                                    ? ''
-                                    : String(project.overridePercent))
+                                  (manual && project.overridePercent != null
+                                    ? String(project.overridePercent)
+                                    : '')
                                 }
+                                placeholder={manual ? undefined : formatShare(share)}
+                                title={manual ? undefined : t('percentComputed')}
                                 disabled={pending}
                                 aria-label={t('percentFor', { project: project.name })}
                                 onChange={(event) =>
@@ -1035,8 +1007,12 @@ export function AiCostAdmin({
                                 }
                                 onBlur={() => void savePercent(pool, project)}
                               />
+                            ) : manual && project.overridePercent != null ? (
+                              `${project.overridePercent}%`
                             ) : (
-                              (project.overridePercent ?? '—')
+                              <span className="kh-ops-percent-computed">
+                                {formatShare(share)}%
+                              </span>
                             )}
                           </td>
                           <td
@@ -1056,90 +1032,24 @@ export function AiCostAdmin({
                       );
                     })}
                   </tbody>
+                  <tfoot>
+                    <tr>
+                      <th>{t('total')}</th>
+                      <td className="kh-ops-num">
+                        {pool.projects.reduce((sum, project) => sum + project.tokens, 0)}
+                      </td>
+                      <td />
+                      <td className="kh-ops-num">{formatPercentTotal(shares)}</td>
+                      <td className="kh-ops-num">
+                        {formatMoney(pool.paidTotal, pool.currency, locale)}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </div>
-          ))
-        )}
-      </section>
-
-      <section className="kh-ops-panel">
-        <div className="kh-ops-panel-head">
-          <h2 className="kh-ops-panel-title">{t('pricesTitle')}</h2>
-        </div>
-        <p className="kh-ops-card-body m-0 px-3 pt-3 text-[13px] text-ink-muted">
-          {t('pricesHint')}
-        </p>
-        {aiSystems.length === 0 ? (
-          <p className="kh-ops-empty">{t('pricesEmpty')}</p>
-        ) : (
-          <div className="kh-ops-table-wrap">
-            <table className="kh-ops-data-table">
-              <thead>
-                <tr>
-                  <th>{t('system')}</th>
-                  <th className="kh-ops-num">{t('rateBlended')}</th>
-                  <th className="kh-ops-num">{t('rateInput')}</th>
-                  <th className="kh-ops-num">{t('rateOutput')}</th>
-                  <th className="kh-ops-num">{t('rateCache')}</th>
-                  <th className="kh-ops-num">{t('rateCacheWrite')}</th>
-                  {canMutate ? <th>{t('actions')}</th> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {aiSystems.map((system) => (
-                  <tr key={system.id}>
-                    <td>
-                      <Link
-                        href={`/workspaces/${workspaceSlug}/systems/${system.slug}`}
-                        className="kh-text-link"
-                      >
-                        {system.name}
-                      </Link>
-                    </td>
-                    {(
-                      [
-                        ['aiTokenRatePer1k', system.aiTokenRatePer1k],
-                        ['aiTokenRateInputPer1k', system.aiTokenRateInputPer1k],
-                        ['aiTokenRateOutputPer1k', system.aiTokenRateOutputPer1k],
-                        ['aiTokenRateCachePer1k', system.aiTokenRateCachePer1k],
-                        ['aiTokenRateCacheWritePer1k', system.aiTokenRateCacheWritePer1k],
-                      ] as const
-                    ).map(([field, current]) => (
-                      <td key={field} className="kh-ops-num">
-                        {canMutate ? (
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.0001"
-                            className="ml-auto w-28"
-                            value={rateValue(system, field, current)}
-                            disabled={pending}
-                            aria-label={`${system.name} ${t(fieldLabel(field))}`}
-                            onChange={(event) => setRate(system.id, field, event.target.value)}
-                          />
-                        ) : (
-                          rateText(current) || '—'
-                        )}
-                      </td>
-                    ))}
-                    {canMutate ? (
-                      <td>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={pending}
-                          onClick={() => void saveRates(system)}
-                        >
-                          {t('saveRates')}
-                        </Button>
-                      </td>
-                    ) : null}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            );
+          })
         )}
       </section>
 
@@ -1326,26 +1236,4 @@ export function AiCostAdmin({
       </Modal>
     </div>
   );
-}
-
-function fieldLabel(
-  field:
-    | 'aiTokenRatePer1k'
-    | 'aiTokenRateInputPer1k'
-    | 'aiTokenRateOutputPer1k'
-    | 'aiTokenRateCachePer1k'
-    | 'aiTokenRateCacheWritePer1k',
-): 'rateBlended' | 'rateInput' | 'rateOutput' | 'rateCache' | 'rateCacheWrite' {
-  switch (field) {
-    case 'aiTokenRatePer1k':
-      return 'rateBlended';
-    case 'aiTokenRateInputPer1k':
-      return 'rateInput';
-    case 'aiTokenRateOutputPer1k':
-      return 'rateOutput';
-    case 'aiTokenRateCachePer1k':
-      return 'rateCache';
-    case 'aiTokenRateCacheWritePer1k':
-      return 'rateCacheWrite';
-  }
 }

@@ -2,8 +2,15 @@ import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { workspaces } from '@project-knowledge-hub/database';
-import { USAGE_CSV_MAX_CHARS } from '@project-knowledge-hub/domain';
 import {
+  MODEL_RATE_IMPORT_MAX_CHARS,
+  USAGE_CSV_MAX_CHARS,
+  auditModelPriceMetadata,
+  modelRatesToCsv,
+  modelRatesToJson,
+} from '@project-knowledge-hub/domain';
+import {
+  requireSystemAdmin,
   requireWorkspaceAdmin,
   requireWorkspaceView,
 } from '@project-knowledge-hub/permissions';
@@ -20,10 +27,14 @@ import {
   previewAiUsageCsv,
 } from '../lib/ai-usage-import.js';
 import {
+  applyScopedModelRateImport,
   deleteAiModelPrice,
   listAiModelPrices,
+  listGlobalAiModelPrices,
   loadImportedTheoretical,
-  upsertAiModelPrice,
+  previewScopedModelRateImport,
+  retireScopedAiModelPrice,
+  upsertScopedAiModelPrice,
 } from '../lib/ai-usage-pricing.js';
 import { upsertProjectCostSnapshot } from '../lib/project-budget.js';
 
@@ -31,6 +42,31 @@ const csvBody = z.object({
   csv: z.string().min(1).max(USAGE_CSV_MAX_CHARS),
   fileName: z.string().max(200).optional(),
 });
+
+const priceBody = z.object({
+  model: z.string(),
+  inputPerMillion: z.number(),
+  cacheWritePerMillion: z.number(),
+  cacheReadPerMillion: z.number(),
+  outputPerMillion: z.number(),
+  blendedPerMillion: z.number().optional(),
+  currency: z.string(),
+  effectiveFrom: z.string(),
+  sourceNote: z.string().nullable().optional(),
+});
+
+const importBody = z.object({
+  format: z.enum(['csv', 'json']),
+  text: z.string().min(1).max(MODEL_RATE_IMPORT_MAX_CHARS),
+});
+
+function priceInput(body: z.infer<typeof priceBody>) {
+  return {
+    ...body,
+    blendedPerMillion: body.blendedPerMillion ?? body.inputPerMillion,
+    sourceNote: body.sourceNote ?? null,
+  };
+}
 
 async function workspaceOrganizationId(
   database: FastifyInstance['database'],
@@ -155,19 +191,13 @@ export async function registerAiUsageImportRoutes(
     assertMutatingOrigin(app, request);
     const principal = requireAuthenticated(request);
     const params = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
-    const body = z
-      .object({
-        model: z.string(),
-        inputPerMillion: z.number(),
-        cacheWritePerMillion: z.number(),
-        cacheReadPerMillion: z.number(),
-        outputPerMillion: z.number(),
-        currency: z.string(),
-        effectiveFrom: z.string(),
-      })
-      .parse(request.body);
+    const body = priceBody.parse(request.body);
     requireWorkspaceAdmin(principal, params.workspaceId);
-    const price = await upsertAiModelPrice(app.database, params.workspaceId, body);
+    const price = await upsertScopedAiModelPrice(
+      app.database,
+      params.workspaceId,
+      priceInput(body),
+    );
     await writeAuditEvent(app.database, {
       organizationId: await workspaceOrganizationId(app.database, params.workspaceId),
       actorType: 'user',
@@ -175,7 +205,15 @@ export async function registerAiUsageImportRoutes(
       action: 'ai_model_price.saved',
       entityType: 'ai_model_price',
       entityId: price.id,
-      metadata: { workspaceId: params.workspaceId, model: price.model },
+      metadata: auditModelPriceMetadata({
+        scope: 'workspace',
+        workspaceId: params.workspaceId,
+        model: price.model,
+        effectiveFrom: price.effectiveFrom,
+        currency: price.currency,
+        sourceNote: price.sourceNote,
+        via: 'http',
+      }),
       ipAddress: request.ip,
     });
     return { price };
@@ -190,18 +228,26 @@ export async function registerAiUsageImportRoutes(
         .object({ workspaceId: z.string().uuid(), priceId: z.string().uuid() })
         .parse(request.params);
       requireWorkspaceAdmin(principal, params.workspaceId);
-      await deleteAiModelPrice(app.database, params.workspaceId, params.priceId);
+      const price = await deleteAiModelPrice(app.database, params.workspaceId, params.priceId);
       await writeAuditEvent(app.database, {
         organizationId: await workspaceOrganizationId(app.database, params.workspaceId),
         actorType: 'user',
         actorId: principal.userId,
-        action: 'ai_model_price.deleted',
+        action: 'ai_model_price.retired',
         entityType: 'ai_model_price',
         entityId: params.priceId,
-        metadata: { workspaceId: params.workspaceId },
+        metadata: auditModelPriceMetadata({
+          scope: 'workspace',
+          workspaceId: params.workspaceId,
+          model: price.model,
+          effectiveFrom: price.effectiveFrom,
+          currency: price.currency,
+          sourceNote: price.sourceNote,
+          via: 'http',
+        }),
         ipAddress: request.ip,
       });
-      return { ok: true };
+      return { ok: true, price };
     },
   );
 
@@ -212,5 +258,176 @@ export async function registerAiUsageImportRoutes(
     requireWorkspaceAdmin(principal, params.workspaceId);
     const priced = await loadImportedTheoretical(app.database, params.workspaceId);
     return { months: priced.months, unpricedModels: priced.unpricedModels };
+  });
+
+  app.post(
+    '/api/v1/workspaces/:workspaceId/ai-model-prices/import/preview',
+    async (request) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+      const body = importBody.parse(request.body);
+      requireWorkspaceAdmin(principal, params.workspaceId);
+      const plan = await previewScopedModelRateImport(
+        app.database,
+        params.workspaceId,
+        body.text,
+        body.format,
+      );
+      return { plan };
+    },
+  );
+
+  app.post('/api/v1/workspaces/:workspaceId/ai-model-prices/import', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    const params = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    const body = importBody.parse(request.body);
+    requireWorkspaceAdmin(principal, params.workspaceId);
+    const plan = await applyScopedModelRateImport(
+      app.database,
+      params.workspaceId,
+      body.text,
+      body.format,
+    );
+    await writeAuditEvent(app.database, {
+      organizationId: await workspaceOrganizationId(app.database, params.workspaceId),
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'ai_model_price.imported',
+      entityType: 'ai_model_price',
+      metadata: auditModelPriceMetadata({
+        scope: 'workspace',
+        workspaceId: params.workspaceId,
+        via: 'http',
+        counts: {
+          added: plan.added.length,
+          changed: plan.changed.length,
+          unchanged: plan.unchanged.length,
+        },
+      }),
+      ipAddress: request.ip,
+    });
+    return { plan };
+  });
+
+  app.get('/api/v1/workspaces/:workspaceId/ai-model-prices/export', async (request, reply) => {
+    const principal = requireAuthenticated(request);
+    const params = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    const query = z.object({ format: z.enum(['csv', 'json']).default('csv') }).parse(request.query);
+    requireWorkspaceView(principal, params.workspaceId);
+    const prices = (await listAiModelPrices(app.database, params.workspaceId)).filter(
+      (row) => row.workspaceId === params.workspaceId && !row.retired,
+    );
+    const body = query.format === 'json' ? modelRatesToJson(prices) : modelRatesToCsv(prices);
+    const type = query.format === 'json' ? 'application/json' : 'text/csv; charset=utf-8';
+    return reply
+      .header('Content-Type', type)
+      .header('Content-Disposition', `attachment; filename="model-rates.${query.format}"`)
+      .send(body);
+  });
+
+  app.get('/api/v1/admin/ai-model-prices', async (request) => {
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    return { prices: await listGlobalAiModelPrices(app.database) };
+  });
+
+  app.put('/api/v1/admin/ai-model-prices', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const body = priceBody.parse(request.body);
+    const price = await upsertScopedAiModelPrice(app.database, null, priceInput(body), {
+      requireSourceNote: true,
+    });
+    await writeAuditEvent(app.database, {
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'ai_model_price.saved',
+      entityType: 'ai_model_price',
+      entityId: price.id,
+      metadata: auditModelPriceMetadata({
+        scope: 'global',
+        model: price.model,
+        effectiveFrom: price.effectiveFrom,
+        currency: price.currency,
+        sourceNote: price.sourceNote,
+        via: 'http',
+      }),
+      ipAddress: request.ip,
+    });
+    return { price };
+  });
+
+  app.post('/api/v1/admin/ai-model-prices/:priceId/retire', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const params = z.object({ priceId: z.string().uuid() }).parse(request.params);
+    const price = await retireScopedAiModelPrice(app.database, null, { priceId: params.priceId });
+    await writeAuditEvent(app.database, {
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'ai_model_price.retired',
+      entityType: 'ai_model_price',
+      entityId: price.id,
+      metadata: auditModelPriceMetadata({
+        scope: 'global',
+        model: price.model,
+        effectiveFrom: price.effectiveFrom,
+        currency: price.currency,
+        sourceNote: price.sourceNote,
+        via: 'http',
+      }),
+      ipAddress: request.ip,
+    });
+    return { price };
+  });
+
+  app.post('/api/v1/admin/ai-model-prices/import/preview', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const body = importBody.parse(request.body);
+    return { plan: await previewScopedModelRateImport(app.database, null, body.text, body.format) };
+  });
+
+  app.post('/api/v1/admin/ai-model-prices/import', async (request) => {
+    assertMutatingOrigin(app, request);
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const body = importBody.parse(request.body);
+    const plan = await applyScopedModelRateImport(app.database, null, body.text, body.format);
+    await writeAuditEvent(app.database, {
+      actorType: 'user',
+      actorId: principal.userId,
+      action: 'ai_model_price.imported',
+      entityType: 'ai_model_price',
+      metadata: auditModelPriceMetadata({
+        scope: 'global',
+        via: 'http',
+        counts: {
+          added: plan.added.length,
+          changed: plan.changed.length,
+          unchanged: plan.unchanged.length,
+        },
+      }),
+      ipAddress: request.ip,
+    });
+    return { plan };
+  });
+
+  app.get('/api/v1/admin/ai-model-prices/export', async (request, reply) => {
+    const principal = requireAuthenticated(request);
+    requireSystemAdmin(principal);
+    const query = z.object({ format: z.enum(['csv', 'json']).default('csv') }).parse(request.query);
+    const prices = (await listGlobalAiModelPrices(app.database)).filter((row) => !row.retired);
+    const body = query.format === 'json' ? modelRatesToJson(prices) : modelRatesToCsv(prices);
+    const type = query.format === 'json' ? 'application/json' : 'text/csv; charset=utf-8';
+    return reply
+      .header('Content-Type', type)
+      .header('Content-Disposition', `attachment; filename="global-model-rates.${query.format}"`)
+      .send(body);
   });
 }
