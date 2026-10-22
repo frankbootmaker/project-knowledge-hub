@@ -3,6 +3,7 @@ import {
   PlatformFinancialsTabs,
   parsePlatformFinancialsTab,
 } from '../../../../components/admin/PlatformFinancialsTabs';
+import { ModelRatesAdmin } from '../../../../components/financials/ModelRatesAdmin';
 import {
   PlatformAiCost,
   type PlatformAiCostReport,
@@ -64,9 +65,11 @@ export default async function AdminFinancialsPage({
   if (filters.type) params.set('type', filters.type);
   if (filters.period) params.set('period', filters.period);
   const suffix = params.size > 0 ? `?${params.toString()}` : '';
-  const response = await apiFetch(`/api/v1/admin/ai-cost${suffix}`);
-  const report = response.ok ? ((await response.json()) as PlatformAiCostReport) : null;
-  const error = response.ok
+  const response = tab === 'ai-cost'
+    ? await apiFetch(`/api/v1/admin/ai-cost${suffix}`)
+    : null;
+  const report = response?.ok ? ((await response.json()) as PlatformAiCostReport) : null;
+  const error = response == null || response.ok
     ? null
     : (((await response.json().catch(() => null)) as { error?: { message?: string } } | null)?.error
         ?.message ?? t('saveFailed'));
@@ -77,8 +80,12 @@ export default async function AdminFinancialsPage({
       <PlatformFinancialsTabs
         active={tab}
         label={t('tabsLabel')}
-        labels={{ 'ai-cost': t('tabAiCost') }}
+        labels={{
+          'ai-cost': t('tabAiCost'),
+          'model-rates': t('tabModelRates'),
+        }}
       />
+      {tab === 'model-rates' ? <ModelRatesAdmin scope="global" canEdit /> : null}
       {tab === 'ai-cost' && report ? (
         <PlatformAiCost
           report={report}
