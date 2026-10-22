@@ -1,5 +1,6 @@
 import { AppError } from './index.js';
 import { aiBillingPeriodSchema } from './ai-cost.js';
+import { splitIntegerTotal } from './cloud-agent-links.js';
 
 /**
  * Paid AI cost allocation (PRO-T-39).
@@ -181,7 +182,11 @@ export function utcUsagePeriod(occurredAt: Date): string | null {
 export type AllocationTokenTask = {
   projectId: string;
   aiSystemId: string | null;
+  /** Stable id used to order equal shares. Optional for a single link. */
+  taskId?: string | null;
   cloudAgentId: string | null;
+  /** Every agent linked to the task. Falls back to cloudAgentId when omitted. */
+  cloudAgentIds?: readonly string[] | null;
   /** Task billing month. Null when the task has no billing period or usage time. */
   period: string | null;
   tokens: number;
@@ -202,11 +207,22 @@ export type AllocationTokenSlice = {
   tokens: number;
 };
 
+function linkedAgentIds(task: AllocationTokenTask): string[] {
+  const fromList = task.cloudAgentIds
+    ?.map((id) => id.trim())
+    .filter((id) => id !== '');
+  if (fromList && fromList.length > 0) return [...new Set(fromList)];
+  const one = task.cloudAgentId?.trim();
+  return one ? [one] : [];
+}
+
 /**
  * Tokens that count toward one project's share of a month.
- * An imported cloud-agent row replaces that task's single billing period and
- * is counted in the UTC month of each event, on the linked project or the
- * task's project. A task with no imported cloud agent keeps its own period.
+ * An imported cloud-agent run is counted once, in the UTC month of the event.
+ * When several tasks link that agent, the run is split in equal whole tokens
+ * (remainder to the earliest task id) across those tasks' projects. The task
+ * counters for an imported agent are the same shares and are not added again.
+ * A task with no imported cloud agent keeps its own period.
  * Unassigned events (no project and no matching task) stay out.
  */
 export function allocationTokenSlices(input: {
@@ -215,16 +231,19 @@ export function allocationTokenSlices(input: {
 }): AllocationTokenSlice[] {
   const taskByAgent = new Map<
     string,
-    { projectId: string; aiSystemId: string | null }
+    Array<{ taskId: string; projectId: string; aiSystemId: string | null }>
   >();
-  for (const task of input.tasks) {
-    const agent = task.cloudAgentId?.trim();
-    if (!agent || taskByAgent.has(agent)) continue;
-    taskByAgent.set(agent, {
-      projectId: task.projectId,
-      aiSystemId: task.aiSystemId,
-    });
-  }
+  input.tasks.forEach((task, index) => {
+    for (const agent of linkedAgentIds(task)) {
+      const list = taskByAgent.get(agent) ?? [];
+      list.push({
+        taskId: task.taskId?.trim() || `${task.projectId}:${index}`,
+        projectId: task.projectId,
+        aiSystemId: task.aiSystemId,
+      });
+      taskByAgent.set(agent, list);
+    }
+  });
   const importedAgents = new Set<string>();
   for (const event of input.events) {
     const agent = event.cloudAgentId?.trim();
@@ -251,21 +270,23 @@ export function allocationTokenSlices(input: {
   for (const event of input.events) {
     const agent = event.cloudAgentId?.trim() ?? '';
     if (!agent) continue;
-    const task = taskByAgent.get(agent);
-    const projectId = event.projectId ?? task?.projectId ?? null;
-    if (!projectId) continue;
     const period = utcUsagePeriod(event.occurredAt);
     if (!period) continue;
-    add(
-      projectId,
-      event.aiSystemId ?? task?.aiSystemId ?? null,
-      period,
-      event.tokens,
+    const linked = [...(taskByAgent.get(agent) ?? [])].sort((left, right) =>
+      left.taskId.localeCompare(right.taskId),
     );
+    if (linked.length === 0) {
+      if (!event.projectId) continue;
+      add(event.projectId, event.aiSystemId, period, event.tokens);
+      continue;
+    }
+    const shares = splitIntegerTotal(event.tokens, linked.length);
+    linked.forEach((task, index) => {
+      add(task.projectId, event.aiSystemId ?? task.aiSystemId, period, shares[index] ?? 0);
+    });
   }
   for (const task of input.tasks) {
-    const agent = task.cloudAgentId?.trim() ?? '';
-    if (agent && importedAgents.has(agent)) continue;
+    if (linkedAgentIds(task).some((agent) => importedAgents.has(agent))) continue;
     if (!task.period || !(task.tokens > 0)) continue;
     add(task.projectId, task.aiSystemId, task.period, task.tokens);
   }

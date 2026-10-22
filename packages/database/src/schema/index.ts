@@ -1600,7 +1600,10 @@ export const projectTasks = pgTable(
     aiSystemId: uuid('ai_system_id').references(() => systems.id, {
       onDelete: 'set null',
     }),
-    /** Cursor cloud agent id. Null when this task is not linked to imported usage. */
+    /**
+     * Mirror of the first sorted cloud-agent link. Not unique.
+     * `projectTaskCloudAgentLinks` is the source of truth.
+     */
     cloudAgentId: text('cloud_agent_id'),
     issueKeyType: text('issue_key_type'),
     issueNumber: integer('issue_number'),
@@ -1624,7 +1627,32 @@ export const projectTasks = pgTable(
       table.issueKeyType,
       table.issueNumber,
     ),
-    uniqueIndex('project_tasks_cloud_agent_id_uidx').on(table.cloudAgentId),
+    index('project_tasks_cloud_agent_id_idx').on(table.cloudAgentId),
+  ],
+);
+
+/**
+ * Many tasks may share one Cursor cloud agent. A task may also link several.
+ * Unique on the pair, not on the agent id.
+ */
+export const projectTaskCloudAgentLinks = pgTable(
+  'project_task_cloud_agent_links',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => projectTasks.id, { onDelete: 'cascade' }),
+    cloudAgentId: text('cloud_agent_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_task_cloud_agent_links_pair_uidx').on(
+      table.taskId,
+      table.cloudAgentId,
+    ),
+    index('project_task_cloud_agent_links_agent_idx').on(table.cloudAgentId),
   ],
 );
 
