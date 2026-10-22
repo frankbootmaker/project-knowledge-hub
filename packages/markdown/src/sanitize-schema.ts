@@ -6,12 +6,17 @@ import { defaultSchema, type Options as SanitizeOptions } from 'rehype-sanitize'
  */
 export const knowledgeSanitizeSchema: SanitizeOptions = {
   ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), 'input'],
   attributes: {
     ...defaultSchema.attributes,
     code: [...(defaultSchema.attributes?.code ?? []), ['className'], ['class']],
     pre: [...(defaultSchema.attributes?.pre ?? []), ['className'], ['class']],
     span: [...(defaultSchema.attributes?.span ?? []), ['className'], ['class']],
     a: [...(defaultSchema.attributes?.a ?? []), ['className'], ['class'], ['target'], ['rel']],
+    ul: [...(defaultSchema.attributes?.ul ?? []), ['className', 'contains-task-list']],
+    ol: [...(defaultSchema.attributes?.ol ?? []), ['className', 'contains-task-list']],
+    li: [...(defaultSchema.attributes?.li ?? []), ['className', 'task-list-item']],
+    input: [['type', 'checkbox'], 'disabled', 'checked'],
     img: [
       ...(defaultSchema.attributes?.img ?? []),
       ['src'],
@@ -32,5 +37,10 @@ export const knowledgeSanitizeSchema: SanitizeOptions = {
     href: [...(defaultSchema.protocols?.href ?? []), 'http', 'https', 'mailto'],
     // Relative hub media paths (`/api/v1/media/:id`) have no protocol.
     src: [...(defaultSchema.protocols?.src ?? []), 'http', 'https'],
+  },
+  required: {
+    ...defaultSchema.required,
+    // Task-list checkboxes stay inert. The source of truth is the markdown text.
+    input: { type: 'checkbox', disabled: true },
   },
 };

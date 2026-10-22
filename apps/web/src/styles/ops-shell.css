@@ -1140,7 +1140,11 @@ a.kh-section-shortcut[aria-current='location'] {
 .kh-ops-stat-note {
   margin-top: 6px;
   color: var(--kh-ink-muted);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
   font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
 }
 
 .kh-ops-progress {
@@ -3514,7 +3518,7 @@ a.kh-ops-choice {
 
 .kh-ops-capacity-row {
   display: grid;
-  grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) 54px auto;
+  grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) auto auto;
   gap: 12px;
   align-items: center;
   padding: 10px 15px;
@@ -3543,35 +3547,192 @@ a.kh-ops-choice {
   font-size: 10px;
 }
 
+.kh-ops-capacity-legend-wrap {
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--kh-line);
+}
+
+.kh-ops-capacity-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+}
+
+.kh-ops-capacity-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kh-ops-capacity-row.is-total {
+  background: var(--kh-surface);
+  border-bottom: 1px solid var(--kh-line-strong);
+}
+
+.kh-ops-capacity-bar {
+  position: relative;
+  min-width: 0;
+}
+
+.kh-ops-capacity-bar.is-over {
+  padding-top: 18px;
+}
+
+.kh-ops-capacity-row:hover,
+.kh-ops-capacity-row:focus-within {
+  position: relative;
+  z-index: 2;
+}
+
 .kh-ops-capacity-track {
   position: relative;
-  height: 10px;
+  height: 12px;
   background: var(--kh-line);
 }
 
-.kh-ops-capacity-track i,
-.kh-ops-capacity-track b {
+.kh-ops-capacity-track:focus-visible {
+  outline: 2px solid var(--kh-focus-ring);
+  outline-offset: 2px;
+}
+
+.kh-ops-capacity-burn,
+.kh-ops-capacity-planned,
+.kh-ops-capacity-overflow {
   position: absolute;
-  inset: 0 auto 0 0;
-  height: 100%;
+  top: 0;
+  bottom: 0;
 }
 
-.kh-ops-capacity-track i {
-  background: var(--kh-ink);
-  width: var(--planned, 0%);
-}
-
-.kh-ops-capacity-track b {
+.kh-ops-capacity-burn {
+  left: 0;
+  z-index: 1;
   background: var(--kh-accent);
-  width: var(--burn, 0%);
-  mix-blend-mode: multiply;
+}
+
+.kh-ops-capacity-planned {
+  z-index: 1;
+  background-color: var(--kh-accent-soft);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in oklch, var(--kh-accent) 70%, transparent) 0 2px,
+    transparent 2px 6px
+  );
+}
+
+.kh-ops-capacity-overflow {
+  z-index: 2;
+  background-color: var(--kh-warn);
+  background-image: repeating-linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--kh-ink) 35%, transparent) 0 1px,
+    transparent 1px 4px
+  );
+}
+
+.kh-ops-capacity-marker {
+  position: absolute;
+  z-index: 3;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--kh-ink);
+}
+
+.kh-ops-capacity-marker span {
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 10px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.kh-ops-capacity-swatch {
+  position: static;
+  display: inline-block;
+  width: 12px;
+  height: 10px;
+  flex: none;
+}
+
+.kh-ops-capacity-tip {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 2rem));
+  padding: 8px 10px;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-panel-solid);
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.kh-ops-capacity-bar:hover .kh-ops-capacity-tip,
+.kh-ops-capacity-bar:focus-within .kh-ops-capacity-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.kh-ops-capacity-tip dl {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.kh-ops-capacity-tip div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.kh-ops-capacity-tip dt {
+  color: var(--kh-ink-muted);
+}
+
+.kh-ops-capacity-tip dd {
+  margin: 0;
+  text-align: right;
 }
 
 .kh-ops-capacity-hours {
-  color: var(--kh-ink-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 11px;
+  display: grid;
+  justify-items: end;
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
   text-align: right;
+}
+
+.kh-ops-capacity-hours small {
+  color: var(--kh-ink-muted);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .kh-ops-budget-layout {
@@ -5058,6 +5219,70 @@ button.kh-ops-tag {
   max-width: 850px;
 }
 
+.kh-ops-description-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.kh-ops-description-mode {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+}
+
+.kh-ops-description-markdown {
+  min-width: 0;
+  min-height: 7rem;
+  max-height: 24rem;
+  overflow: auto;
+  border: 1px solid var(--kh-line-strong);
+  border-radius: var(--kh-radius-md);
+  background: var(--kh-panel-solid);
+  color: var(--kh-ink);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.45;
+}
+
+.kh-ops-description-markdown .kh-ops-markdown-view {
+  max-width: none;
+  padding: 10px 12px;
+}
+
+.kh-ops-description-markdown .knowledge-markdown,
+.kh-ops-description-markdown .knowledge-markdown :is(p, li, td, th, blockquote) {
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.kh-ops-description-markdown .knowledge-markdown :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+}
+
+.kh-ops-description-markdown .knowledge-markdown :is(pre, code) {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.kh-ops-description-raw {
+  margin: 0;
+  min-height: 7rem;
+  max-height: 24rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
 .kh-ops-toc {
   position: sticky;
   top: 12px;
@@ -5549,7 +5774,7 @@ button.kh-ops-stage-card:disabled {
     gap: 8px;
   }
 
-  .kh-ops-capacity-track {
+  .kh-ops-capacity-bar {
     grid-column: 1 / -1;
   }
 }

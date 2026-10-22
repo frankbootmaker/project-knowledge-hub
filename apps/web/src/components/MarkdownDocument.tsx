@@ -158,6 +158,11 @@ function MarkdownBody({
   );
 }
 
+/** Sanitized markdown body. Mermaid and wide tables match the knowledge record view. */
+export function MarkdownView({ html, className }: { html: string; className?: string }) {
+  return <MarkdownBody html={html} className={className} />;
+}
+
 export function MarkdownDocument({
   html,
   toc,

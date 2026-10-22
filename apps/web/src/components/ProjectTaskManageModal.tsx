@@ -35,6 +35,7 @@ import {
   resolveRatePerson,
   type RatePerson,
 } from '../lib/task-costing';
+import { DescriptionMarkdownField } from './DescriptionMarkdownField';
 import {
   DeliveryDocumentsEditor,
   saveDeliveryDocumentLinks,
@@ -1083,14 +1084,15 @@ export function ProjectTaskManageModal({
                   ))}
                 </Select>
               </Field>
-              <Field className="kh-ops-field-span" label={t('description')}>
-                <Textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  disabled={pending || !canMutate}
-                  rows={4}
-                />
-              </Field>
+              <DescriptionMarkdownField
+                className="kh-ops-field-span"
+                label={t('description')}
+                value={description}
+                onChange={setDescription}
+                disabled={pending}
+                readOnly={!canMutate}
+                rows={4}
+              />
               {task.itemType === 'bug' ? (
                 <>
                   <Field label={t('severity')}>
@@ -1128,30 +1130,31 @@ export function ProjectTaskManageModal({
                       disabled={pending || !canMutate}
                     />
                   </Field>
-                  <Field className="kh-ops-field-span" label={t('stepsToReproduce')}>
-                    <Textarea
-                      value={stepsToReproduce}
-                      rows={3}
-                      onChange={(e) => setStepsToReproduce(e.target.value)}
-                      disabled={pending || !canMutate}
-                    />
-                  </Field>
-                  <Field label={t('expectedBehavior')}>
-                    <Textarea
-                      value={expectedBehavior}
-                      rows={3}
-                      onChange={(e) => setExpectedBehavior(e.target.value)}
-                      disabled={pending || !canMutate}
-                    />
-                  </Field>
-                  <Field label={t('actualBehavior')}>
-                    <Textarea
-                      value={actualBehavior}
-                      rows={3}
-                      onChange={(e) => setActualBehavior(e.target.value)}
-                      disabled={pending || !canMutate}
-                    />
-                  </Field>
+                  <DescriptionMarkdownField
+                    className="kh-ops-field-span"
+                    label={t('stepsToReproduce')}
+                    value={stepsToReproduce}
+                    onChange={setStepsToReproduce}
+                    disabled={pending}
+                    readOnly={!canMutate}
+                    rows={3}
+                  />
+                  <DescriptionMarkdownField
+                    label={t('expectedBehavior')}
+                    value={expectedBehavior}
+                    onChange={setExpectedBehavior}
+                    disabled={pending}
+                    readOnly={!canMutate}
+                    rows={3}
+                  />
+                  <DescriptionMarkdownField
+                    label={t('actualBehavior')}
+                    value={actualBehavior}
+                    onChange={setActualBehavior}
+                    disabled={pending}
+                    readOnly={!canMutate}
+                    rows={3}
+                  />
                   <Switch
                     id="bug-regression-edit"
                     checked={regression}

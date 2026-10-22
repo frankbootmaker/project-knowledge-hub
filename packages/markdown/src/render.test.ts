@@ -54,4 +54,41 @@ graph TD
     const result = await renderMarkdown('![x](data:image/png;base64,aaaa)');
     expect(result.html.toLowerCase()).not.toContain('data:image');
   });
+
+  it('opens surviving links in a new tab', async () => {
+    const result = await renderMarkdown(
+      '[docs](https://example.com/guide) and [mail](mailto:team@example.com)',
+    );
+    expect(result.html).toContain('href="https://example.com/guide"');
+    expect(result.html).toContain('href="mailto:team@example.com"');
+    expect(result.html.match(/target="_blank"/g)).toHaveLength(2);
+    expect(result.html.match(/rel="noopener noreferrer"/g)).toHaveLength(2);
+  });
+
+  it('renders GFM tables, task lists, and fenced code without raw HTML', async () => {
+    const result = await renderMarkdown(`| A | B |
+| - | - |
+| 1 | 2 |
+
+- [x] done
+- [ ] open
+
+\`\`\`ts
+const x = 1;
+\`\`\`
+
+<script>alert(1)</script>
+`);
+    expect(result.html).toContain('<table>');
+    expect(result.html).toContain('<th>');
+    expect(result.html).toContain('contains-task-list');
+    expect(result.html).toContain('type="checkbox"');
+    expect(result.html).toContain('disabled');
+    expect(result.html).toContain('checked');
+    expect(result.html).toContain('<pre>');
+    expect(result.html).toContain('class="language-ts"');
+    expect(result.html).toContain('hljs-keyword');
+    expect(result.html.toLowerCase()).not.toContain('<script');
+    expect(result.html.toLowerCase()).not.toContain('onerror');
+  });
 });
