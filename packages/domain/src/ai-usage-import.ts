@@ -25,6 +25,7 @@ export const CURSOR_USAGE_CSV_HEADERS = [
 ] as const;
 
 export const CLOUD_AGENT_ID_MAX = 80;
+export const CLOUD_AGENT_LINK_LIMIT = 20;
 export const USAGE_CSV_MAX_CHARS = 8_000_000;
 export const USAGE_CSV_MAX_ROWS = 100_000;
 export const USAGE_IMPORT_ERROR_LIMIT = 100;
@@ -267,6 +268,36 @@ export function parseCloudAgentId(
   return trimmed;
 }
 
+/**
+ * Replace a task's cloud-agent links. Null or an empty list clears them.
+ * Duplicates are dropped. The result is sorted. A write that sends only
+ * `cloudAgentId` still means that one link.
+ */
+export function parseCloudAgentIds(
+  value: readonly (string | null)[] | null | undefined,
+): string[] | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return [];
+  if (value.length > CLOUD_AGENT_LINK_LIMIT) {
+    throw new AppError({
+      code: 'CLOUD_AGENT_ID_INVALID',
+      message: `A task can link at most ${CLOUD_AGENT_LINK_LIMIT} cloud agents`,
+      statusCode: 400,
+    });
+  }
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const parsed = parseCloudAgentId(item ?? null);
+    if (!parsed) continue;
+    if (seen.has(parsed)) continue;
+    seen.add(parsed);
+    ids.push(parsed);
+  }
+  ids.sort();
+  return ids;
+}
+
 export function parseCursorUsageCsv(csv: string): {
   rows: NormalizedAiUsageRow[];
   errors: AiUsageRowError[];
@@ -361,16 +392,34 @@ export function dedupeUsageRows(
   return { fresh, duplicateCount };
 }
 
+export type CloudAgentTaskIndex = ReadonlyMap<string, string | readonly string[]>;
+
+function taskIdsForAgent(map: CloudAgentTaskIndex, agent: string): string[] {
+  const value = map.get(agent);
+  if (value == null) return [];
+  const ids = typeof value === 'string' ? [value] : [...value];
+  return [...new Set(ids.filter((id) => id.trim() !== ''))].sort();
+}
+
+export function agentHasLinkedTask(map: CloudAgentTaskIndex, agent: string): boolean {
+  return taskIdsForAgent(map, agent).length > 0;
+}
+
+/**
+ * A single linked task owns `projectTaskId`. Several tasks share the agent
+ * without pointing the event at one of them; the link table is the source.
+ */
 export function linkUsageRows<T extends { cloudAgentId: string | null }>(
   rows: readonly T[],
-  taskIdByCloudAgentId: ReadonlyMap<string, string>,
+  taskIdByCloudAgentId: CloudAgentTaskIndex,
 ): Array<T & { projectTaskId: string | null }> {
-  return rows.map((row) => ({
-    ...row,
-    projectTaskId: row.cloudAgentId
-      ? (taskIdByCloudAgentId.get(row.cloudAgentId) ?? null)
-      : null,
-  }));
+  return rows.map((row) => {
+    const ids = row.cloudAgentId ? taskIdsForAgent(taskIdByCloudAgentId, row.cloudAgentId) : [];
+    return {
+      ...row,
+      projectTaskId: ids.length === 1 ? ids[0]! : null,
+    };
+  });
 }
 
 export function summarizeUsageRows(
@@ -426,14 +475,14 @@ export function previewUsageImport(input: {
   errors: readonly AiUsageRowError[];
   rowCountNoTokens: number;
   existingHashes: ReadonlySet<string>;
-  taskIdByCloudAgentId: ReadonlyMap<string, string>;
+  taskIdByCloudAgentId: CloudAgentTaskIndex;
 }): UsageImportStats {
   const deduped = dedupeUsageRows(input.rows, input.existingHashes);
   const linkedFresh = linkUsageRows(deduped.fresh, input.taskIdByCloudAgentId);
   const summary = summarizeUsageRows(input.rows);
   const linkedInFile = input.rows.filter((row) =>
     row.cloudAgentId
-      ? input.taskIdByCloudAgentId.has(row.cloudAgentId)
+      ? agentHasLinkedTask(input.taskIdByCloudAgentId, row.cloudAgentId)
       : false,
   ).length;
   return {

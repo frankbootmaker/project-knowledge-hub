@@ -7,6 +7,7 @@ import {
   projectMilestones,
   projectSprints,
   projectTaskActivities,
+  projectTaskCloudAgentLinks,
   projectTaskRaci,
   projectTasks,
   projectUserStories,
@@ -21,7 +22,7 @@ import {
   overlaySchedule,
   rescheduleDeliveryFrom,
 } from './delivery-dependencies.js';
-import { relinkTaskUsage } from './ai-usage-import.js';
+import { redistributeCloudAgentUsage, setTaskCloudAgentLinks } from './ai-usage-import.js';
 import { loadProjectCalendar } from './project-calendar.js';
 import type { PublicItemMediaLink } from './project-item-media.js';
 import {
@@ -35,6 +36,7 @@ import {
   resolveTaskScheduleDates,
   mergeAiUsage,
   parseCloudAgentId,
+  parseCloudAgentIds,
   milestoneStatusSchema,
   raciRoleSchema,
   raidSeveritySchema,
@@ -174,7 +176,10 @@ export type PublicTask = {
   usageOccurredAt: string | null;
   billingPeriod: string | null;
   aiSystemId: string | null;
+  /** First sorted link. Kept for clients that read one id. */
   cloudAgentId: string | null;
+  cloudAgentIds: string[];
+  cloudAgentLinks: PublicCloudAgentLink[];
   sortOrder: number;
   createdBy: string | null;
   currentOwnerUserId: string | null;
@@ -200,6 +205,18 @@ export type PublicTask = {
 };
 
 /** Task the current user holds a RACI role on, with project/workspace context. */
+export type PublicCloudAgentTask = {
+  id: string;
+  projectId: string;
+  title: string;
+  humanKey: string | null;
+};
+
+export type PublicCloudAgentLink = {
+  cloudAgentId: string;
+  tasks: PublicCloudAgentTask[];
+};
+
 export type PublicAssignedTask = PublicTask & {
   myRole: RaciRole;
   projectName: string;
@@ -252,6 +269,8 @@ function toPublicTask(
     epicTitle?: string | null;
     keyPrefix?: string | null;
     completedAt?: string | null;
+    cloudAgentIds?: string[];
+    cloudAgentLinks?: PublicCloudAgentLink[];
   },
 ): PublicTask {
   const keys = toHumanKeyFields(
@@ -259,6 +278,8 @@ function toPublicTask(
     row.issueKeyType,
     row.issueNumber,
   );
+  const cloudAgentIds = extras?.cloudAgentIds
+    ?? (row.cloudAgentId ? [row.cloudAgentId] : []);
   return {
     id: row.id,
     projectId: row.projectId,
@@ -301,7 +322,9 @@ function toPublicTask(
     usageOccurredAt: row.usageOccurredAt?.toISOString() ?? null,
     billingPeriod: row.billingPeriod ?? null,
     aiSystemId: row.aiSystemId ?? null,
-    cloudAgentId: row.cloudAgentId ?? null,
+    cloudAgentIds,
+    cloudAgentId: cloudAgentIds[0] ?? null,
+    cloudAgentLinks: extras?.cloudAgentLinks ?? [],
     sortOrder: row.sortOrder,
     createdBy: row.createdBy,
     currentOwnerUserId: row.currentOwnerUserId,
@@ -356,6 +379,77 @@ export async function loadCompletedAtByTask(
     }
   }
   return map;
+}
+
+async function loadCloudAgentLinks(
+  database: Database,
+  taskIds: string[],
+): Promise<Map<string, { ids: string[]; links: PublicCloudAgentLink[] }>> {
+  const result = new Map<string, { ids: string[]; links: PublicCloudAgentLink[] }>();
+  if (taskIds.length === 0) return result;
+  const ownLinks = await database.db
+    .select({
+      taskId: projectTaskCloudAgentLinks.taskId,
+      cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId,
+      workspaceId: projects.workspaceId,
+    })
+    .from(projectTaskCloudAgentLinks)
+    .innerJoin(projectTasks, eq(projectTasks.id, projectTaskCloudAgentLinks.taskId))
+    .innerJoin(projects, eq(projects.id, projectTasks.projectId))
+    .where(inArray(projectTaskCloudAgentLinks.taskId, taskIds));
+  const agentIds = [...new Set(ownLinks.map((row) => row.cloudAgentId))];
+  const peers = agentIds.length === 0
+    ? []
+    : await database.db
+      .select({
+        cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId,
+        taskId: projectTasks.id,
+        projectId: projectTasks.projectId,
+        title: projectTasks.title,
+        issueKeyType: projectTasks.issueKeyType,
+        issueNumber: projectTasks.issueNumber,
+        keyPrefix: projects.keyPrefix,
+        workspaceId: projects.workspaceId,
+      })
+      .from(projectTaskCloudAgentLinks)
+      .innerJoin(projectTasks, eq(projectTasks.id, projectTaskCloudAgentLinks.taskId))
+      .innerJoin(projects, eq(projects.id, projectTasks.projectId))
+      .where(
+        and(
+          inArray(projectTaskCloudAgentLinks.cloudAgentId, agentIds),
+          isNull(projectTasks.archivedAt),
+        ),
+      );
+  const workspaceByTask = new Map<string, string>();
+  for (const link of ownLinks) workspaceByTask.set(link.taskId, link.workspaceId);
+  const idsByTask = new Map<string, string[]>();
+  for (const link of ownLinks) {
+    const list = idsByTask.get(link.taskId) ?? [];
+    list.push(link.cloudAgentId);
+    idsByTask.set(link.taskId, list);
+  }
+  for (const taskId of taskIds) {
+    const ids = [...(idsByTask.get(taskId) ?? [])].sort();
+    const workspaceId = workspaceByTask.get(taskId) ?? null;
+    const links = ids.map((cloudAgentId) => ({
+      cloudAgentId,
+      tasks: peers
+        .filter((peer) => (
+          peer.cloudAgentId === cloudAgentId
+          && workspaceId != null
+          && peer.workspaceId === workspaceId
+        ))
+        .map((peer) => ({
+          id: peer.taskId,
+          projectId: peer.projectId,
+          title: peer.title,
+          humanKey: toHumanKeyFields(peer.keyPrefix, peer.issueKeyType, peer.issueNumber).humanKey,
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+    }));
+    result.set(taskId, { ids, links });
+  }
+  return result;
 }
 
 async function loadTaskContext(
@@ -445,9 +539,11 @@ function mapTasksWithContext(
   stories: Map<string, { title: string; epicId: string; epicTitle: string | null }>,
   keyPrefixByProject: Map<string, string | null>,
   completedAtByTask: Map<string, string>,
+  cloudAgents: Map<string, { ids: string[]; links: PublicCloudAgentLink[] }>,
 ): PublicTask[] {
   return rows.map((row) => {
     const story = row.userStoryId ? stories.get(row.userStoryId) : undefined;
+    const agents = cloudAgents.get(row.id);
     return toPublicTask(row, raciMap.get(row.id) ?? [], {
       currentOwner: row.currentOwnerUserId
         ? owners.get(row.currentOwnerUserId) ?? null
@@ -457,6 +553,8 @@ function mapTasksWithContext(
       epicTitle: story?.epicTitle ?? null,
       keyPrefix: keyPrefixByProject.get(row.projectId) ?? null,
       completedAt: taskCompletedAt(row.status, completedAtByTask.get(row.id)),
+      cloudAgentIds: agents?.ids,
+      cloudAgentLinks: agents?.links,
     });
   });
 }
@@ -467,10 +565,11 @@ async function withTaskContext(
   keyPrefixByProject: Map<string, string | null>,
 ): Promise<PublicTask[]> {
   const ids = rows.map((row) => row.id);
-  const [raciMap, context, completedAtByTask] = await Promise.all([
+  const [raciMap, context, completedAtByTask, cloudAgents] = await Promise.all([
     loadRaciForTasks(database, ids),
     loadTaskContext(database, rows),
     loadCompletedAtByTask(database, ids),
+    loadCloudAgentLinks(database, ids),
   ]);
   return mapTasksWithContext(
     rows,
@@ -479,7 +578,22 @@ async function withTaskContext(
     context.stories,
     keyPrefixByProject,
     completedAtByTask,
+    cloudAgents,
   );
+}
+
+function resolveCloudAgentIds(input: {
+  cloudAgentId?: string | null;
+  cloudAgentIds?: readonly (string | null)[] | null;
+}): string[] | undefined {
+  if (input.cloudAgentIds !== undefined) {
+    return parseCloudAgentIds(input.cloudAgentIds) ?? [];
+  }
+  if (input.cloudAgentId !== undefined) {
+    const one = parseCloudAgentId(input.cloudAgentId);
+    return one ? [one] : [];
+  }
+  return undefined;
 }
 
 function defaultOwnerFromRaci(
@@ -1387,6 +1501,7 @@ export function taskTouchesCost(input: {
   billingPeriod?: unknown;
   aiSystemId?: unknown;
   cloudAgentId?: unknown;
+  cloudAgentIds?: unknown;
 }): boolean {
   return (
     input.forecastHours !== undefined ||
@@ -1401,7 +1516,8 @@ export function taskTouchesCost(input: {
     input.usageOccurredAt !== undefined ||
     input.billingPeriod !== undefined ||
     input.aiSystemId !== undefined ||
-    input.cloudAgentId !== undefined
+    input.cloudAgentId !== undefined ||
+    input.cloudAgentIds !== undefined
   );
 }
 
@@ -1622,6 +1738,8 @@ export async function createTask(
     usageOccurredAt?: Date | null;
     billingPeriod?: string | null;
     aiSystemId?: string | null;
+    cloudAgentId?: string | null;
+    cloudAgentIds?: readonly (string | null)[] | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     sprintId?: string | null;
@@ -1817,6 +1935,15 @@ export async function createTask(
     ...dateChanges,
   ]);
 
+  const createdAgentIds = resolveCloudAgentIds(input);
+  if (createdAgentIds && createdAgentIds.length > 0) {
+    await setTaskCloudAgentLinks(database, {
+      taskId: createdTask.id,
+      workspaceId: input.workspaceId,
+      cloudAgentIds: createdAgentIds,
+    });
+  }
+
   return getTask(database, createdTask.id);
 }
 
@@ -1832,7 +1959,12 @@ export async function deleteTask(
   });
   await deleteDeliveryDependenciesFor(database, 'task', [taskId]);
   await deleteMilestoneItemLinks(database, 'task', [taskId]);
+  const removedAgents = existing.cloudAgentIds;
+  const workspaceId = await projectWorkspaceId(database, existing.projectId);
   await database.db.delete(projectTasks).where(eq(projectTasks.id, taskId));
+  if (workspaceId && removedAgents.length > 0) {
+    await redistributeCloudAgentUsage(database, workspaceId, removedAgents);
+  }
   const applied = await recomputeDeliveryParentStatuses(database, existing.projectId, {
     storyIds: [existing.userStoryId],
     epicIds: [existing.epicId],
@@ -1875,6 +2007,7 @@ export async function updateTask(
     billingPeriod?: string | null;
     aiSystemId?: string | null;
     cloudAgentId?: string | null;
+    cloudAgentIds?: string[] | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     sprintId?: string | null;
@@ -1969,24 +2102,19 @@ export async function updateTask(
       existing.sprintId,
     );
   }
-  const nextCloudAgentId =
-    input.cloudAgentId === undefined
-      ? undefined
-      : parseCloudAgentId(input.cloudAgentId);
-  if (nextCloudAgentId) {
-    const [taken] = await database.db
-      .select({ id: projectTasks.id })
-      .from(projectTasks)
-      .where(eq(projectTasks.cloudAgentId, nextCloudAgentId))
-      .limit(1);
-    if (taken && taken.id !== existing.id) {
-      throw new AppError({
-        code: 'CLOUD_AGENT_ID_TAKEN',
-        message: 'Another task already uses this cloud agent id',
-        statusCode: 409,
-      });
-    }
-  }
+  const nextCloudAgentIds = resolveCloudAgentIds(input);
+  const nextCloudAgentId = nextCloudAgentIds === undefined
+    ? undefined
+    : (nextCloudAgentIds[0] ?? null);
+  const currentCloudAgentIds = nextCloudAgentIds === undefined
+    ? []
+    : (await database.db
+      .select({ cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId })
+      .from(projectTaskCloudAgentLinks)
+      .where(eq(projectTaskCloudAgentLinks.taskId, taskId))
+    ).map((row) => row.cloudAgentId).sort();
+  const cloudAgentsChanged = nextCloudAgentIds !== undefined
+    && nextCloudAgentIds.join('\0') !== currentCloudAgentIds.join('\0');
 
   if (input.aiSystemId !== undefined && input.aiSystemId !== null) {
     const [project] = await database.db
@@ -2165,11 +2293,8 @@ export async function updateTask(
     touched: input.aiSystemId !== undefined,
   });
   const fields = [...changedFields, ...usageDelta.fields];
-  if (
-    nextCloudAgentId !== undefined &&
-    nextCloudAgentId !== (existing.cloudAgentId ?? null)
-  ) {
-    fields.push('cloudAgentId');
+  if (cloudAgentsChanged) {
+    fields.push('cloudAgentIds');
   }
   if (fields.length > 0) {
     await recordTaskActivity(database, {
@@ -2210,18 +2335,15 @@ export async function updateTask(
     { entityType: 'task', id: taskId },
     ...dateChanges,
   ]);
-  if (
-    nextCloudAgentId !== undefined &&
-    nextCloudAgentId !== (existing.cloudAgentId ?? null)
-  ) {
+  if (cloudAgentsChanged && nextCloudAgentIds) {
     const workspaceForLink =
       input.workspaceId ??
       (await projectWorkspaceId(database, existing.projectId));
     if (workspaceForLink) {
-      await relinkTaskUsage(database, {
+      await setTaskCloudAgentLinks(database, {
         taskId,
         workspaceId: workspaceForLink,
-        cloudAgentId: nextCloudAgentId,
+        cloudAgentIds: nextCloudAgentIds ?? [],
       });
     }
   }

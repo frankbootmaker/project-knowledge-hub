@@ -213,6 +213,8 @@ const createTaskSchema = z.object({
   completionPercent: taskCompletionPercentSchema.nullable().optional(),
   currentOwnerUserId: z.string().uuid().nullable().optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
+  cloudAgentId: z.string().max(80).nullable().optional(),
+  cloudAgentIds: z.array(z.string().max(80)).max(20).nullable().optional(),
   raci: z.array(raciEntrySchema).max(50).optional(),
 });
 
@@ -229,6 +231,7 @@ const updateTaskSchema = z.object({
   actualHours: hoursSchema.optional(),
   ...aiUsageBodyFields,
   cloudAgentId: z.string().max(80).nullable().optional(),
+  cloudAgentIds: z.array(z.string().max(80)).max(20).nullable().optional(),
   aiSystemId: z.string().uuid().nullable().optional(),
   milestoneId: z.string().uuid().nullable().optional(),
   userStoryId: z.string().uuid().nullable().optional(),
@@ -251,6 +254,7 @@ const reportAiUsageSchema = z.object({
   usageOccurredAt: z.string().max(40).nullable().optional(),
   billingPeriod: z.string().max(7).nullable().optional(),
   cloudAgentId: z.string().max(80).nullable().optional(),
+  cloudAgentIds: z.array(z.string().max(80)).max(20).nullable().optional(),
   aiSystemId: z.string().uuid().nullable().optional(),
 });
 
@@ -459,6 +463,8 @@ export async function registerProjectDeliveryRoutes(
           : parseHours(body.actualHours) ?? null,
       ...mapAiUsageBody(body),
       aiSystemId: body.aiSystemId,
+      cloudAgentId: body.cloudAgentId,
+      cloudAgentIds: body.cloudAgentIds,
       milestoneId: body.milestoneId,
       userStoryId: body.userStoryId,
       sprintId: body.sprintId,
@@ -528,6 +534,7 @@ export async function registerProjectDeliveryRoutes(
       ...mapAiUsageBody(body),
       aiSystemId: body.aiSystemId,
       cloudAgentId: parseCloudAgentId(body.cloudAgentId),
+      cloudAgentIds: body.cloudAgentIds,
       milestoneId: body.milestoneId,
       userStoryId: body.userStoryId,
       sprintId: body.sprintId,
@@ -574,6 +581,7 @@ export async function registerProjectDeliveryRoutes(
       ...mapAiUsageBody(body),
       aiSystemId: body.aiSystemId,
       cloudAgentId: parseCloudAgentId(body.cloudAgentId),
+      cloudAgentIds: body.cloudAgentIds,
       actorUserId: principal.userId,
       workspaceId: project.workspaceId,
     });

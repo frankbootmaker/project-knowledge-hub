@@ -35,6 +35,7 @@ import {
   resolveRatePerson,
   type RatePerson,
 } from '../lib/task-costing';
+import { DescriptionMarkdownField } from './DescriptionMarkdownField';
 import {
   DeliveryDocumentsEditor,
   saveDeliveryDocumentLinks,
@@ -95,6 +96,8 @@ type TaskDetail = {
   billingPeriod?: string | null;
   aiSystemId: string | null;
   cloudAgentId?: string | null;
+  cloudAgentIds?: string[];
+  cloudAgentLinks?: CloudAgentLink[];
   humanKey?: string | null;
   itemType?: 'task' | 'bug';
   severity?: string | null;
@@ -108,6 +111,18 @@ type TaskDetail = {
   affectedSystemId?: string | null;
   duplicateOfTaskId?: string | null;
   raci: RaciEntry[];
+};
+
+type CloudAgentTaskRef = {
+  id: string;
+  projectId: string;
+  title: string;
+  humanKey: string | null;
+};
+
+type CloudAgentLink = {
+  cloudAgentId: string;
+  tasks: CloudAgentTaskRef[];
 };
 
 type Activity = {
@@ -249,7 +264,9 @@ export function ProjectTaskManageModal({
   const [usageOccurredAt, setUsageOccurredAt] = useState('');
   const [billingPeriod, setBillingPeriod] = useState('');
   const [aiSystemId, setAiSystemId] = useState('');
-  const [cloudAgentId, setCloudAgentId] = useState('');
+  const [cloudAgentIds, setCloudAgentIds] = useState<string[]>([]);
+  const [agentDraft, setAgentDraft] = useState('');
+  const [agentLinks, setAgentLinks] = useState<CloudAgentLink[]>([]);
   const [severity, setSeverity] = useState('medium');
   const [foundIn, setFoundIn] = useState('');
   const [foundInNote, setFoundInNote] = useState('');
@@ -342,7 +359,15 @@ export function ProjectTaskManageModal({
       );
       setBillingPeriod(loaded.billingPeriod ?? '');
       setAiSystemId(loaded.aiSystemId ?? '');
-      setCloudAgentId(loaded.cloudAgentId ?? '');
+      setCloudAgentIds(
+        loaded.cloudAgentIds && loaded.cloudAgentIds.length > 0
+          ? loaded.cloudAgentIds
+          : loaded.cloudAgentId
+            ? [loaded.cloudAgentId]
+            : [],
+      );
+      setAgentDraft('');
+      setAgentLinks(loaded.cloudAgentLinks ?? []);
       setSeverity(loaded.severity ?? 'medium');
       setFoundIn(loaded.foundIn ?? '');
       setFoundInNote(loaded.foundInNote ?? '');
@@ -509,11 +534,6 @@ export function ProjectTaskManageModal({
       setError(t('billingPeriodInvalid'));
       return null;
     }
-    const agent = cloudAgentId.trim();
-    if (agent.length > 80 || /\s/.test(agent)) {
-      setError(t('cloudAgentIdInvalid'));
-      return null;
-    }
     return {
       tokensInput: input,
       tokensOutput: output,
@@ -524,6 +544,51 @@ export function ProjectTaskManageModal({
       usageOccurredAt: usageOccurredAt || null,
       billingPeriod: period || null,
     };
+  }
+
+  function validAgentId(id: string): boolean {
+    return id.length > 0 && id.length <= 80 && !/\s/.test(id);
+  }
+
+  function agentIdsForSave(): string[] | null {
+    const draft = agentDraft.trim();
+    const ids = [...cloudAgentIds];
+    if (draft) {
+      if (!validAgentId(draft)) {
+        setError(t('cloudAgentIdInvalid'));
+        return null;
+      }
+      if (!ids.includes(draft)) ids.push(draft);
+    }
+    if (ids.length > 20 || ids.some((id) => !validAgentId(id))) {
+      setError(t('cloudAgentIdInvalid'));
+      return null;
+    }
+    return [...ids].sort();
+  }
+
+  function addAgent() {
+    const draft = agentDraft.trim();
+    if (!draft) return;
+    if (!validAgentId(draft) || cloudAgentIds.length >= 20) {
+      setError(t('cloudAgentIdInvalid'));
+      return;
+    }
+    setError(null);
+    setCloudAgentIds((current) =>
+      current.includes(draft) ? current : [...current, draft].sort(),
+    );
+    setAgentDraft('');
+  }
+
+  function agentPeerText(id: string): string {
+    const peers = agentLinks.find((link) => link.cloudAgentId === id)?.tasks ?? [];
+    if (peers.length === 0) return '';
+    if (peers.length === 1) return t('cloudAgentOnlyThis');
+    const names = peers.map((item) =>
+      item.humanKey ? `${item.humanKey} · ${item.title}` : item.title,
+    );
+    return `${t('cloudAgentTasks')}: ${names.join(', ')}`;
   }
 
   function raciIssueLabel(issue: RaciDraftIssue): string {
@@ -565,7 +630,8 @@ export function ProjectTaskManageModal({
     setPending(true);
     setError(null);
     const usage = aiUsagePayload();
-    if (!usage) {
+    const nextAgentIds = agentIdsForSave();
+    if (!usage || !nextAgentIds) {
       setPending(false);
       return;
     }
@@ -589,7 +655,7 @@ export function ProjectTaskManageModal({
           userStoryId: userStoryId || null,
           ...usage,
           aiSystemId: aiSystemId.trim() || null,
-          cloudAgentId: cloudAgentId.trim() || null,
+          cloudAgentIds: nextAgentIds,
           ...(task?.itemType === 'bug'
             ? {
                 severity: severity || 'medium',
@@ -910,6 +976,27 @@ export function ProjectTaskManageModal({
           <section
             className={`kh-ops-modal-pane${taskTab === 'details' ? ' active' : ''}`}
           >
+            {(task.cloudAgentLinks?.length ?? 0) > 0 ? (
+              <div className="mb-3 grid gap-2">
+                <p className="m-0 text-sm font-semibold">{t('cloudAgents')}</p>
+                <ul className="m-0 grid list-none gap-2 p-0">
+                  {task.cloudAgentLinks?.map((link) => (
+                    <li key={link.cloudAgentId} className="grid gap-1">
+                      <span className="kh-ops-menu-type tabular-nums">{link.cloudAgentId}</span>
+                      <span className="text-xs text-ink-muted">
+                        {link.tasks.length <= 1
+                          ? t('cloudAgentOnlyThis')
+                          : `${t('cloudAgentTasks')}: ${link.tasks
+                              .map((item) =>
+                                item.humanKey ? `${item.humanKey} · ${item.title}` : item.title,
+                              )
+                              .join(', ')}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div className="kh-ops-form-grid">
               <Field className="kh-ops-field-span" label={t('taskTitle')}>
                 <Input
@@ -1083,14 +1170,15 @@ export function ProjectTaskManageModal({
                   ))}
                 </Select>
               </Field>
-              <Field className="kh-ops-field-span" label={t('description')}>
-                <Textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  disabled={pending || !canMutate}
-                  rows={4}
-                />
-              </Field>
+              <DescriptionMarkdownField
+                className="kh-ops-field-span"
+                label={t('description')}
+                value={description}
+                onChange={setDescription}
+                disabled={pending}
+                readOnly={!canMutate}
+                rows={4}
+              />
               {task.itemType === 'bug' ? (
                 <>
                   <Field label={t('severity')}>
@@ -1128,30 +1216,31 @@ export function ProjectTaskManageModal({
                       disabled={pending || !canMutate}
                     />
                   </Field>
-                  <Field className="kh-ops-field-span" label={t('stepsToReproduce')}>
-                    <Textarea
-                      value={stepsToReproduce}
-                      rows={3}
-                      onChange={(e) => setStepsToReproduce(e.target.value)}
-                      disabled={pending || !canMutate}
-                    />
-                  </Field>
-                  <Field label={t('expectedBehavior')}>
-                    <Textarea
-                      value={expectedBehavior}
-                      rows={3}
-                      onChange={(e) => setExpectedBehavior(e.target.value)}
-                      disabled={pending || !canMutate}
-                    />
-                  </Field>
-                  <Field label={t('actualBehavior')}>
-                    <Textarea
-                      value={actualBehavior}
-                      rows={3}
-                      onChange={(e) => setActualBehavior(e.target.value)}
-                      disabled={pending || !canMutate}
-                    />
-                  </Field>
+                  <DescriptionMarkdownField
+                    className="kh-ops-field-span"
+                    label={t('stepsToReproduce')}
+                    value={stepsToReproduce}
+                    onChange={setStepsToReproduce}
+                    disabled={pending}
+                    readOnly={!canMutate}
+                    rows={3}
+                  />
+                  <DescriptionMarkdownField
+                    label={t('expectedBehavior')}
+                    value={expectedBehavior}
+                    onChange={setExpectedBehavior}
+                    disabled={pending}
+                    readOnly={!canMutate}
+                    rows={3}
+                  />
+                  <DescriptionMarkdownField
+                    label={t('actualBehavior')}
+                    value={actualBehavior}
+                    onChange={setActualBehavior}
+                    disabled={pending}
+                    readOnly={!canMutate}
+                    rows={3}
+                  />
                   <Switch
                     id="bug-regression-edit"
                     checked={regression}
@@ -1235,8 +1324,10 @@ export function ProjectTaskManageModal({
             usageOccurredAt.trim() !== '' ||
             billingPeriod.trim() !== '' ||
             aiSystemId.trim() !== '' ||
-            cloudAgentId.trim() !== '' ||
+            cloudAgentIds.length > 0 ||
+            agentDraft.trim() !== '' ||
             task.aiSystemId ||
+            (task.cloudAgentIds?.length ?? 0) > 0 ||
             task.cloudAgentId ? (
               <div className="kh-ops-form-grid">
                 <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
@@ -1325,14 +1416,63 @@ export function ProjectTaskManageModal({
                     placeholder={t('aiSystemIdPlaceholder')}
                   />
                 </Field>
-                <Field className="kh-ops-field-span" label={t('cloudAgentId')}>
-                  <Input
-                    value={cloudAgentId}
-                    onChange={(e) => setCloudAgentId(e.target.value)}
-                    disabled={pending || !canMutate}
-                    placeholder={t('cloudAgentIdPlaceholder')}
-                    maxLength={80}
-                  />
+                <Field className="kh-ops-field-span" label={t('cloudAgents')}>
+                  <p className="m-0 text-xs text-ink-muted">{t('cloudAgentShareHint')}</p>
+                  {cloudAgentIds.length > 0 ? (
+                    <ul className="m-0 grid list-none gap-2 p-0">
+                      {cloudAgentIds.map((id) => {
+                        const peers = agentPeerText(id);
+                        return (
+                          <li key={id} className="grid gap-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="kh-ops-menu-type tabular-nums">{id}</span>
+                              {canMutate ? (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  disabled={pending}
+                                  onClick={() =>
+                                    setCloudAgentIds((current) =>
+                                      current.filter((item) => item !== id),
+                                    )
+                                  }
+                                >
+                                  {t('cloudAgentRemove')}
+                                </Button>
+                              ) : null}
+                            </div>
+                            {peers ? (
+                              <span className="text-xs text-ink-muted">{peers}</span>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
+                  {canMutate ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        value={agentDraft}
+                        onChange={(event) => setAgentDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter') return;
+                          event.preventDefault();
+                          addAgent();
+                        }}
+                        disabled={pending}
+                        placeholder={t('cloudAgentIdPlaceholder')}
+                        maxLength={80}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={addAgent}
+                      >
+                        {t('cloudAgentAdd')}
+                      </Button>
+                    </div>
+                  ) : null}
                 </Field>
               </div>
             ) : (

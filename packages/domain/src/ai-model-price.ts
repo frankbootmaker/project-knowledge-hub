@@ -519,12 +519,18 @@ export function importedCloudAgentIds(
 }
 
 export function taskSupersededByImport(
-  cloudAgentId: string | null | undefined,
+  cloudAgentId: string | readonly string[] | null | undefined,
   imported: ReadonlySet<string>,
 ): boolean {
-  const id = cloudAgentId?.trim();
-  if (!id) return false;
-  return imported.has(id);
+  const ids = Array.isArray(cloudAgentId)
+    ? cloudAgentId
+    : cloudAgentId
+      ? [cloudAgentId]
+      : [];
+  return ids.some((id) => {
+    const trimmed = id.trim();
+    return trimmed !== '' && imported.has(trimmed);
+  });
 }
 
 /** Shown when a task recorded tokens and no model id. */

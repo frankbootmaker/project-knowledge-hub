@@ -505,6 +505,8 @@ export type McpToolHandlers = {
     regression?: boolean | null;
     affectedSystemId?: string | null;
     duplicateOfTaskId?: string | null;
+    cloudAgentId?: string | null;
+    cloudAgentIds?: string[] | null;
   }) => Promise<unknown>;
   updateProjectTask: (input: {
     taskId: string;
@@ -526,6 +528,7 @@ export type McpToolHandlers = {
     billingPeriod?: string | null;
     aiSystemId?: string | null;
     cloudAgentId?: string | null;
+    cloudAgentIds?: string[] | null;
     milestoneId?: string | null;
     userStoryId?: string | null;
     sprintId?: string | null;
@@ -565,6 +568,7 @@ export type McpToolHandlers = {
     billingPeriod?: string | null;
     aiSystemId?: string | null;
     cloudAgentId?: string | null;
+    cloudAgentIds?: string[] | null;
   }) => Promise<unknown>;
   setProjectTaskRaci: (input: {
     taskId: string;
@@ -892,6 +896,9 @@ export type McpToolHandlers = {
     sortOrder?: number;
     archived?: boolean;
     deliveryLinks?: Array<{ entityType: string; entityId: string }>;
+  }) => Promise<unknown>;
+  applyProjectChangeToBaseline: (input: {
+    changeId: string;
   }) => Promise<unknown>;
   getKnowledgeRecordDeliveryLinks: (input: {
     recordId: string;
@@ -1626,6 +1633,7 @@ export function createKnowledgeHubMcpServer(
         title: z.string(),
         slug: z.string(),
         recordType: z.string(),
+        humanKey: z.string().nullable(),
       })
       .nullable();
   const projectBaselineOutput = {
@@ -1645,6 +1653,8 @@ export function createKnowledgeHubMcpServer(
       workdaysPerWeek: z.number().int(),
       nonWorkingDays: z.array(z.string()),
       finishDate: nullableOutputText(),
+      forecastFinishDate: nullableOutputText(),
+      baselineFinishDate: nullableOutputText(),
       durationWorkingDays: z.number().int().nullable(),
       charterRecordId: nullableOutputText(),
       charterRecord: pinnedRecordOutput(),
@@ -1700,7 +1710,7 @@ export function createKnowledgeHubMcpServer(
     'get_project',
     {
       description:
-        'Get a project by id or projectSlug. Returns status (lifecycle stage), health (health.overall is the RAG), methodology, baseline, calendar, finishDate, durationWorkingDays, charter/plan, keyPrefix, budgets, definitionOfDone, url, and MCP provenance. health.financial is null when the budget summary failed.',
+        'Get a project by id or projectSlug. Returns status (lifecycle stage), health.overall (RAG; financial null if budget summary failed), baseline, calendar, finishDate, forecastFinishDate, baselineFinishDate, durationWorkingDays, charter/plan, keyPrefix, budgets, definitionOfDone, url, MCP provenance.',
       inputSchema: {
         projectId: z.string().uuid().optional(),
         projectSlug: z.string().min(1).max(80).optional(),
@@ -1726,7 +1736,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_baseline',
     {
       description:
-        'Update project baseline window, working calendar, pinned docs, definitionOfDone, currency, budgets, and issue key prefix. hoursPerWorkday, workdaysPerWeek (Monday-first, 1–7), and nonWorkingDays (YYYY-MM-DD, replaces the list) drive scheduling. finishDate and durationWorkingDays are calculated from the plan and are not inputs. Returns the saved project, including definitionOfDone (string or null). Budget fields accept number or string and are returned as JSON numbers. Requires pm:write.',
+        'Update project baseline window, working calendar, pinned docs, definitionOfDone, currency, budgets, and issue key prefix. charterRecordId and initialPlanRecordId accept a UUID or document key in this project, any record type. hoursPerWorkday, workdaysPerWeek (Monday-first, 1–7), and nonWorkingDays (YYYY-MM-DD, replaces the list) drive scheduling. endDate is the approved baseline finish. finishDate, forecastFinishDate, baselineFinishDate, and durationWorkingDays are calculated and are not inputs. Apply an approved schedule change with apply_project_change_to_baseline. Returns the saved project, including definitionOfDone and pinned key and title. Budget fields accept number or string and are returned as JSON numbers. Requires pm:write.',
       inputSchema: {
         projectId: z.string().uuid(),
         startDate: isoDateNullableSchema.optional(),
@@ -1734,8 +1744,8 @@ export function createKnowledgeHubMcpServer(
         hoursPerWorkday: hoursPerWorkdaySchema.optional(),
         workdaysPerWeek: workdaysPerWeekSchema.optional(),
         nonWorkingDays: nonWorkingDaysSchema.nullable().optional(),
-        charterRecordId: z.string().uuid().nullable().optional(),
-        initialPlanRecordId: z.string().uuid().nullable().optional(),
+        charterRecordId: entityRef.nullable().optional(),
+        initialPlanRecordId: entityRef.nullable().optional(),
         definitionOfDone: z.string().max(20000).nullable().optional(),
         currency: projectCurrencyEnum.optional(),
         initialBudget: moneyInput.optional(),
@@ -2429,6 +2439,39 @@ export function createKnowledgeHubMcpServer(
         .nullable()
         .describe('Tasks have no planned target. Always null.')
         .optional(),
+      cloudAgentId: z
+        .string()
+        .nullable()
+        .describe(
+          'First sorted cloud agent id on this task. The same id may be linked to other tasks.',
+        )
+        .optional(),
+      cloudAgentIds: z
+        .array(z.string())
+        .describe('Cloud agent ids linked to this task, sorted.')
+        .optional(),
+      cloudAgentLinks: z
+        .array(
+          z
+            .object({
+              cloudAgentId: z.string(),
+              tasks: z.array(
+                z
+                  .object({
+                    id: z.string(),
+                    projectId: z.string(),
+                    title: z.string(),
+                    humanKey: z.string().nullable(),
+                  })
+                  .passthrough(),
+              ),
+            })
+            .passthrough(),
+        )
+        .describe(
+          'Each linked cloud agent and the non-archived tasks in this workspace that share it.',
+        )
+        .optional(),
     })
     .passthrough();
   const taskListOutput = {
@@ -2556,7 +2599,7 @@ export function createKnowledgeHubMcpServer(
     'list_project_tasks',
     {
       description:
-        'List tasks for a project (optional milestone, sprint, and itemType filters). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Optional limit (1-25, default 25) and cursor page the list. Descriptions and bug notes are excerpts; use get_project_task for the full text. The result includes nextCursor (null when hasMore is false). completionPercent is the displayed value: done is 100, cancelled is 0, otherwise the stored step. startDate is the stored start and is writable. targetPercent is null because a task has no planned target. Each task includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
+        'List tasks for a project (optional milestone, sprint, and itemType filters). itemType bug returns bugs only. milestoneId and sprintId must belong to the given project. Includes RACI. Optional limit (1-25, default 25) and cursor page the list. Descriptions and bug notes are excerpts; use get_project_task for the full text. The result includes nextCursor (null when hasMore is false). completionPercent is the displayed value: done is 100, cancelled is 0, otherwise the stored step. startDate is the stored start and is writable. targetPercent is null because a task has no planned target. Each task includes cloudAgentIds and cloudAgentLinks. The same cloud agent id may be linked to several tasks. Each task includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Requires pm:read.',
       inputSchema: {
         projectId: z.string().uuid(),
         milestoneId: entityRef.optional(),
@@ -2595,7 +2638,7 @@ export function createKnowledgeHubMcpServer(
     'get_project_task',
     {
       description:
-        'Get one project task or bug with RACI. The raci array is the current standing set (userId and role R/A/C/I) and includes the latest set_project_task_raci replacement. Hour fields (forecastHours, actualHours) returned as JSON numbers. startDate is the stored start and is writable. targetPercent is null because a task has no planned target. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Each media link includes mediaId. Call get_workspace_media (OAuth: call_hub_tool) to read the image. Requires pm:read.',
+        'Get one project task or bug with RACI. The raci array is the current standing set (userId and role R/A/C/I) and includes the latest set_project_task_raci replacement. Hour fields (forecastHours, actualHours) returned as JSON numbers. startDate is the stored start and is writable. targetPercent is null because a task has no planned target. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). Returns cloudAgentIds and cloudAgentLinks. The same cloud agent id may be linked to several tasks; cloudAgentId is the first sorted id. Includes mediaLinks and mediaLinkCount for the Media tab (workspace images and titled http(s) URLs). Each media link includes mediaId. Call get_workspace_media (OAuth: call_hub_tool) to read the image. Requires pm:read.',
       inputSchema: { taskId: entityRef },
       outputSchema: taskResultOutput,
     },
@@ -2843,7 +2886,7 @@ export function createKnowledgeHubMcpServer(
     'create_project_task',
     {
       description:
-        'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. When both startDate and dueDate are set without duration, duration is the gap and startDate must be on or before dueDate. Bugs use the same start date and duration. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Creating as done, including completionPercent 100, sets completedAt to now. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
+        'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. When both startDate and dueDate are set without duration, duration is the gap and startDate must be on or before dueDate. Bugs use the same start date and duration. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentIds (up to 20, null or empty clears) links Cursor cloud agents. The same id may be on several tasks. Imported usage is stored once and split in equal whole tokens across those tasks; the earliest task id gets any remainder. cloudAgentId sets one link when cloudAgentIds is omitted. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Creating as done, including completionPercent 100, sets completedAt to now. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
       inputSchema: {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -2866,6 +2909,8 @@ export function createKnowledgeHubMcpServer(
       usageOccurredAt: z.string().max(40).nullable().optional(),
       billingPeriod: z.string().max(7).nullable().optional(),
       aiSystemId: z.string().uuid().nullable().optional(),
+      cloudAgentId: z.string().max(80).nullable().optional(),
+      cloudAgentIds: z.array(z.string().min(1).max(80)).max(20).nullable().optional(),
       milestoneId: entityRef.nullable().optional(),
       userStoryId: entityRef.nullable().optional(),
       sprintId: entityRef.nullable().optional(),
@@ -2925,7 +2970,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_task',
     {
       description:
-        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentId (max 80, null clears it) links imported Cursor usage with that id onto this task; one task per id. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. A transition into done sets completedAt to now. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Recompute skips an archived story, epic, or milestone and never overwrites a cancelled status. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Parent start and end follow included children. Requires pm:write.',
+        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentIds (up to 20, null or empty clears) replaces the Cursor cloud agent links. The same id may be linked to several tasks. Imported usage is stored once and split in equal whole tokens across those tasks; the earliest task id gets any remainder. cloudAgentId sets one link when cloudAgentIds is omitted and is returned as the first sorted id. Reads also return cloudAgentLinks. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. A transition into done sets completedAt to now. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Recompute skips an archived story, epic, or milestone and never overwrites a cancelled status. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Parent start and end follow included children. Requires pm:write.',
       inputSchema: {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -2949,6 +2994,7 @@ export function createKnowledgeHubMcpServer(
       billingPeriod: z.string().max(7).nullable().optional(),
       aiSystemId: z.string().uuid().nullable().optional(),
       cloudAgentId: z.string().max(80).nullable().optional(),
+      cloudAgentIds: z.array(z.string().min(1).max(80)).max(20).nullable().optional(),
       milestoneId: entityRef.nullable().optional(),
       userStoryId: entityRef.nullable().optional(),
       sprintId: entityRef.nullable().optional(),
@@ -2998,7 +3044,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'report_project_task_ai_usage',
-    'Record AI token usage on a task (prefer when marking done), then refresh the cost snapshot. Send modelId. Tokens are priced from the model catalog (per 1,000,000 tokens): workspace pattern, then global. No matching row is unpriced and listed, not a silent zero. tokensUsed alone uses the blended catalog rate and clears any stored breakdown. tokensInput, tokensOutput, tokensCache (cache read), and tokensCacheWrite use the split rates. tokensUsed is stored as the sum when omitted and must equal the sum when both are sent. That product is the theoretical API cost. Optional pricingTier, usageOccurredAt, and billingPeriod (YYYY-MM) place the tokens for paid-cost allocation and do not change flat-fee accrual. Billable for api/mixed only when the month has no billing-ledger entries; flat ignores tokens; note_only records usage at $0. Imported usage for the same cloudAgentId replaces this task so it is not counted twice. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
+    'Record AI token usage on a task (prefer when marking done), then refresh the cost snapshot. Send modelId. Tokens are priced from the model catalog (per 1,000,000 tokens): workspace pattern, then global. No matching row is unpriced and listed, not a silent zero. tokensUsed alone uses the blended catalog rate and clears any stored breakdown. tokensInput, tokensOutput, tokensCache (cache read), and tokensCacheWrite use the split rates. tokensUsed is stored as the sum when omitted and must equal the sum when both are sent. That product is the theoretical API cost. Optional pricingTier, usageOccurredAt, and billingPeriod (YYYY-MM) place the tokens for paid-cost allocation and do not change flat-fee accrual. Billable for api/mixed only when the month has no billing-ledger entries; flat ignores tokens; note_only records usage at $0. cloudAgentIds replaces the Cursor cloud agent links (the same id may be on several tasks). Imported usage is stored once and split in equal whole tokens across those tasks, so it is not counted twice. cloudAgentId sets one link when cloudAgentIds is omitted. aiSystemId must be an AI assistant system linked to the project. Requires pm:write.',
     {
       taskId: entityRef,
       tokensUsed: tokenCountSchema.optional(),
@@ -3012,6 +3058,7 @@ export function createKnowledgeHubMcpServer(
       billingPeriod: z.string().max(7).nullable().optional(),
       aiSystemId: z.string().uuid().nullable().optional(),
       cloudAgentId: z.string().max(80).nullable().optional(),
+      cloudAgentIds: z.array(z.string().min(1).max(80)).max(20).nullable().optional(),
     },
     async (args) =>
       wrap('report_project_task_ai_usage', 'pm:write', () =>
@@ -4216,6 +4263,18 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('update_project_change_item', 'pm:write', () =>
         handlers.updateProjectChangeItem(args),
+      )(),
+  );
+
+  server.tool(
+    'apply_project_change_to_baseline',
+    'Apply an approved change request that stores a baseline start or finish. Writes those dates onto the project, marks the change implemented, and records an audit entry. A second call does not write again. changeId may be a UUID or human key. Requires pm:write.',
+    {
+      changeId: entityRef,
+    },
+    async (args) =>
+      wrap('apply_project_change_to_baseline', 'pm:write', () =>
+        handlers.applyProjectChangeToBaseline(args),
       )(),
   );
 

@@ -3,6 +3,7 @@ import type { Database } from '@project-knowledge-hub/database';
 import {
   aiModelPrices,
   aiUsageEvents,
+  projectTaskCloudAgentLinks,
   projectTasks,
   projects,
 } from '@project-knowledge-hub/database';
@@ -156,6 +157,19 @@ export async function loadImportedTheoretical(
   workspaceId: string,
 ): Promise<ImportedTheoretical> {
   const prices = await listAiModelPrices(database, workspaceId);
+  const linkedAgentRows = await database.db
+    .select({ cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId })
+    .from(projectTaskCloudAgentLinks)
+    .innerJoin(projectTasks, eq(projectTaskCloudAgentLinks.taskId, projectTasks.id))
+    .innerJoin(projects, eq(projectTasks.projectId, projects.id))
+    .where(
+      and(
+        eq(projects.workspaceId, workspaceId),
+        isNull(projectTasks.archivedAt),
+        isNull(projects.archivedAt),
+      ),
+    );
+  const linkedAgents = new Set(linkedAgentRows.map((row) => row.cloudAgentId));
   const events = await database.db
     .select({
       occurredAt: aiUsageEvents.occurredAt,
@@ -185,7 +199,9 @@ export async function loadImportedTheoretical(
       tokensCache: row.tokensCache,
       tokensOutput: row.tokensOutput,
       cost: row.cost,
-      linked: row.projectTaskId != null,
+      linked:
+        row.projectTaskId != null
+        || (row.cloudAgentId != null && linkedAgents.has(row.cloudAgentId)),
       projectId: row.projectId,
       projectName: row.projectName,
       cloudAgentId: row.cloudAgentId,

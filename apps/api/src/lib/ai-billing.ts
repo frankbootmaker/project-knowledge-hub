@@ -1,10 +1,11 @@
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   aiBillingAllocationOverrides,
   aiBillingEntries,
   ensureExchangeRates,
   loadExchangeRateBook,
+  projectTaskCloudAgentLinks,
   projectTasks,
   projects,
   systems,
@@ -564,9 +565,11 @@ function usagePeriod(
 }
 
 type TaskUsageRow = {
+  taskId: string;
   projectId: string;
   aiSystemId: string | null;
   cloudAgentId: string | null;
+  cloudAgentIds: string[];
   sprintId: string | null;
   period: string | null;
   usageOccurredAt: Date | null;
@@ -601,6 +604,22 @@ async function taskUsageRows(
     database,
     taskRows.map((row) => row.id),
   );
+  const agentIdsByTask = new Map<string, string[]>();
+  const taskIds = taskRows.map((row) => row.id);
+  if (taskIds.length > 0) {
+    const linkRows = await database.db
+      .select({
+        taskId: projectTaskCloudAgentLinks.taskId,
+        cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId,
+      })
+      .from(projectTaskCloudAgentLinks)
+      .where(inArray(projectTaskCloudAgentLinks.taskId, taskIds));
+    for (const link of linkRows) {
+      const list = agentIdsByTask.get(link.taskId) ?? [];
+      list.push(link.cloudAgentId);
+      agentIdsByTask.set(link.taskId, list);
+    }
+  }
   const usages: TaskUsageRow[] = [];
   for (const task of taskRows) {
     if (task.status === 'cancelled') continue;
@@ -614,10 +633,15 @@ async function taskUsageRows(
     const tokens = usageTokenTotal(usage);
     if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
     const period = usagePeriod(task.billingPeriod, task.usageOccurredAt);
+    const cloudAgentIds = [...(agentIdsByTask.get(task.id) ?? [])].sort();
     usages.push({
+      taskId: task.id,
       projectId: task.projectId,
       aiSystemId: task.aiSystemId,
-      cloudAgentId: task.cloudAgentId ?? null,
+      cloudAgentId: cloudAgentIds[0] ?? task.cloudAgentId ?? null,
+      cloudAgentIds: cloudAgentIds.length > 0
+        ? cloudAgentIds
+        : (task.cloudAgentId ? [task.cloudAgentId] : []),
       sprintId: task.sprintId ?? null,
       period,
       model: task.aiModelId ?? null,
@@ -876,13 +900,15 @@ export async function loadProjectPaidAi(
   const usages = await taskUsageRows(database, taskRows, today);
   const imported = await loadImportedTheoretical(database, project.workspaceId);
   const billableUsages = usages.filter(
-    (row) => !taskSupersededByImport(row.cloudAgentId, imported.agentIds),
+    (row) => !taskSupersededByImport(row.cloudAgentIds, imported.agentIds),
   );
   const tokenSlices = allocationTokenSlices({
     tasks: usages.map((row) => ({
+      taskId: row.taskId,
       projectId: row.projectId,
       aiSystemId: row.aiSystemId,
       cloudAgentId: row.cloudAgentId,
+      cloudAgentIds: row.cloudAgentIds,
       period: row.period,
       tokens: row.tokens,
     })),
@@ -1243,16 +1269,18 @@ export async function loadWorkspaceAiCostOverview(
   const taskUsages = await taskUsageRows(database, taskRows, today);
   const tokenSlices = allocationTokenSlices({
     tasks: taskUsages.map((row) => ({
+      taskId: row.taskId,
       projectId: row.projectId,
       aiSystemId: row.aiSystemId,
       cloudAgentId: row.cloudAgentId,
+      cloudAgentIds: row.cloudAgentIds,
       period: row.period,
       tokens: row.tokens,
     })),
     events: imported.allocationEvents,
   });
   const usages = taskUsages.filter(
-    (row) => !taskSupersededByImport(row.cloudAgentId, imported.agentIds),
+    (row) => !taskSupersededByImport(row.cloudAgentIds, imported.agentIds),
   );
 
   const taskCatalog = priceTaskUsagesFromCatalog(

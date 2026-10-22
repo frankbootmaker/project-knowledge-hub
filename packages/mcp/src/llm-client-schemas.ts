@@ -169,7 +169,7 @@ export function buildLlmOpenApiDocument(options: LlmSchemaOptions): Record<strin
     info: {
       title,
       // Bump when tool surface changes — ChatGPT Actions can cache schemas.
-      version: '0.4.0',
+      version: '0.4.1',
       description: forChatGptActionsText(
         'Knowledge Hub OpenAPI (ChatGPT Actions). Bearer API token. ' +
           'Knowledge writes: knowledge:write. Catalogue systems: catalogue:write. ' +

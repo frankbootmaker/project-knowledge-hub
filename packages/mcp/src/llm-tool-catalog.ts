@@ -221,12 +221,17 @@ const pinnedRecordOutput = {
   type: 'object',
   nullable: true,
   additionalProperties: false,
-  required: ['id', 'title', 'slug', 'recordType'],
+  required: ['id', 'title', 'slug', 'recordType', 'humanKey'],
   properties: {
     id: uuidProp('Pinned knowledge record id'),
     title: stringProp('Record title'),
     slug: stringProp('Record slug'),
     recordType: stringProp('Knowledge record type'),
+    humanKey: {
+      type: 'string',
+      nullable: true,
+      description: 'Document key such as PRO-NT-1. Null when the record has no key.',
+    },
   },
 };
 
@@ -253,6 +258,8 @@ const projectBaselineResult = {
         'workdaysPerWeek',
         'nonWorkingDays',
         'finishDate',
+        'forecastFinishDate',
+        'baselineFinishDate',
         'durationWorkingDays',
         'charterRecordId',
         'charterRecord',
@@ -308,13 +315,26 @@ const projectBaselineResult = {
         finishDate: {
           ...ymd,
           nullable: true,
-          description: 'Latest scheduled delivery finish. Calculated. Not an input.',
+          description:
+            'Forecast finish: latest scheduled delivery end. Same as forecastFinishDate. Calculated. Not an input.',
+        },
+        forecastFinishDate: {
+          ...ymd,
+          nullable: true,
+          description:
+            'Forecast finish: latest scheduled delivery end. Calculated. Not an input.',
+        },
+        baselineFinishDate: {
+          ...ymd,
+          nullable: true,
+          description:
+            'Approved baseline finish. Same as endDate. Calculated from the stored baseline, not from delivery items.',
         },
         durationWorkingDays: {
           type: 'integer',
           nullable: true,
           description:
-            'Working days from the earliest scheduled start to finishDate. Calculated. Not an input.',
+            'Inclusive working days from the project start through baselineFinishDate. A single working day is 1. Null when start or baseline finish is missing. Calculated. Not an input.',
         },
         charterRecordId: { ...uuidProp('Pinned charter id'), nullable: true },
         charterRecord: pinnedRecordOutput,
@@ -479,6 +499,40 @@ const taskRowResult = {
       maximum: 100,
       nullable: true,
       description: 'Tasks have no planned target. Always null.',
+    },
+    cloudAgentId: {
+      type: 'string',
+      nullable: true,
+      description:
+        'First sorted cloud agent id. The same id may be linked to other tasks.',
+    },
+    cloudAgentIds: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Cloud agent ids linked to this task, sorted.',
+    },
+    cloudAgentLinks: {
+      type: 'array',
+      description:
+        'Each linked cloud agent and the non-archived tasks in this workspace that share it. Imported usage is stored once and split in equal whole tokens.',
+      items: {
+        type: 'object',
+        properties: {
+          cloudAgentId: { type: 'string' },
+          tasks: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                projectId: { type: 'string' },
+                title: { type: 'string' },
+                humanKey: { type: 'string', nullable: true },
+              },
+            },
+          },
+        },
+      },
     },
   },
 };
@@ -753,7 +807,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project',
     description:
-      'Get a project by id. projectId (UUID) is required. status is the lifecycle stage. health.overall is the RAG (worst of timeline, risk, and financial; financial is null when the budget summary failed). health.riskReasons explains an amber or red risk RAG (empty when green) using the same rule as get_project_budget_summary riskRag. Returns baseline, working calendar, finishDate, durationWorkingDays, definitionOfDone, keyPrefix, budgets, methodology, url, health, and MCP provenance (createdVia, createdByApiClientId, createdByOauthGrantId, createdByUserId, generatedByModel).',
+      'Get a project by id. projectId (UUID) is required. status is the lifecycle stage. health.overall is the RAG (worst of timeline, risk, and financial; financial is null when the budget summary failed). health.riskReasons explains an amber or red risk RAG (empty when green) using the same rule as get_project_budget_summary riskRag. Returns baseline, working calendar, baselineFinishDate (approved endDate), forecastFinishDate and finishDate (latest delivery finish), durationWorkingDays (inclusive working days from the project start through the baseline finish; a single working day is 1), charter and plan records with key and title, definitionOfDone, keyPrefix, budgets, methodology, url, health, and MCP provenance (createdVia, createdByApiClientId, createdByOauthGrantId, createdByUserId, generatedByModel).',
     scope: 'projects:read',
     openApi: true,
     output: projectBaselineResult,
@@ -1128,7 +1182,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'list_project_tasks',
     description:
-      'List delivery tasks. Optional milestone, sprint, and itemType filters. Optional limit (1-25, default 25) and cursor. Result includes nextCursor (null when hasMore is false). Descriptions are excerpts. completionPercent is displayed: done is 100, cancelled is 0, otherwise the stored step. startDate is the stored start and is writable. targetPercent is null. Each task includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
+      'List delivery tasks. Optional milestone, sprint, and itemType filters. Optional limit (1-25, default 25) and cursor. Result includes nextCursor (null when hasMore is false). Descriptions are excerpts. completionPercent is displayed: done is 100, cancelled is 0, otherwise the stored step. startDate is the stored start and is writable. targetPercent is null. Each task includes cloudAgentIds and cloudAgentLinks. The same cloud agent id may be linked to several tasks. Each task includes mediaLinks and mediaLinkCount for the Media tab. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     output: taskListPageResult,
@@ -1158,7 +1212,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project_task',
     description:
-      'Get one task or bug with RACI. The raci array is the current standing set and includes the latest set_project_task_raci replacement. startDate is the stored start and is writable. targetPercent is null. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Includes mediaLinks and mediaLinkCount for the Media tab. Each media link includes mediaId. Call get_workspace_media (OAuth: call_hub_tool) to read the image. Requires pm:read.',
+      'Get one task or bug with RACI. The raci array is the current standing set and includes the latest set_project_task_raci replacement. startDate is the stored start and is writable. targetPercent is null. taskId may be a UUID or human key (HL1-T-12 or HL1-B-4). Returns cloudAgentIds and cloudAgentLinks. The same cloud agent id may be linked to several tasks. Includes mediaLinks and mediaLinkCount for the Media tab. Each media link includes mediaId. Call get_workspace_media (OAuth: call_hub_tool) to read the image. Requires pm:read.',
     scope: 'pm:read',
     openApi: true,
     output: wrappedResult('task', taskRowResult),
@@ -1171,7 +1225,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'create_project_task',
     description:
-      'Create a live delivery task or bug (itemType, default task). startDate is stored and returned. targetPercent is null. Optional durationDays makes dueDate equal startDate plus that many working days on the project calendar. Bugs use the same start date and duration. Bug fields are rejected on a task. Creating as done, including completionPercent 100, sets completedAt to now. Requires pm:write.',
+      'Create a live delivery task or bug (itemType, default task). startDate is stored and returned. targetPercent is null. Optional durationDays makes dueDate equal startDate plus that many working days on the project calendar. Bugs use the same start date and duration. Bug fields are rejected on a task. Optional cloudAgentIds links Cursor cloud agents. The same id may be on several tasks. Imported usage is stored once and split in equal whole tokens. cloudAgentId sets one link when cloudAgentIds is omitted. Creating as done, including completionPercent 100, sets completedAt to now. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -1204,6 +1258,21 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
         usageOccurredAt: { type: 'string', maxLength: 40, nullable: true },
         billingPeriod: { type: 'string', maxLength: 7, nullable: true },
         aiSystemId: { type: 'string', format: 'uuid', nullable: true },
+        cloudAgentId: {
+          type: 'string',
+          maxLength: 80,
+          nullable: true,
+          description:
+            'One Cursor cloud agent id. Used when cloudAgentIds is omitted. The same id may be linked to several tasks.',
+        },
+        cloudAgentIds: {
+          type: 'array',
+          maxItems: 20,
+          nullable: true,
+          description:
+            'Replaces the cloud agent links. Null or empty clears them. The same id may be linked to several tasks. Imported usage is stored once and split in equal whole tokens; the earliest task id gets any remainder.',
+          items: { type: 'string', minLength: 1, maxLength: 80 },
+        },
         milestoneId: { ...entityRefProp('Milestone'), nullable: true },
         userStoryId: { ...entityRefProp('User story'), nullable: true },
         sprintId: { ...entityRefProp('Sprint'), nullable: true },
@@ -1234,7 +1303,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown, including tokensCacheWrite, bills split rates. Optional cloudAgentId links imported Cursor usage with that id onto this task. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. A transition into done sets completedAt to now. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Recompute skips an archived story, epic, or milestone and never overwrites a cancelled status. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Parent start and end follow included children. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown, including tokensCacheWrite, bills split rates. Optional cloudAgentIds replaces the Cursor cloud agent links. The same id may be on several tasks. Imported usage is stored once and split in equal whole tokens (remainder to the earliest task id). cloudAgentId sets one link when cloudAgentIds is omitted. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. A transition into done sets completedAt to now. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Recompute skips an archived story, epic, or milestone and never overwrites a cancelled status. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Parent start and end follow included children. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -1273,7 +1342,15 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           maxLength: 80,
           nullable: true,
           description:
-            'Cursor cloud agent id. Links imported usage onto this task. Null clears it.',
+            'One Cursor cloud agent id. Used when cloudAgentIds is omitted. Null clears the links. The same id may be linked to several tasks.',
+        },
+        cloudAgentIds: {
+          type: 'array',
+          maxItems: 20,
+          nullable: true,
+          description:
+            'Replaces the cloud agent links. Null or empty clears them. The same id may be linked to several tasks. Imported usage is stored once and split in equal whole tokens; the earliest task id gets any remainder.',
+          items: { type: 'string', minLength: 1, maxLength: 80 },
         },
         milestoneId: { ...entityRefProp('Milestone'), nullable: true },
         userStoryId: { ...entityRefProp('User story'), nullable: true },
@@ -2598,7 +2675,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_baseline',
     description:
-      'Update baseline window, working calendar, DoD, currency, budgets, and keyPrefix. projectId (UUID) is required. hoursPerWorkday, workdaysPerWeek (1–7, Monday-first), and nonWorkingDays replace the calendar used by scheduling. finishDate and durationWorkingDays are calculated from the plan and are not inputs. Returns saved definitionOfDone. Requires pm:write.',
+      'Update baseline window, working calendar, pinned docs, DoD, currency, budgets, and keyPrefix. projectId (UUID) is required. charterRecordId and initialPlanRecordId accept a UUID or document key in this project, any record type, and the result includes key and title. hoursPerWorkday, workdaysPerWeek (1–7, Monday-first), and nonWorkingDays replace the calendar used by scheduling. endDate is the approved baseline finish. finishDate, forecastFinishDate, baselineFinishDate, and durationWorkingDays are calculated and are not inputs. Apply an approved schedule change with apply_project_change_to_baseline. Returns saved definitionOfDone. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     output: projectBaselineResult,
@@ -2626,6 +2703,14 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           nullable: true,
           items: ymd,
           description: 'Replaces public holidays and other non-working dates. Null clears the list.',
+        },
+        charterRecordId: {
+          ...entityRefProp('Pinned charter document, UUID or key'),
+          nullable: true,
+        },
+        initialPlanRecordId: {
+          ...entityRefProp('Pinned initial plan document, UUID or key'),
+          nullable: true,
         },
         definitionOfDone: { type: 'string', nullable: true, maxLength: 20000 },
         currency: {
@@ -2851,7 +2936,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'report_project_task_ai_usage',
     description:
-      'Record AI token usage on a task. tokensUsed alone uses the blended rate. Optional tokensInput/tokensOutput/tokensCache/tokensCacheWrite use split rates (null rate falls back to blended). Optional cloudAgentId links imported Cursor usage onto this task. Requires pm:write.',
+      'Record AI token usage on a task. tokensUsed alone uses the blended rate. Optional tokensInput/tokensOutput/tokensCache/tokensCacheWrite use split rates (null rate falls back to blended). Optional cloudAgentIds replaces the Cursor cloud agent links. The same id may be on several tasks. Imported usage is stored once and split in equal whole tokens so it is not counted twice. cloudAgentId sets one link when cloudAgentIds is omitted. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -2873,7 +2958,16 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           type: 'string',
           maxLength: 80,
           nullable: true,
-          description: 'Cursor cloud agent id. Links imported usage onto this task.',
+          description:
+            'One Cursor cloud agent id. Used when cloudAgentIds is omitted. The same id may be linked to several tasks.',
+        },
+        cloudAgentIds: {
+          type: 'array',
+          maxItems: 20,
+          nullable: true,
+          description:
+            'Replaces the cloud agent links. Null or empty clears them. Imported usage is stored once and split in equal whole tokens.',
+          items: { type: 'string', minLength: 1, maxLength: 80 },
         },
       },
     },
@@ -3034,9 +3128,24 @@ const EXTRA_HUB_TOOLS: Array<{
   output?: Record<string, unknown>;
 }> = [
   {
+    name: 'apply_project_change_to_baseline',
+    description:
+      'Apply an approved change request that stores a baseline start or finish. Writes those dates onto the project, marks the change implemented, and records an audit entry. A second call does not write again. changeId may be a UUID or human key. Requires pm:write.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['changeId'],
+      properties: {
+        changeId: entityRefProp('Change item id or human key'),
+      },
+    },
+  },
+  {
     name: 'update_project_change_item',
     description:
-      'Update a change-management item. changeId is required. Requires pm:write.',
+      'Update a change-management item. changeId is required. baselineEndAfter stores a proposed finish and does not change the project until apply_project_change_to_baseline. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {

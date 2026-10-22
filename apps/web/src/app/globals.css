@@ -839,10 +839,33 @@ html[data-theme='dark'] .knowledge-markdown .hljs-literal {
   margin: 12px 0;
 }
 
-.knowledge-markdown ul {
+.knowledge-markdown ul,
+.knowledge-markdown ol {
   margin: 12px 0;
   padding-left: 1.25rem;
+}
+
+.knowledge-markdown ul {
   list-style: disc;
+}
+
+.knowledge-markdown ol {
+  list-style: decimal;
+}
+
+.knowledge-markdown :is(ul, ol).contains-task-list {
+  list-style: none;
+  padding-left: 0.25rem;
+}
+
+.knowledge-markdown .task-list-item {
+  list-style: none;
+}
+
+.knowledge-markdown .task-list-item input {
+  margin-right: 0.4rem;
+  accent-color: var(--kh-accent);
+  pointer-events: none;
 }
 
 .knowledge-markdown blockquote {
