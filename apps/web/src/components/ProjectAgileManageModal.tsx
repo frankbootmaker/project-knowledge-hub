@@ -29,6 +29,7 @@ import {
   parentDateDetail,
   type MilestoneLinkCompletion,
 } from '../lib/delivery-completion';
+import { DescriptionMarkdownField } from './DescriptionMarkdownField';
 import {
   DeliveryDocumentsEditor,
   saveDeliveryDocumentLinks,
@@ -1023,17 +1024,26 @@ export function ProjectAgileManageModal({
             ) : null}
           </>
         )}
-        <Field
-          className={kind === 'milestone' ? undefined : 'kh-ops-field-span'}
-          label={kind === 'milestone' ? t('milestoneNote') : t('description')}
-        >
-          <Textarea
+        {kind === 'milestone' ? (
+          <Field label={t('milestoneNote')}>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={pending || !canMutate || confirmDelete}
+              rows={4}
+            />
+          </Field>
+        ) : (
+          <DescriptionMarkdownField
+            className="kh-ops-field-span"
+            label={t('description')}
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            disabled={pending || !canMutate || confirmDelete}
+            onChange={setDescription}
+            disabled={pending || confirmDelete}
+            readOnly={!canMutate}
             rows={4}
           />
-        </Field>
+        )}
       </div>
       </section>
       {kind === 'milestone' ? (
