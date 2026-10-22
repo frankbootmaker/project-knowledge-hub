@@ -5,7 +5,7 @@ import {
   createDocumentImportConvertQueue,
   enqueueDocumentImportConvertJob,
 } from '@project-knowledge-hub/jobs';
-import { processDocumentImportConvert } from '@project-knowledge-hub/document-import';
+import { processDocumentImportConvert } from '@project-knowledge-hub/document-import/process';
 import {
   createDraftFromDocumentImportInputSchema,
   detectContentSecrets,
