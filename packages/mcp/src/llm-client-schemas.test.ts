@@ -59,7 +59,7 @@ describe('llm-client-schemas', () => {
     expect(findLlmTool('set_project_milestone_item_links')?.scope).toBe('pm:write');
     expect(writePaths['/api/v1/llm/tools/list_workspaces']).toBeUndefined();
     expect(writePaths['/api/v1/llm/tools/list_projects']).toBeTruthy();
-    expect(withWrite.info).toMatchObject({ version: '0.2.0' });
+    expect(withWrite.info).toMatchObject({ version: '0.3.0' });
     const createPath = writePaths['/api/v1/llm/tools/create_knowledge_record'] as {
       post: {
         requestBody: {

@@ -1568,22 +1568,52 @@ export {
 } from './ai-cost-granularity.js';
 
 export {
+  AI_MODEL_PRICE_SOURCE_GUIDE,
+  AI_MODEL_PRICE_UNIT,
   DEFAULT_AI_MODEL_PRICES,
+  aiModelPriceToolDescription,
+  auditModelPriceMetadata,
+  fallbackTokenRate,
+  globMatches,
   importedCloudAgentIds,
+  isIsoDate,
   matchAiModelPrice,
   modelPatternMatches,
+  modelPriceScopeDenial,
   parseUsagePaidAmount,
+  patternKey,
+  presentAiModelPrices,
   priceImportedUsage,
+  redactPriceNote,
   taskSupersededByImport,
   theoreticalMonths,
   theoreticalTokenCost,
+  validateAiModelPriceWrite,
   type AiModelPrice,
+  type AiModelPriceScope,
+  type AiModelPriceView,
+  type AiModelPriceWrite,
   type ImportedUsageForPrice,
+  type ModelPriceActor,
+  type PriceFieldError,
   type PricedImportedUsage,
   type TheoreticalMonthSplit,
   type UnpricedModel,
   type UsageTokenCounts,
 } from './ai-model-price.js';
+
+export {
+  MODEL_RATE_CSV_HEADERS,
+  MODEL_RATE_IMPORT_MAX_CHARS,
+  MODEL_RATE_IMPORT_MAX_ROWS,
+  modelRatesToCsv,
+  modelRatesToJson,
+  parseCsvTable,
+  planModelRateImport,
+  type ModelRateChange,
+  type ModelRateImportError,
+  type ModelRateImportPlan,
+} from './ai-model-rate-import.js';
 
 export {
   AI_COST_NOTES_MAX,

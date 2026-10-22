@@ -3165,7 +3165,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'list_ai_model_prices',
     description:
-      'List default and workspace AI model prices (input, cache write, cache read, output per 1,000,000 tokens). A workspace row overrides a matching default. Requires pm:read. Via call_hub_tool.',
+      'List global and workspace AI model prices. Each row has scope (global or workspace), inherited, and overridden. Rates are per 1,000,000 tokens (unit per_1m_tokens), not per 1,000. Read current list prices at https://docs.anthropic.com/en/docs/about-claude/pricing https://developers.openai.com/api/docs/pricing https://ai.google.dev/gemini-api/docs/pricing https://docs.x.ai/docs/models https://cursor.com/docs/models before upsert_ai_model_price. Always record sourceNote and effectiveFrom. Requires pm:read. Via call_hub_tool.',
     scope: 'pm:read',
     write: false,
     body: {
@@ -3174,6 +3174,92 @@ const EXTRA_HUB_TOOLS: Array<{
       required: ['workspaceId'],
       properties: {
         workspaceId: uuidProp('Workspace id. Required.'),
+      },
+    },
+  },
+  {
+    name: 'upsert_ai_model_price',
+    description:
+      'Create or replace one AI model price. scope global needs a platform administrator. scope workspace needs a workspace administrator and overrides that pattern or adds one. Amounts are per 1,000,000 tokens (unit per_1m_tokens). Read the current provider price first: https://docs.anthropic.com/en/docs/about-claude/pricing https://developers.openai.com/api/docs/pricing https://ai.google.dev/gemini-api/docs/pricing https://docs.x.ai/docs/models https://cursor.com/docs/models . Always send sourceNote and effectiveFrom (YYYY-MM-DD). Requires pm:write. Via call_hub_tool.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: [
+        'scope',
+        'model',
+        'inputPerMillion',
+        'outputPerMillion',
+        'cacheReadPerMillion',
+        'cacheWritePerMillion',
+        'blendedPerMillion',
+        'currency',
+        'effectiveFrom',
+        'sourceNote',
+      ],
+      properties: {
+        scope: { type: 'string', enum: ['global', 'workspace'] },
+        workspaceId: uuidProp('Required when scope is workspace.'),
+        model: stringProp('Pattern or exact model id', { minLength: 1, maxLength: 80 }),
+        inputPerMillion: {
+          type: 'number',
+          minimum: 0,
+          description: 'Input price per 1,000,000 tokens.',
+        },
+        outputPerMillion: {
+          type: 'number',
+          minimum: 0,
+          description: 'Output price per 1,000,000 tokens.',
+        },
+        cacheReadPerMillion: {
+          type: 'number',
+          minimum: 0,
+          description: 'Cache-read price per 1,000,000 tokens.',
+        },
+        cacheWritePerMillion: {
+          type: 'number',
+          minimum: 0,
+          description: 'Cache-write price per 1,000,000 tokens. Falls back to blended when blank in the UI.',
+        },
+        blendedPerMillion: {
+          type: 'number',
+          minimum: 0,
+          description: 'Undifferentiated price per 1,000,000 tokens.',
+        },
+        currency: { type: 'string', minLength: 3, maxLength: 3 },
+        effectiveFrom: {
+          type: 'string',
+          description: 'YYYY-MM-DD the price takes effect. Required.',
+        },
+        sourceNote: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 500,
+          description: 'Provider price page or short note. Required. Do not put secrets here.',
+        },
+      },
+    },
+  },
+  {
+    name: 'retire_ai_model_price',
+    description:
+      'Retire one AI model price so resolution skips it. scope global needs a platform administrator. scope workspace needs a workspace administrator. Pass priceId, or model plus effectiveFrom. Rates are per 1,000,000 tokens. Provider pages: https://docs.anthropic.com/en/docs/about-claude/pricing https://developers.openai.com/api/docs/pricing https://ai.google.dev/gemini-api/docs/pricing https://docs.x.ai/docs/models https://cursor.com/docs/models . Requires pm:write. Via call_hub_tool.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['scope'],
+      properties: {
+        scope: { type: 'string', enum: ['global', 'workspace'] },
+        workspaceId: uuidProp('Required when scope is workspace.'),
+        priceId: uuidProp('Price row id.'),
+        model: stringProp('Pattern or model id, with effectiveFrom when priceId is omitted.', {
+          minLength: 1,
+          maxLength: 80,
+        }),
+        effectiveFrom: { type: 'string', description: 'YYYY-MM-DD, with model when priceId is omitted.' },
       },
     },
   },
