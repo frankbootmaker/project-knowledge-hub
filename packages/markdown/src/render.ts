@@ -65,6 +65,31 @@ function rehypeMermaidBlocks(): (tree: Root) => void {
   };
 }
 
+/** Surviving links open in a new tab and cannot reach back into this page. */
+function rehypeSafeBlankLinks(): (tree: Root) => void {
+  return (tree) => {
+    visit(tree, 'element', (node: Element) => {
+      if (node.tagName !== 'a') {
+        return;
+      }
+      const href = node.properties?.href;
+      if (typeof href !== 'string') {
+        return;
+      }
+      const trimmed = href.trim();
+      const lower = trimmed.toLowerCase();
+      if (trimmed.length === 0 || lower.startsWith('javascript:') || lower.startsWith('data:')) {
+        return;
+      }
+      node.properties = {
+        ...node.properties,
+        target: '_blank',
+        rel: ['noopener', 'noreferrer'],
+      };
+    });
+  };
+}
+
 function collectToc(tree: Root): TocItem[] {
   const toc: TocItem[] = [];
   visit(tree, 'element', (node: Element) => {
@@ -95,6 +120,7 @@ export async function renderMarkdown(markdown: string): Promise<RenderedMarkdown
     .use(rehypeMermaidBlocks)
     .use(rehypeHighlight, { detect: false, ignoreMissing: true })
     .use(rehypeSanitize, knowledgeSanitizeSchema)
+    .use(rehypeSafeBlankLinks)
     // After sanitize: ids may be prefixed (e.g. user-content-); TOC must match HTML.
     .use(() => (tree: Root) => {
       toc = collectToc(tree);

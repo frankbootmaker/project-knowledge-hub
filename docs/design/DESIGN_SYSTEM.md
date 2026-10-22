@@ -166,6 +166,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-editor-shell` / `.kh-ops-editor-toolbar` / `.kh-ops-markdown-editor` | Knowledge create/edit editor + markdown toolbar. Toolbar buttons use the UI sans. The markdown field stays monospace |
 | `.kh-ops-manage-strip` / `.kh-ops-keyvals` / `.kh-ops-tag-list` / `.kh-ops-tag` | Record action strip, definition lists, tag chips. Keyvals, tag chips, and the record header meta line use the menu type. Dates go through `LocalDateTime` / `formatLocaleDate` |
 | `.kh-ops-markdown-view` / `.kh-ops-toc` / `.kh-ops-preview-pane` | Markdown document density, TOC panel, live preview |
+| `.kh-ops-description-label-row` / `.kh-ops-description-mode` / `.kh-ops-description-markdown` / `.kh-ops-description-raw` | Delivery description on epic, story, task, and bug dialogs. Raw / Rendered uses `.kh-ops-type-chip`. The body reuses the knowledge markdown renderer in the UI sans. Code stays mono. An empty value hides the toggle. Editing stays a `Textarea` |
 | `.kh-ops-roster-person` | Stakeholder roster avatar + name cell |
 | `.kh-ops-org-tree` / `.kh-ops-org-card` / `.kh-ops-org-ungrouped-grid` | Stakeholder org chart (tree connectors, 200px cards, including ungrouped) |
 | `.kh-ops-help-btn` / `.kh-ops-popover` | Compact `?` help control and square legend/tooltip panel |
@@ -251,6 +252,8 @@ from client components. Tones: `success` (default), `danger`, `info`.
 Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-22
+
+* **Description markdown (PRO-T-125)** — Epic, user story, task, and bug detail dialogs show the description as rendered Markdown by default. Raw and Rendered are `.kh-ops-type-chip` buttons on the label row (`.kh-ops-description-mode`). The toggle hides when the text is empty. The last choice is stored in localStorage. Editing stays a plain `Textarea`. Bug steps, expected behavior, and actual behavior use the same view. Rendered HTML is the knowledge-record renderer (GFM tables, lists, task lists, fenced code, Mermaid). Links open in a new tab. The view uses the UI sans; only code is monospace. Copy is in English, German, and Hungarian.
 
 * **Unassigned usage filters (PRO-T-123)** — Workspace Financials → Usage import puts the shared DataTable toolbar (`.kh-ops-toolbar`, search `Input`, `TableFilterControl`, Clear filters, `DataTable` with `hideHeaderFilter`) on the unassigned usage table. Search covers cloud agent and model. The funnel filters model (checklist) and cloud agent (contains), and the Latest range is two date fields inserted after the cloud-agent filter, inclusive. There is no status column. The empty state is `.kh-ops-empty-state` (mark `00`); Clear filters shows when a column or date filter is active. Row counts and token totals use `.kh-ops-cell-number` / `.kh-ops-num` (IBM Plex Sans, 13px, regular, `tabular-nums`). Copy is in English, German, and Hungarian.
 
