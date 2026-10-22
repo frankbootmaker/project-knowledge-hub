@@ -547,6 +547,13 @@
       "when": 1794009600000,
       "tag": "0077_ai_model_prices",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1794096000000,
+      "tag": "0078_backfill_done_completed_at",
+      "breakpoints": true
     }
   ]
 }

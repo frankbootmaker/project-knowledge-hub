@@ -137,6 +137,75 @@ describe.skipIf(!hasIntegrationEnv)('Knowledge records', () => {
     }
   });
 
+  it('returns language, translation group, and siblings on read (PRO-B-33)', async () => {
+    const headers = { cookie: adminCookie, origin: 'http://localhost:3100' };
+    const created = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/knowledge-records',
+      headers,
+      payload: {
+        workspaceId,
+        title: 'Source note',
+        recordType: 'note',
+        language: 'en',
+        contentMarkdown: '# Source',
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const source = (created.json() as { knowledgeRecord: { id: string } }).knowledgeRecord;
+
+    const translated = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/knowledge-records/${source.id}/translations`,
+      headers,
+      payload: {
+        language: 'de',
+        title: 'Quellnotiz',
+        contentMarkdown: '# Quelle',
+      },
+    });
+    expect(translated.statusCode).toBe(200);
+    const sibling = (
+      translated.json() as {
+        knowledgeRecord: { id: string; language: string; translationGroupId: string };
+      }
+    ).knowledgeRecord;
+    expect(sibling.language).toBe('de');
+    expect(sibling.translationGroupId).toBeTruthy();
+
+    const read = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/knowledge-records/${sibling.id}`,
+      headers: { cookie: adminCookie },
+    });
+    expect(read.statusCode).toBe(200);
+    const body = read.json() as {
+      knowledgeRecord: {
+        language: string;
+        translationGroupId: string;
+        translations: Array<{ id: string; key: string | null; language: string | null }>;
+      };
+    };
+    expect(body.knowledgeRecord.language).toBe('de');
+    expect(body.knowledgeRecord.translationGroupId).toBe(sibling.translationGroupId);
+    const languages = body.knowledgeRecord.translations.map((item) => item.language).sort();
+    expect(languages).toEqual(['de', 'en']);
+    expect(body.knowledgeRecord.translations.map((item) => item.id).sort()).toEqual(
+      [source.id, sibling.id].sort(),
+    );
+
+    const sourceRead = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/knowledge-records/${source.id}`,
+      headers: { cookie: adminCookie },
+    });
+    const sourceBody = sourceRead.json() as {
+      knowledgeRecord: { language: string | null; translationGroupId: string | null };
+    };
+    expect(sourceBody.knowledgeRecord.language).toBe('en');
+    expect(sourceBody.knowledgeRecord.translationGroupId).toBe(sibling.translationGroupId);
+  });
+
   it('creates a deployment guide linked to a system with safe HTML', async () => {
     const systemResponse = await app.inject({
       method: 'POST',

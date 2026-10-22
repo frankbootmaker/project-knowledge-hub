@@ -255,6 +255,28 @@ describe.skipIf(!hasIntegrationEnv)('platform AI cost', () => {
     return (response.json() as { chart: ChartPoint[] }).chart;
   }
 
+  it('rejects an invalid AI cost from or to (PRO-B-36)', async () => {
+    for (const value of ['oct', '2026-13', '2026-02-30']) {
+      const admin = await app!.inject({
+        method: 'GET',
+        url: `/api/v1/admin/ai-cost?from=${encodeURIComponent(value)}`,
+        headers: { cookie: adminCookie },
+      });
+      expect(admin.statusCode).toBe(400);
+      const adminBody = admin.json() as { error: { message: string } };
+      expect(adminBody.error.message).toContain('from');
+
+      const workspace = await app!.inject({
+        method: 'GET',
+        url: `/api/v1/workspaces/${alphaId}/ai-cost?to=${encodeURIComponent(value)}`,
+        headers: { cookie: adminCookie },
+      });
+      expect(workspace.statusCode).toBe(400);
+      const workspaceBody = workspace.json() as { error: { message: string } };
+      expect(workspaceBody.error.message).toContain('to');
+    }
+  });
+
   it('returns 403 for a workspace admin who is not a system admin', async () => {
     const response = await app!.inject({
       method: 'GET',

@@ -1849,6 +1849,27 @@ export function createKnowledgeHubMcpServer(
           .any()
           .optional()
           .describe('Counts and summaries on every page unless includeRecordRelations is false.'),
+        language: z
+          .string()
+          .nullable()
+          .optional()
+          .describe('Content language, for example en or hu.'),
+        translationGroupId: z
+          .string()
+          .nullable()
+          .optional()
+          .describe('Shared id of the translation family. Null when the record has no siblings yet.'),
+        translations: z
+          .array(
+            z.object({
+              id: z.string(),
+              key: z.string().nullable().describe('Human document key, or null.'),
+              language: z.string().nullable(),
+              slug: z.string(),
+            }),
+          )
+          .optional()
+          .describe('Translation family, including this record. Archived siblings are omitted.'),
       })
       .passthrough(),
   };
@@ -1857,7 +1878,7 @@ export function createKnowledgeHubMcpServer(
     'get_knowledge_record',
     {
       description:
-        'Get a knowledge record with markdown. Tags, media, and linkedItems (deliveryLinks: epic, user story, milestone, task including bugs, sprint; raidLinks; changeItems; each id, humanKey, title, type, kind; archived omitted) are on the first page only. Pages are 50000 characters. contentLength and contentSha256 cover the full body. contentTruncated and nextOffset (null at the end) page it. returnedChars, chunkIndex (0, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (approximate if short). contentOffset or contentLimit returns raw slices to concatenate; otherwise the first page still appends …[truncated] when more remains. boundary paragraph or line snaps to a break in the second half (default is a hard cut). inCodeFence is true inside a fence. expectSha256 yields 409 if the body changed. Follow nextOffset until null before rewriting. Images: ![alt](/api/v1/media/{id}), never data: URIs. Read pixels with call_hub_tool get_workspace_media. recordId is a UUID or document key (HL1-VIS-2). recordRelations (counts, up to 20 summaries) is on every page unless includeRecordRelations is false.',
+        'Get a knowledge record with markdown. Returns language, translationGroupId, and translations (id, key, language, slug) for the translation family, including this record. key is the human document key. Tags, media, and linkedItems (deliveryLinks: epic, user story, milestone, task including bugs, sprint; raidLinks; changeItems; each id, humanKey, title, type, kind; archived omitted) are on the first page only. Pages are 50000 characters. contentLength and contentSha256 cover the full body. contentTruncated and nextOffset (null at the end) page it. returnedChars, chunkIndex (0, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (approximate if short). contentOffset or contentLimit returns raw slices to concatenate; otherwise the first page still appends …[truncated] when more remains. boundary paragraph or line snaps to a break in the second half (default is a hard cut). inCodeFence is true inside a fence. expectSha256 yields 409 if the body changed. Follow nextOffset until null before rewriting. Images: ![alt](/api/v1/media/{id}), never data: URIs. Read pixels with call_hub_tool get_workspace_media. recordId is a UUID or document key (HL1-VIS-2). recordRelations (counts, up to 20 summaries) is on every page unless includeRecordRelations is false.',
       inputSchema: {
         recordId: z.string().min(1).max(80),
         contentOffset: z.number().int().min(0).optional(),
@@ -2631,7 +2652,7 @@ export function createKnowledgeHubMcpServer(
     'create_project_task',
     {
       description:
-        'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. When both startDate and dueDate are set without duration, duration is the gap and startDate must be on or before dueDate. Bugs use the same start date and duration. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
+        'Create a project task or bug (itemType task or bug, default task). Type is fixed at create: tasks get a T key and bugs a B key. Bug fields (severity, foundIn, foundInNote, stepsToReproduce, expectedBehavior, actualBehavior, resolution, regression, affectedSystemId, duplicateOfTaskId) are rejected on a task. Severity defaults to medium on a bug. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. When both startDate and dueDate are set without duration, duration is the gap and startDate must be on or before dueDate. Bugs use the same start date and duration. Optional RACI, user story, sprint, story points, and current owner. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the given project. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Optional AI usage: tokensUsed alone bills the blended rate; tokensInput/tokensOutput/tokensCache bill split rates and set tokensUsed to their sum when omitted. aiSystemId must be an AI assistant system linked to the project. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Creating as done, including completionPercent 100, sets completedAt to now. Reads return the displayed percent, so cancelled is 0. Requires pm:write.',
       inputSchema: {
       projectId: z.string().uuid(),
       title: z.string().min(1).max(200),
@@ -2713,7 +2734,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_task',
     {
       description:
-        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentId (max 80, null clears it) links imported Cursor usage with that id onto this task; one task per id. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Recompute skips an archived story, epic, or milestone and never overwrites a cancelled status. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Parent start and end follow included children. Requires pm:write.',
+        'Update a project task or bug. taskId may be a UUID or any human key (HL1-T-12 or HL1-B-4). itemType cannot change after create. Bug fields are rejected on a task. duplicateOfTaskId is stored only when resolution is duplicate and may be a UUID or human key. affectedSystemId must be a catalogue system linked to the project. Optional startDate and durationDays; null clears them. startDate is stored and returned. targetPercent is null. When durationDays is set, dueDate is startDate plus that many working days on the project calendar. Bugs use the same start date and duration. When both startDate and dueDate are set, startDate must be on or before dueDate. Hour fields (forecastHours, actualHours) accept number or string; returned as JSON numbers. milestoneId, sprintId, and userStoryId must belong to the task\'s project. tokensUsed alone keeps blended-rate billing and clears a stored breakdown. tokensInput/tokensOutput/tokensCache bill split rates; tokensUsed is their sum when omitted and must match when both are sent. Optional modelId, pricingTier, usageOccurredAt, billingPeriod. aiSystemId must be an AI assistant system linked to the project. Optional cloudAgentId (max 80, null clears it) links imported Cursor usage with that id onto this task; one task per id. completionPercent written is 0, 25, 50, 75, or 100; status done stores 100 and cancelled stores null. A transition into done sets completedAt to now. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Recompute skips an archived story, epic, or milestone and never overwrites a cancelled status. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Parent start and end follow included children. Requires pm:write.',
       inputSchema: {
       taskId: entityRef,
       title: z.string().min(1).max(200).optional(),
@@ -3350,11 +3371,11 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_ai_usage_theoretical_cost',
-    'Per-month theoretical API cost for imported usage and task usage that was not replaced by an import. linked is allocated to a project task. unassigned is workspace-level. Amounts are in the workspace reporting currency. Unpriced models are listed and are not treated as zero without a flag. from and to are YYYY-MM or YYYY-MM-DD. Requires pm:read. Via call_hub_tool.',
+    'Per-month theoretical API cost for imported usage and task usage that was not replaced by an import. linked is allocated to a project task. unassigned is workspace-level. Amounts are in the workspace reporting currency. Unpriced models are listed and are not treated as zero without a flag. from and to are YYYY-MM or YYYY-MM-DD. An invalid from or to is rejected and names that field; it does not fall back to the last 12 months. Omit both for that default. Requires pm:read. Via call_hub_tool.',
     {
       workspaceId: z.string().uuid(),
-      from: z.string().optional(),
-      to: z.string().optional(),
+      from: z.string().optional().describe('YYYY-MM or YYYY-MM-DD. Invalid values are rejected.'),
+      to: z.string().optional().describe('YYYY-MM or YYYY-MM-DD. Invalid values are rejected.'),
     },
     async (args) =>
       wrap('get_ai_usage_theoretical_cost', 'pm:read', () =>
@@ -3374,10 +3395,10 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_platform_ai_cost',
-    'Platform AI cost summary across workspaces: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts on the usage date. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. Defaults to the last 12 months. System administrator only. Requires pm:read.',
+    'Platform AI cost summary across workspaces: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts on the usage date. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. from and to are YYYY-MM. An invalid from or to is rejected and names that field; it does not fall back to the last 12 months. Omit both for that default. System administrator only. Requires pm:read.',
     {
-      from: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
-      to: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
+      from: z.string().optional().describe('YYYY-MM. Invalid values are rejected.'),
+      to: z.string().optional().describe('YYYY-MM. Invalid values are rejected.'),
       reportingCurrency: z.string().min(3).max(3).optional(),
     },
     async (args) =>

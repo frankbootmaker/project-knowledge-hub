@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { AppError } from './index.js';
 import {
   allocateAiBillingPool,
   buildPlatformAiCost,
   defaultAiBillingWindow,
   flatFeeMonthShares,
+  resolveAiBillingWindow,
   resolveBillingServiceWindow,
   roundAiMoney,
   scaleAiBillingTypes,
@@ -33,6 +35,24 @@ function sumShares(
 ): number {
   return roundAiMoney(shares.reduce((sum, share) => sum + share.amount, 0));
 }
+
+describe('resolveAiBillingWindow', () => {
+  it('names the invalid bound instead of a generic period error (PRO-B-36)', () => {
+    expect(() => resolveAiBillingWindow({ from: 'oct' })).toThrow(/from must be YYYY-MM/);
+    expect(() => resolveAiBillingWindow({ to: '2026-13' })).toThrow(/to must be YYYY-MM/);
+    expect(() => resolveAiBillingWindow({ from: '2026-02-30' })).toThrow(/from must be YYYY-MM/);
+    try {
+      resolveAiBillingWindow({ to: 'oct' });
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppError);
+      expect((error as AppError).statusCode).toBe(400);
+    }
+    expect(resolveAiBillingWindow({ from: '2026-01', to: '2026-03' })).toEqual({
+      from: '2026-01',
+      to: '2026-03',
+    });
+  });
+});
 
 describe('allocateAiBillingPool', () => {
   it('splits an upgrade plus on-demand month by token usage', () => {
