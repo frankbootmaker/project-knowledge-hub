@@ -61,6 +61,7 @@ import {
   recordTypeSchema,
   itemMediaEntityTypeSchema,
   type ItemMediaEntityType,
+  assertAiCostViewBounds,
   taskStatusSchema,
   userStoryStatusSchema,
 } from '@project-knowledge-hub/domain';
@@ -82,6 +83,7 @@ import {
   createKnowledgeRecord,
   createRecordTranslation,
   listRecordTranslations,
+  listTranslationSiblingLinks,
   loadProjectKeyPrefixMap,
   resolveReviewedByUser,
   updateKnowledgeRecord,
@@ -2261,6 +2263,7 @@ export function createMcpToolHandlers(
       const linkedItems = loadSidecars
         ? await listKnowledgeRecordLinkedItems(app.database, record.id)
         : null;
+      const translations = await listTranslationSiblingLinks(app.database, record.id);
       const toPayload = (candidate: ContentPage) => {
         const isFirst = candidate.contentOffset === 0;
         return {
@@ -2293,6 +2296,9 @@ export function createMcpToolHandlers(
             lastValidatedAt: record.lastValidatedAt?.toISOString() ?? null,
             reviewedBy: record.reviewedBy,
             reviewedByUser,
+            language: record.language,
+            translationGroupId: record.translationGroupId,
+            translations,
             updatedAt: record.updatedAt.toISOString(),
             ...(recordRelations ? { recordRelations } : {}),
             ...(isFirst
@@ -4909,6 +4915,7 @@ export function createMcpToolHandlers(
 
     async getAiUsageTheoreticalCost(input) {
       assertWorkspaceAllowed(client, input.workspaceId);
+      assertAiCostViewBounds({ from: input.from, to: input.to });
       const overview = await loadWorkspaceAiCostOverview(app.database, input.workspaceId);
       const presented = presentWorkspaceAiCost(overview, {
         ...(input.from ? { from: input.from } : {}),

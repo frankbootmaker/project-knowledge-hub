@@ -612,6 +612,32 @@ const knowledgeRecordResult = {
       additionalProperties: true,
       properties: {
         id: uuidProp('Knowledge record id'),
+        language: {
+          type: 'string',
+          nullable: true,
+          description: 'Content language, for example en or hu.',
+        },
+        translationGroupId: {
+          type: 'string',
+          nullable: true,
+          description: 'Shared id of the translation family. Null until a sibling exists.',
+        },
+        translations: {
+          type: 'array',
+          description:
+            'Translation family, including this record. key is the human document key. Archived siblings are omitted.',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['id', 'key', 'language', 'slug'],
+            properties: {
+              id: { type: 'string' },
+              key: { type: 'string', nullable: true },
+              language: { type: 'string', nullable: true },
+              slug: { type: 'string' },
+            },
+          },
+        },
         recordRelations: {
           type: 'object',
           additionalProperties: false,
@@ -796,7 +822,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record',
     description:
-      'Get a knowledge record (paged markdown). Tags, media, and linkedItems are on the first page only. linkedItems has deliveryLinks, raidLinks, and changeItems for the same project. Archived RAID, change, and delivery items are omitted. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). Read pixels with call_hub_tool get_workspace_media. recordId may be UUID or document key. recordRelations (counts and up to 20 summaries) is included on every page unless includeRecordRelations is false.',
+      'Get a knowledge record (paged markdown). Returns language, translationGroupId, and translations (id, key, language, slug) for the translation family, including this record. key is the human document key. Tags, media, and linkedItems are on the first page only. linkedItems has deliveryLinks, raidLinks, and changeItems for the same project. Archived RAID, change, and delivery items are omitted. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). Read pixels with call_hub_tool get_workspace_media. recordId may be UUID or document key. recordRelations (counts and up to 20 summaries) is included on every page unless includeRecordRelations is false.',
     scope: 'knowledge:read',
     openApi: true,
     output: knowledgeRecordResult,
@@ -1105,7 +1131,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'create_project_task',
     description:
-      'Create a live delivery task or bug (itemType, default task). startDate is stored and returned. targetPercent is null. Optional durationDays makes dueDate equal startDate plus that many working days on the project calendar. Bugs use the same start date and duration. Bug fields are rejected on a task. Requires pm:write.',
+      'Create a live delivery task or bug (itemType, default task). startDate is stored and returned. targetPercent is null. Optional durationDays makes dueDate equal startDate plus that many working days on the project calendar. Bugs use the same start date and duration. Bug fields are rejected on a task. Creating as done, including completionPercent 100, sets completedAt to now. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -1168,7 +1194,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_task',
     description:
-      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown, including tokensCacheWrite, bills split rates. Optional cloudAgentId links imported Cursor usage with that id onto this task. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Recompute skips an archived story, epic, or milestone and never overwrites a cancelled status. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Parent start and end follow included children. Requires pm:write.',
+      'Update a task or bug. taskId is a UUID or human key (T or B, e.g. HL1-B-4). itemType cannot change. startDate is stored and returned; null clears it. targetPercent is null. Optional durationDays; when set, dueDate is startDate plus that many working days on the project calendar. Null clears a date or duration. Bugs use the same start date and duration. Bug fields are rejected on a task. tokensUsed alone bills the blended rate. A token breakdown, including tokensCacheWrite, bills split rates. Optional cloudAgentId links imported Cursor usage with that id onto this task. completionPercent written is 0, 25, 50, 75, or 100; done stores 100 and cancelled stores null. A transition into done sets completedAt to now. Reopening a done task or bug (status back to todo, in_progress, or blocked) clears completedAt and resets completionPercent to 0, because the step from before done is not stored. An explicit completionPercent on that call is kept. Reads return the displayed percent, so cancelled is 0. A status, completion, date, or story change recomputes the story, its epic, and milestones linked to them. Recompute skips an archived story, epic, or milestone and never overwrites a cancelled status. Linking to an archived milestone, story, or sprint is rejected until it is unarchived. Parent start and end follow included children. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     openApi: true,
@@ -3074,7 +3100,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'get_ai_usage_theoretical_cost',
     description:
-      'Per-month theoretical API cost. linked is allocated to a project task. unassigned is workspace-level imported usage with no task. Amounts are in the workspace reporting currency. Unpriced models are listed instead of being treated as a silent zero. from and to accept YYYY-MM or YYYY-MM-DD. Requires pm:read. Via call_hub_tool.',
+      'Per-month theoretical API cost. linked is allocated to a project task. unassigned is workspace-level imported usage with no task. Amounts are in the workspace reporting currency. Unpriced models are listed instead of being treated as a silent zero. from and to accept YYYY-MM or YYYY-MM-DD. An invalid from or to is rejected and names that field; it does not fall back to the last 12 months. Omit both for that default. Requires pm:read. Via call_hub_tool.',
     scope: 'pm:read',
     write: false,
     body: {
@@ -3085,11 +3111,13 @@ const EXTRA_HUB_TOOLS: Array<{
         workspaceId: uuidProp('Workspace id. Required.'),
         from: {
           type: 'string',
-          description: 'Optional range start, YYYY-MM or YYYY-MM-DD.',
+          description:
+            'Optional range start, YYYY-MM or YYYY-MM-DD. A value that is not a real calendar date is rejected.',
         },
         to: {
           type: 'string',
-          description: 'Optional range end, YYYY-MM or YYYY-MM-DD.',
+          description:
+            'Optional range end, YYYY-MM or YYYY-MM-DD. A value that is not a real calendar date is rejected.',
         },
       },
     },
@@ -3112,7 +3140,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'get_platform_ai_cost',
     description:
-      'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts from the token-rate currency at usageOccurredAt, else completedAt, else updatedAt. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. Defaults to the last 12 months. System administrator only. Requires pm:read. Via call_hub_tool.',
+      'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts from the token-rate currency at usageOccurredAt, else completedAt, else updatedAt. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. from and to are YYYY-MM. An invalid from or to is rejected and names that field; it does not fall back to the last 12 months. Omit both for that default. System administrator only. Requires pm:read. Via call_hub_tool.',
     scope: 'pm:read',
     write: false,
     body: {
@@ -3121,13 +3149,13 @@ const EXTRA_HUB_TOOLS: Array<{
       properties: {
         from: {
           type: 'string',
-          pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
-          description: 'First month YYYY-MM. Defaults to 11 months before to.',
+          description:
+            'First month YYYY-MM. Invalid values are rejected. Defaults to 11 months before to.',
         },
         to: {
           type: 'string',
-          pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
-          description: 'Last month YYYY-MM. Defaults to the current UTC month.',
+          description:
+            'Last month YYYY-MM. Invalid values are rejected. Defaults to the current UTC month.',
         },
         reportingCurrency: {
           type: 'string',

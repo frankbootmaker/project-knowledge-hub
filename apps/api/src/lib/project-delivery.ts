@@ -1791,6 +1791,15 @@ export async function createTask(
       userStoryId: createdTask.userStoryId,
     },
   });
+  // Created already done has no later transition. Stamp completedAt at now.
+  if (createdTask.status === 'done') {
+    await recordTaskActivity(database, {
+      taskId: createdTask.id,
+      actorUserId: input.createdBy,
+      type: 'status_changed',
+      metadata: { from: null, to: 'done' },
+    });
+  }
 
   let dateChanges: Array<{
     entityType: 'task' | 'user_story' | 'epic' | 'milestone' | 'sprint';

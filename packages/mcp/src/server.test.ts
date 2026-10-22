@@ -1222,6 +1222,9 @@ describe('knowledge record linked items and RAID recordIds', () => {
       const tool = listed.tools.find((item) => item.name === 'get_knowledge_record');
       const output = JSON.stringify(tool?.outputSchema);
       expect(output).toContain('linkedItems');
+      expect(output).toContain('language');
+      expect(output).toContain('translationGroupId');
+      expect(output).toContain('translations');
       expect(output).toContain('deliveryLinks');
       expect(output).toContain('raidLinks');
       expect(output).toContain('changeItems');

@@ -952,13 +952,31 @@ export function defaultAiBillingWindow(now = new Date()): { from: string; to: st
   return { from: shiftAiBillingPeriod(to, -11), to };
 }
 
+function assertNamedBillingPeriod(
+  value: string | null | undefined,
+  field: 'from' | 'to',
+): string | null {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed) return null;
+  const parsed = aiBillingPeriodSchema.safeParse(trimmed);
+  if (!parsed.success) {
+    throw new AppError({
+      code: 'BILLING_PERIOD_INVALID',
+      message: `${field} must be YYYY-MM`,
+      statusCode: 400,
+      details: { field, value: trimmed },
+    });
+  }
+  return parsed.data;
+}
+
 export function resolveAiBillingWindow(
   input: { from?: string | null; to?: string | null },
   now = new Date(),
 ): { from: string; to: string } {
   const fallback = defaultAiBillingWindow(now);
-  const from = input.from?.trim() ? assertAiBillingPeriod(input.from) : null;
-  const to = input.to?.trim() ? assertAiBillingPeriod(input.to) : null;
+  const from = assertNamedBillingPeriod(input.from, 'from');
+  const to = assertNamedBillingPeriod(input.to, 'to');
   const resolved = {
     from: from ?? (to ? shiftAiBillingPeriod(to, -11) : fallback.from),
     to: to ?? (from && from > fallback.to ? from : fallback.to),

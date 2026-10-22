@@ -109,6 +109,31 @@ describe('resolveAiCostViewWindow', () => {
       range: 'custom',
     });
   });
+
+  it('rejects an invalid from or to instead of the default 12-month window (PRO-B-36)', () => {
+    for (const value of ['oct', '2026-13', '2026-02-30', '2026-02-29', '2026-1']) {
+      expect(() => resolveAiCostViewWindow({ from: value }, NOW)).toThrow(
+        /from must be a real calendar date/,
+      );
+      expect(() => resolveAiCostViewWindow({ to: value }, NOW)).toThrow(
+        /to must be a real calendar date/,
+      );
+      expect(() =>
+        resolveAiCostViewWindow({ from: value, to: '2026-10' }, NOW),
+      ).toThrow(/from must be a real calendar date/);
+      expect(() =>
+        resolveAiCostViewWindow({ from: '2026-01', to: value }, NOW),
+      ).toThrow(/to must be a real calendar date/);
+    }
+    expect(resolveAiCostViewWindow({ from: '  ', to: '  ' }, NOW).range).toBe('last12');
+    expect(resolveAiCostViewWindow({ from: '2024-02-29', to: '2024-02-29' }, NOW)).toMatchObject({
+      from: '2024-02',
+      to: '2024-02',
+      fromDay: '2024-02-29',
+      toDay: '2024-02-29',
+      range: 'custom',
+    });
+  });
 });
 
 describe('fillAiCostChart', () => {

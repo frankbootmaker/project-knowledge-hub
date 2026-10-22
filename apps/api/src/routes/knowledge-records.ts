@@ -35,6 +35,7 @@ import {
   createRecordTranslation,
   createTranslationInputSchema,
   listRecordTranslations,
+  listTranslationSiblingLinks,
   loadApproverSnapshot,
   loadPrimarySource,
   loadProjectKeyPrefixMap,
@@ -220,6 +221,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
           record.id,
         )
       : undefined;
+    const translations = await listTranslationSiblingLinks(app.database, record.id);
     return {
       knowledgeRecord: {
         ...toPublicRecord(record, tagMap.get(record.id) ?? [], source, {
@@ -232,6 +234,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
             ? keyPrefixMap.get(record.projectId) ?? null
             : null,
         }),
+        translations,
         ...(recordRelations ? { recordRelations } : {}),
       },
     };
