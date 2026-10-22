@@ -1665,17 +1665,29 @@ export {
 } from './ai-cost.js';
 
 export {
+  splitIntegerTotal,
+  splitMoneyTotal,
+  splitTokensAcrossTasks,
+  type TokenBuckets,
+  type TokenShare,
+} from './cloud-agent-links.js';
+
+export {
   AI_USAGE_IMPORT_SOURCES,
   CLOUD_AGENT_ID_MAX,
+  CLOUD_AGENT_LINK_LIMIT,
   CURSOR_USAGE_CSV_HEADERS,
   USAGE_CSV_MAX_CHARS,
   USAGE_CSV_MAX_ROWS,
   USAGE_IMPORT_ERROR_LIMIT,
   aggregateLinkedUsage,
   dedupeUsageRows,
+  agentHasLinkedTask,
   linkUsageRows,
+  type CloudAgentTaskIndex,
   mapCursorUsageTokens,
   parseCloudAgentId,
+  parseCloudAgentIds,
   parseCursorUsageCsv,
   parseUsageSource,
   previewUsageImport,

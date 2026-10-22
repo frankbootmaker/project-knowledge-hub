@@ -1,8 +1,9 @@
-import { and, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   aiUsageEvents,
   aiUsageImports,
+  projectTaskCloudAgentLinks,
   projectTasks,
   projects,
   users,
@@ -11,6 +12,7 @@ import {
 import {
   AppError,
   USAGE_IMPORT_ERROR_LIMIT,
+  agentHasLinkedTask,
   aggregateLinkedUsage,
   dedupeUsageRows,
   linkUsageRows,
@@ -18,9 +20,11 @@ import {
   previewUsageImport,
   priceImportedUsage,
   roundAiMoney,
+  splitTokensAcrossTasks,
   type AiUsageImportSource,
   type AiUsageImportSummary,
   type AiUsageRowError,
+  type CloudAgentTaskIndex,
   type NormalizedAiUsageRow,
   type UsageImportStats,
 } from '@project-knowledge-hub/domain';
@@ -126,7 +130,7 @@ export async function previewAiUsageCsv(
       tokensOutput: row.tokensOutput,
       cost: row.cost,
       linked: row.cloudAgentId
-        ? prepared.taskIdByCloudAgentId.has(row.cloudAgentId)
+        ? agentHasLinkedTask(prepared.taskIdByCloudAgentId, row.cloudAgentId)
         : false,
       cloudAgentId: row.cloudAgentId,
     })),
@@ -209,7 +213,7 @@ export async function importAiUsageCsv(
 
   let inserted = 0;
   let linked = 0;
-  const taskIds = new Set<string>();
+  const agents = new Set<string>();
   for (const chunk of chunks(prepared.fresh, INSERT_CHUNK)) {
     const written = await database.db
       .insert(aiUsageEvents)
@@ -239,29 +243,29 @@ export async function importAiUsageCsv(
         target: [aiUsageEvents.workspaceId, aiUsageEvents.rowHash],
       })
       .returning({
-        projectTaskId: aiUsageEvents.projectTaskId,
+        cloudAgentId: aiUsageEvents.cloudAgentId,
       });
     inserted += written.length;
     for (const row of written) {
-      if (row.projectTaskId) {
+      if (
+        row.cloudAgentId
+        && agentHasLinkedTask(prepared.taskIdByCloudAgentId, row.cloudAgentId)
+      ) {
         linked += 1;
-        taskIds.add(row.projectTaskId);
+        agents.add(row.cloudAgentId);
       }
     }
   }
 
   const raced = prepared.fresh.length - inserted;
-  const affected = new Set<string>();
   const syncErrors: AiUsageRowError[] = [];
-  for (const taskId of taskIds) {
-    const result = await replaceTaskTokensFromEvents(database, taskId);
-    if (result.projectId) affected.add(result.projectId);
-    if (result.status === 'overflow') {
-      syncErrors.push({
-        rowNumber: 0,
-        message: 'Linked usage for a task exceeds the token counter limit',
-      });
-    }
+  const distributed = await redistributeCloudAgentUsage(database, workspaceId, [...agents]);
+  const affected = new Set(distributed.projectIds);
+  if (distributed.overflow) {
+    syncErrors.push({
+      rowNumber: 0,
+      message: 'Linked usage for a task exceeds the token counter limit',
+    });
   }
 
   const errors = [...storedErrors, ...syncErrors].slice(0, USAGE_IMPORT_ERROR_LIMIT);
@@ -342,10 +346,7 @@ export async function listUnassignedUsage(
   unpricedModels: Array<{ model: string; rowCount: number; tokensTotal: number }>;
 }> {
   await requireWorkspace(database, workspaceId);
-  const unassigned = and(
-    eq(aiUsageEvents.workspaceId, workspaceId),
-    isNull(aiUsageEvents.projectTaskId),
-  );
+  const unassigned = unassignedEventWhere(workspaceId);
   const [countRow] = await database.db
     .select({ total: sql<number>`count(*)::int` })
     .from(aiUsageEvents)
@@ -471,16 +472,7 @@ export async function listUnassignedUsageRows(
   await requireWorkspace(database, workspaceId);
   const limit = pageLimit(input.limit, 25, UNASSIGNED_PAGE_MAX);
   const offset = decodeListCursor(input.cursor);
-  const where = input.importId
-    ? and(
-        eq(aiUsageEvents.workspaceId, workspaceId),
-        isNull(aiUsageEvents.projectTaskId),
-        eq(aiUsageEvents.importId, input.importId),
-      )
-    : and(
-        eq(aiUsageEvents.workspaceId, workspaceId),
-        isNull(aiUsageEvents.projectTaskId),
-      );
+  const where = unassignedEventWhere(workspaceId, input.importId);
   const [countRow] = await database.db
     .select({ total: sql<number>`count(*)::int` })
     .from(aiUsageEvents)
@@ -526,52 +518,57 @@ export async function listUnassignedUsageRows(
 }
 
 /**
- * Point workspace usage at a task after its cloud agent id changes, then
- * replace that task's token counters with the sum of linked events.
+ * Replace one task's cloud-agent links, then split imported usage for every
+ * agent that was added or removed. A second identical set does not write.
  */
+export async function setTaskCloudAgentLinks(
+  database: Database,
+  input: { taskId: string; workspaceId: string; cloudAgentIds: readonly string[] },
+): Promise<{ changed: boolean }> {
+  const existing = await database.db
+    .select({ cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId })
+    .from(projectTaskCloudAgentLinks)
+    .where(eq(projectTaskCloudAgentLinks.taskId, input.taskId));
+  const previous = existing.map((row) => row.cloudAgentId).sort();
+  const next = [...new Set(input.cloudAgentIds)].sort();
+  if (previous.join('\0') === next.join('\0')) {
+    return { changed: false };
+  }
+  await database.db
+    .delete(projectTaskCloudAgentLinks)
+    .where(eq(projectTaskCloudAgentLinks.taskId, input.taskId));
+  if (next.length > 0) {
+    await database.db.insert(projectTaskCloudAgentLinks).values(
+      next.map((cloudAgentId) => ({
+        taskId: input.taskId,
+        cloudAgentId,
+      })),
+    );
+  }
+  await database.db
+    .update(projectTasks)
+    .set({
+      cloudAgentId: next[0] ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(projectTasks.id, input.taskId));
+  await redistributeCloudAgentUsage(database, input.workspaceId, [...previous, ...next]);
+  if (next.length === 0) {
+    await zeroTaskTokens(database, input.taskId);
+  }
+  return { changed: true };
+}
+
+/** @deprecated Callers pass one id. Prefer setTaskCloudAgentLinks. */
 export async function relinkTaskUsage(
   database: Database,
   input: { taskId: string; workspaceId: string; cloudAgentId: string | null },
 ): Promise<{ changed: boolean }> {
-  const unlinkWhere = input.cloudAgentId
-    ? and(
-        eq(aiUsageEvents.projectTaskId, input.taskId),
-        or(
-          isNull(aiUsageEvents.cloudAgentId),
-          ne(aiUsageEvents.cloudAgentId, input.cloudAgentId),
-        ),
-      )
-    : eq(aiUsageEvents.projectTaskId, input.taskId);
-  const unlinked = await database.db
-    .update(aiUsageEvents)
-    .set({ projectTaskId: null })
-    .where(unlinkWhere)
-    .returning({ id: aiUsageEvents.id });
-
-  let linkedNew = 0;
-  if (input.cloudAgentId) {
-    const linked = await database.db
-      .update(aiUsageEvents)
-      .set({ projectTaskId: input.taskId })
-      .where(
-        and(
-          eq(aiUsageEvents.workspaceId, input.workspaceId),
-          eq(aiUsageEvents.cloudAgentId, input.cloudAgentId),
-          isNull(aiUsageEvents.projectTaskId),
-        ),
-      )
-      .returning({ id: aiUsageEvents.id });
-    linkedNew = linked.length;
-  }
-
-  if (unlinked.length === 0 && linkedNew === 0) {
-    return { changed: false };
-  }
-  const result = await replaceTaskTokensFromEvents(database, input.taskId);
-  if (result.status === 'empty') {
-    await zeroTaskTokens(database, input.taskId);
-  }
-  return { changed: true };
+  return setTaskCloudAgentLinks(database, {
+    taskId: input.taskId,
+    workspaceId: input.workspaceId,
+    cloudAgentIds: input.cloudAgentId ? [input.cloudAgentId] : [],
+  });
 }
 
 async function prepareRows(
@@ -631,36 +628,74 @@ async function loadTaskIdsByCloudAgent(
   database: Database,
   workspaceId: string,
   agentIds: string[],
-): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
+): Promise<CloudAgentTaskIndex> {
+  const map = new Map<string, string[]>();
   for (const part of chunks(agentIds, HASH_CHUNK)) {
     if (part.length === 0) continue;
     const rows = await database.db
       .select({
-        id: projectTasks.id,
-        cloudAgentId: projectTasks.cloudAgentId,
+        id: projectTaskCloudAgentLinks.taskId,
+        cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId,
       })
-      .from(projectTasks)
+      .from(projectTaskCloudAgentLinks)
+      .innerJoin(projectTasks, eq(projectTasks.id, projectTaskCloudAgentLinks.taskId))
       .innerJoin(projects, eq(projects.id, projectTasks.projectId))
       .where(
         and(
           eq(projects.workspaceId, workspaceId),
-          inArray(projectTasks.cloudAgentId, part),
+          inArray(projectTaskCloudAgentLinks.cloudAgentId, part),
+          isNull(projectTasks.archivedAt),
         ),
       );
     for (const row of rows) {
-      if (row.cloudAgentId) map.set(row.cloudAgentId, row.id);
+      const list = map.get(row.cloudAgentId) ?? [];
+      list.push(row.id);
+      map.set(row.cloudAgentId, list);
     }
   }
   return map;
 }
 
-async function replaceTaskTokensFromEvents(
+function unassignedEventWhere(workspaceId: string, importId?: string) {
+  const noTaskLink = sql`NOT EXISTS (
+    SELECT 1
+    FROM project_task_cloud_agent_links l
+    INNER JOIN project_tasks t ON t.id = l.task_id
+    INNER JOIN projects p ON p.id = t.project_id
+    WHERE l.cloud_agent_id = ${aiUsageEvents.cloudAgentId}
+      AND p.workspace_id = ${aiUsageEvents.workspaceId}
+      AND t.archived_at IS NULL
+  )`;
+  return and(
+    eq(aiUsageEvents.workspaceId, workspaceId),
+    importId ? eq(aiUsageEvents.importId, importId) : undefined,
+    noTaskLink,
+  );
+}
+
+/**
+ * Write each linked task's equal share of the agents' imported events.
+ * One task keeps the whole run. Events point at that task only then.
+ */
+export async function redistributeCloudAgentUsage(
   database: Database,
-  taskId: string,
-): Promise<{ status: 'ok' | 'overflow' | 'empty'; projectId: string | null }> {
+  workspaceId: string,
+  agentIds: readonly string[],
+): Promise<{ projectIds: string[]; overflow: boolean }> {
+  const seed = [...new Set(agentIds.map((id) => id.trim()).filter((id) => id !== ''))];
+  if (seed.length === 0) return { projectIds: [], overflow: false };
+
+  // A task's counters are the sum of every agent it links. Rewriting one
+  // agent has to include the other agents on those tasks, and those agents'
+  // other tasks, or a share would replace a total and drop the rest.
+  const linkRows = await loadAgentLinkClosure(database, workspaceId, seed);
+  const ids = [
+    ...new Set([...seed, ...linkRows.map((row) => row.cloudAgentId)]),
+  ];
   const events = await database.db
     .select({
+      id: aiUsageEvents.id,
+      cloudAgentId: aiUsageEvents.cloudAgentId,
       occurredAt: aiUsageEvents.occurredAt,
       model: aiUsageEvents.model,
       maxMode: aiUsageEvents.maxMode,
@@ -670,35 +705,188 @@ async function replaceTaskTokensFromEvents(
       tokensOutput: aiUsageEvents.tokensOutput,
     })
     .from(aiUsageEvents)
-    .where(eq(aiUsageEvents.projectTaskId, taskId));
-  const [task] = await database.db
-    .select({ projectId: projectTasks.projectId })
-    .from(projectTasks)
-    .where(eq(projectTasks.id, taskId))
-    .limit(1);
-  if (events.length === 0) {
-    return { status: 'empty', projectId: task?.projectId ?? null };
+    .where(
+      and(
+        eq(aiUsageEvents.workspaceId, workspaceId),
+        inArray(aiUsageEvents.cloudAgentId, ids),
+      ),
+    );
+
+  const tasksByAgent = new Map<string, Array<{ taskId: string; projectId: string }>>();
+  for (const row of linkRows) {
+    const list = tasksByAgent.get(row.cloudAgentId) ?? [];
+    if (!list.some((item) => item.taskId === row.taskId)) list.push(row);
+    tasksByAgent.set(row.cloudAgentId, list);
   }
-  const aggregate = aggregateLinkedUsage(events);
-  if (aggregate === 'overflow' || aggregate == null) {
-    return { status: 'overflow', projectId: task?.projectId ?? null };
+
+  let overflow = false;
+  for (const agentId of ids) {
+    const tasks = tasksByAgent.get(agentId) ?? [];
+    const sole = tasks.length === 1 ? tasks[0]?.taskId ?? null : null;
+    await database.db
+      .update(aiUsageEvents)
+      .set({ projectTaskId: sole })
+      .where(
+        and(
+          eq(aiUsageEvents.workspaceId, workspaceId),
+          eq(aiUsageEvents.cloudAgentId, agentId),
+        ),
+      );
   }
-  await database.db
-    .update(projectTasks)
-    .set({
-      tokensUsed: aggregate.tokensUsed,
-      tokensInput: aggregate.tokensInput,
-      tokensOutput: aggregate.tokensOutput,
-      tokensCache: aggregate.tokensCache,
-      tokensCacheWrite: aggregate.tokensCacheWrite,
-      aiModelId: aggregate.modelId,
-      aiPricingTier: aggregate.pricingTier,
-      usageOccurredAt: aggregate.usageOccurredAt,
-      billingPeriod: aggregate.billingPeriod,
-      updatedAt: new Date(),
+
+  type ShareAcc = {
+    tokensInput: number;
+    tokensOutput: number;
+    tokensCache: number;
+    tokensCacheWrite: number;
+    modelId: string | null;
+    pricingTier: string | null;
+    usageOccurredAt: Date | null;
+    billingPeriod: string | null;
+    projectId: string;
+  };
+  const byTask = new Map<string, ShareAcc>();
+  for (const agentId of ids) {
+    const tasks = tasksByAgent.get(agentId) ?? [];
+    const agentEvents = events.filter((row) => row.cloudAgentId === agentId);
+    const aggregate = aggregateLinkedUsage(agentEvents);
+    if (aggregate === 'overflow') {
+      overflow = true;
+      continue;
+    }
+    if (!aggregate || tasks.length === 0) continue;
+    const shares = splitTokensAcrossTasks(aggregate, tasks.map((task) => task.taskId));
+    for (const share of shares) {
+      const projectId = tasks.find((task) => task.taskId === share.taskId)?.projectId ?? '';
+      const current = byTask.get(share.taskId) ?? {
+        tokensInput: 0,
+        tokensOutput: 0,
+        tokensCache: 0,
+        tokensCacheWrite: 0,
+        modelId: null,
+        pricingTier: null,
+        usageOccurredAt: null,
+        billingPeriod: null,
+        projectId,
+      };
+      current.tokensInput += share.tokensInput;
+      current.tokensOutput += share.tokensOutput;
+      current.tokensCache += share.tokensCache;
+      current.tokensCacheWrite += share.tokensCacheWrite;
+      if (
+        !current.usageOccurredAt
+        || aggregate.usageOccurredAt.getTime() >= current.usageOccurredAt.getTime()
+      ) {
+        current.modelId = aggregate.modelId;
+        current.pricingTier = aggregate.pricingTier;
+        current.usageOccurredAt = aggregate.usageOccurredAt;
+        current.billingPeriod = aggregate.billingPeriod;
+      }
+      byTask.set(share.taskId, current);
+    }
+  }
+
+  const projectIds = new Set<string>();
+  const linkedTaskIds = [...new Set(linkRows.map((row) => row.taskId))];
+  for (const taskId of linkedTaskIds) {
+    const share = byTask.get(taskId);
+    const projectId = share?.projectId
+      ?? linkRows.find((row) => row.taskId === taskId)?.projectId
+      ?? null;
+    if (projectId) projectIds.add(projectId);
+    if (!share) {
+      await zeroTaskTokens(database, taskId);
+      continue;
+    }
+    const tokensUsed =
+      share.tokensInput + share.tokensOutput + share.tokensCache + share.tokensCacheWrite;
+    await database.db
+      .update(projectTasks)
+      .set({
+        tokensUsed,
+        tokensInput: share.tokensInput,
+        tokensOutput: share.tokensOutput,
+        tokensCache: share.tokensCache,
+        tokensCacheWrite: share.tokensCacheWrite,
+        aiModelId: share.modelId,
+        aiPricingTier: share.pricingTier,
+        usageOccurredAt: share.usageOccurredAt,
+        billingPeriod: share.billingPeriod,
+        updatedAt: new Date(),
+      })
+      .where(eq(projectTasks.id, taskId));
+  }
+  return { projectIds: [...projectIds], overflow };
+}
+
+async function loadAgentLinkClosure(
+  database: Database,
+  workspaceId: string,
+  seed: readonly string[],
+): Promise<Array<{ taskId: string; cloudAgentId: string; projectId: string }>> {
+  const agentIds = new Set(seed);
+  const taskIds = new Set<string>();
+  let rows: Array<{ taskId: string; cloudAgentId: string; projectId: string }> = [];
+  for (let hop = 0; hop < 20; hop += 1) {
+    const byAgent = agentIds.size === 0
+      ? []
+      : await selectAgentLinks(database, workspaceId, {
+          agentIds: [...agentIds],
+        });
+    const byTask = taskIds.size === 0
+      ? []
+      : await selectAgentLinks(database, workspaceId, {
+          taskIds: [...taskIds],
+        });
+    const merged = new Map<string, { taskId: string; cloudAgentId: string; projectId: string }>();
+    for (const row of [...byAgent, ...byTask]) {
+      merged.set(`${row.taskId}\0${row.cloudAgentId}`, row);
+    }
+    const nextAgents = new Set(seed);
+    const nextTasks = new Set<string>();
+    for (const row of merged.values()) {
+      nextAgents.add(row.cloudAgentId);
+      nextTasks.add(row.taskId);
+    }
+    const grew = nextAgents.size !== agentIds.size
+      || nextTasks.size !== taskIds.size
+      || merged.size !== rows.length;
+    agentIds.clear();
+    for (const id of nextAgents) agentIds.add(id);
+    taskIds.clear();
+    for (const id of nextTasks) taskIds.add(id);
+    rows = [...merged.values()];
+    if (!grew) break;
+  }
+  return rows;
+}
+
+async function selectAgentLinks(
+  database: Database,
+  workspaceId: string,
+  filter: { agentIds?: string[]; taskIds?: string[] },
+): Promise<Array<{ taskId: string; cloudAgentId: string; projectId: string }>> {
+  const agentIds = filter.agentIds ?? [];
+  const taskIds = filter.taskIds ?? [];
+  if (agentIds.length === 0 && taskIds.length === 0) return [];
+  return database.db
+    .select({
+      taskId: projectTaskCloudAgentLinks.taskId,
+      cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId,
+      projectId: projectTasks.projectId,
     })
-    .where(eq(projectTasks.id, taskId));
-  return { status: 'ok', projectId: task?.projectId ?? null };
+    .from(projectTaskCloudAgentLinks)
+    .innerJoin(projectTasks, eq(projectTasks.id, projectTaskCloudAgentLinks.taskId))
+    .innerJoin(projects, eq(projects.id, projectTasks.projectId))
+    .where(
+      and(
+        eq(projects.workspaceId, workspaceId),
+        agentIds.length > 0
+          ? inArray(projectTaskCloudAgentLinks.cloudAgentId, agentIds)
+          : inArray(projectTaskCloudAgentLinks.taskId, taskIds),
+        isNull(projectTasks.archivedAt),
+      ),
+    );
 }
 
 async function zeroTaskTokens(database: Database, taskId: string): Promise<void> {

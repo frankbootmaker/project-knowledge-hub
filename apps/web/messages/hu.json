@@ -3181,6 +3181,12 @@
     "cloudAgentId": "Felhőügynök azonosító",
     "cloudAgentIdPlaceholder": "Cursor felhőügynök, például bc-…",
     "cloudAgentIdInvalid": "A felhőügynök azonosítója legfeljebb 80 karakter, szóköz nélkül.",
+    "cloudAgents": "Felhőügynökök",
+    "cloudAgentAdd": "Hozzáadás",
+    "cloudAgentRemove": "Eltávolítás",
+    "cloudAgentShareHint": "Ugyanaz a felhőügynök több feladathoz is kapcsolható. Az importált használat egyszer tárolódik, és egyenlő egész tokenekre oszlik ezek között. A maradék a legkisebb feladat-azonosítóhoz kerül.",
+    "cloudAgentTasks": "Az ügynök feladatai",
+    "cloudAgentOnlyThis": "Csak ez a feladat",
     "statusField": "Állapot",
     "completionField": "Készültség",
     "rowStatus": "Állapot: {item}"

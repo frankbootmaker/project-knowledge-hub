@@ -81,6 +81,11 @@ type TaskBody = {
   pricingTier: string | null;
   billingPeriod: string | null;
   cloudAgentId: string | null;
+  cloudAgentIds?: string[];
+  cloudAgentLinks?: Array<{
+    cloudAgentId: string;
+    tasks: Array<{ id: string }>;
+  }>;
 };
 
 describe.skipIf(!hasIntegrationEnv)('AI usage CSV import', () => {
@@ -365,5 +370,81 @@ describe.skipIf(!hasIntegrationEnv)('AI usage CSV import', () => {
       'cursor-usage.csv',
       'cursor-usage.csv',
     ]);
+
+    const secondTask = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/tasks`,
+      headers: headers(adminCookie),
+      payload: { title: 'Second cloud agent task' },
+    });
+    expect(secondTask.statusCode).toBe(200);
+    const taskIdB = (secondTask.json() as { task: TaskBody }).task.id;
+
+    const shared = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-tasks/${taskIdB}`,
+      headers: headers(adminCookie),
+      payload: { cloudAgentIds: [AGENT] },
+    });
+    expect(shared.statusCode).toBe(200);
+    const taskB = (shared.json() as { task: TaskBody }).task;
+    expect(taskB.cloudAgentIds).toEqual([AGENT]);
+    expect(taskB.cloudAgentId).toBe(AGENT);
+    expect(taskB.cloudAgentLinks?.[0]?.tasks.map((item) => item.id).sort()).toEqual(
+      [taskId, taskIdB].sort(),
+    );
+
+    const firstAfterShare = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/project-tasks/${taskId}`,
+      headers: headers(readerCookie),
+    });
+    const taskA = (firstAfterShare.json() as { task: TaskBody }).task;
+    const fullUsed = 1374959 + 22;
+    expect((taskA.tokensUsed ?? 0) + (taskB.tokensUsed ?? 0)).toBe(fullUsed);
+    expect(taskA.tokensUsed).not.toBe(fullUsed);
+    expect(taskB.tokensUsed).not.toBe(fullUsed);
+    expect((taskA.tokensInput ?? 0) + (taskB.tokensInput ?? 0)).toBe(77552 + 7804 + 3);
+    expect((taskA.tokensCacheWrite ?? 0) + (taskB.tokensCacheWrite ?? 0)).toBe(10);
+    expect((taskA.tokensCache ?? 0) + (taskB.tokensCache ?? 0)).toBe(471741 + 811858 + 4);
+    expect((taskA.tokensOutput ?? 0) + (taskB.tokensOutput ?? 0)).toBe(4013 + 1991 + 5);
+    expect(taskA.cloudAgentIds).toEqual([AGENT]);
+
+    const unassignedAfter = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/workspaces/${workspaceId}/ai-usage-events/unassigned`,
+      headers: headers(readerCookie),
+    });
+    const groupsAfter = (unassignedAfter.json() as {
+      groups: Array<{ cloudAgentId: string | null }>;
+    }).groups;
+    expect(groupsAfter.some((group) => group.cloudAgentId === AGENT)).toBe(false);
+
+    const replay = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/${workspaceId}/ai-usage-imports`,
+      headers: headers(adminCookie),
+      payload: { csv: [HEADER, AGENT_ROW_A, EXTRA_ROW].join('\n'), fileName: 'replay.csv' },
+    });
+    expect(replay.statusCode).toBe(200);
+    const replayBody = (replay.json() as {
+      import: { rowCountInserted: number; rowCountDuplicate: number };
+    }).import;
+    expect(replayBody.rowCountInserted).toBe(0);
+    expect(replayBody.rowCountDuplicate).toBe(2);
+
+    const rereadA = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/project-tasks/${taskId}`,
+      headers: headers(readerCookie),
+    });
+    const rereadB = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/project-tasks/${taskIdB}`,
+      headers: headers(readerCookie),
+    });
+    const againA = (rereadA.json() as { task: TaskBody }).task;
+    const againB = (rereadB.json() as { task: TaskBody }).task;
+    expect((againA.tokensUsed ?? 0) + (againB.tokensUsed ?? 0)).toBe(fullUsed);
   });
 });

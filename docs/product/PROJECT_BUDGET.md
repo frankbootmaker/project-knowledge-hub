@@ -92,7 +92,8 @@ project_tasks
   ├── ai_model_id / ai_pricing_tier
   ├── usage_occurred_at / billing_period   (audit only)
   ├── ai_system_id
-  └── cloud_agent_id   (links imported Cursor usage)
+  ├── cloud_agent_id   (mirror of the first sorted link; not unique)
+  └── project_task_cloud_agent_links (task_id, cloud_agent_id; same agent on many tasks)
 
 project_cost_snapshots
   └── (project_id, captured_on) → bac, pv, ev, ac
@@ -167,7 +168,7 @@ Resource RAG (utilization): aggregate planned demand vs capacity → amber when 
 * `POST /api/v1/project-tasks/:id/ai-usage`
 * Stakeholder create/update include engagement/capacity/contract fields
 * MCP: `get_project_budget_summary`, `get_project_resource_utilization`, `update_project_ai_assistant_cost`, `report_project_task_ai_usage`, `list_ai_usage_imports`, `import_ai_usage_csv`, baseline/task/stakeholder money fields (`pm:read` / `pm:write`)
-* Usage CSV: `POST /api/v1/workspaces/:id/ai-usage-imports/preview` and `POST /api/v1/workspaces/:id/ai-usage-imports` (workspace admin). `GET` the import log and `GET .../ai-usage-events/unassigned` follow the same read access as AI Cost. Set `cloudAgentId` on a task to link rows. The Cursor Admin API importer is not built; the `source` column already allows it.
+* Usage CSV: `POST /api/v1/workspaces/:id/ai-usage-imports/preview` and `POST /api/v1/workspaces/:id/ai-usage-imports` (workspace admin). `GET` the import log and `GET .../ai-usage-events/unassigned` follow the same read access as AI Cost. Set `cloudAgentIds` (or one `cloudAgentId`) on a task to link rows. The same cloud agent id may be linked to several tasks. Imported usage stays one row per run. Each linked task stores an equal share of the token buckets; the earliest task id receives any remainder, and the shares sum to the run. Summing task counters does not double count. A month's theoretical total still prices each event once: linked when any non-archived task in the workspace has that agent, otherwise unassigned. Project allocation uses the same equal token split and skips the task counters for an imported agent. The Cursor Admin API importer is not built; the `source` column already allows it.
 
 ## Out of scope
 
