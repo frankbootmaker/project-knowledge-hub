@@ -3837,6 +3837,7 @@
     "usageUnassignedTitle": "Unassigned usage",
     "usageUnassignedEmpty": "No unassigned usage.",
     "usageUnassignedHint": "Rows that do not match a task stay on the workspace. Set the cloud agent id on a task to link them.",
+    "usageUnassignedSearch": "Search cloud agent or model…",
     "usageCloudAgent": "Cloud agent",
     "usageModel": "Model",
     "usageLatest": "Latest",

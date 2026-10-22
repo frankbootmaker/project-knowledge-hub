@@ -3837,6 +3837,7 @@
     "usageUnassignedTitle": "Hozzá nem rendelt használat",
     "usageUnassignedEmpty": "Nincs hozzá nem rendelt használat.",
     "usageUnassignedHint": "A feladathoz nem illeszkedő sorok a munkaterületen maradnak. A feladat felhőügynök-azonosítója köti össze őket.",
+    "usageUnassignedSearch": "Felhőügynök vagy modell keresése…",
     "usageCloudAgent": "Felhőügynök",
     "usageModel": "Modell",
     "usageLatest": "Legutóbbi",
