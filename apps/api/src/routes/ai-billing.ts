@@ -5,6 +5,7 @@ import { projects, workspaces } from '@project-knowledge-hub/database';
 import {
   AI_BILLING_ENTRY_TYPES,
   AppError,
+  assertAiCostViewBounds,
   projectCurrencySchema,
 } from '@project-knowledge-hub/domain';
 import {
@@ -130,6 +131,7 @@ export async function registerAiBillingRoutes(
     }
     const from = blank(query.from);
     const to = blank(query.to);
+    assertAiCostViewBounds({ from, to });
     const provider = blank(query.provider);
     const period = blank(query.period);
     const windowQuery = {
@@ -173,6 +175,7 @@ export async function registerAiBillingRoutes(
         .parse(request.query);
       const from = blank(query.from);
       const to = blank(query.to);
+      assertAiCostViewBounds({ from, to });
       const overview = await loadWorkspaceAiCostOverview(
         app.database,
         params.workspaceId,
