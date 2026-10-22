@@ -3837,6 +3837,7 @@
     "usageUnassignedTitle": "Nicht zugeordnete Nutzung",
     "usageUnassignedEmpty": "Keine nicht zugeordnete Nutzung.",
     "usageUnassignedHint": "Zeilen ohne passende Aufgabe bleiben im Workspace. Die Cloud-Agent-ID an der Aufgabe verknüpft sie.",
+    "usageUnassignedSearch": "Cloud-Agent oder Modell suchen…",
     "usageCloudAgent": "Cloud-Agent",
     "usageModel": "Modell",
     "usageLatest": "Zuletzt",
