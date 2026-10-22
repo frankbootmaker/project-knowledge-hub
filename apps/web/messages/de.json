@@ -3905,6 +3905,7 @@
     },
     "percent": "Prozent",
     "percentFor": "Prozent für {project}",
+    "percentComputed": "Berechneter Anteil. Eine Zahl setzt einen manuellen Anteil.",
     "allocated": "Zugeteilt",
     "pricesTitle": "Modellpreise",
     "pricesHint": "Listenpreise je 1.000 Tokens. Ein leerer Cache-Schreibpreis fällt auf den Mischpreis zurück. Cache-Lesen und Cache-Schreiben sind getrennt.",

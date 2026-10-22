@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import {
   addCalendarDays,
+  allocationDisplayPercents,
   lastDayOfMonth,
   projectCurrencySchema,
   summarizeAiBillingMonth,
@@ -82,6 +83,7 @@ export type AiCostPoolProject = {
 
 export type AiCostPool = {
   period: string;
+  scheduled?: boolean;
   currency: string;
   originalCurrency?: string;
   aiSystemId: string | null;
@@ -195,6 +197,16 @@ function toLocalInput(iso: string | null): string {
   if (Number.isNaN(date.getTime())) return '';
   const pad = (value: number) => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatShare(value: number): string {
+  return (Math.round(value * 100) / 100).toFixed(2);
+}
+
+function formatPercentTotal(values: readonly number[]): string {
+  const sum = Math.round(values.reduce((total, value) => total + value, 0) * 100) / 100;
+  if (sum === 100) return '100%';
+  return `${sum.toFixed(2)}%`;
 }
 
 function fxDetail(
@@ -906,7 +918,17 @@ export function AiCostAdmin({
         {visiblePools.length === 0 ? (
           <p className="kh-ops-empty">{t('allocationEmpty')}</p>
         ) : (
-          visiblePools.map((pool) => (
+          visiblePools.map((pool) => {
+            const shares = allocationDisplayPercents(
+              pool.projects.map((project) => ({
+                method: project.method,
+                tokens: project.tokens,
+                overridePercent: project.overridePercent,
+                amount: project.amount,
+              })),
+              pool.paidTotal,
+            );
+            return (
             <div
               key={`${pool.period}-${pool.originalCurrency ?? pool.currency}-${pool.aiSystemId ?? 'workspace'}`}
             >
@@ -914,7 +936,7 @@ export function AiCostAdmin({
                 className="kh-ops-panel-meta m-0 px-3 pt-3"
                 title={fxDetail(pool.fxSource, pool.fxRateDate, pool.fxRate, t)}
               >
-                {pool.period}
+                {monthLabel(pool.period, pool.scheduled)}
                 {' · '}
                 {pool.aiSystemName ?? t('workspacePool')}
                 {' · '}
@@ -938,8 +960,11 @@ export function AiCostAdmin({
                     </tr>
                   </thead>
                   <tbody>
-                    {pool.projects.map((project) => {
+                    {pool.projects.map((project, index) => {
                       const key = percentKey(pool, project.projectId);
+                      const share = shares[index] ?? 0;
+                      const manual = project.method === 'override';
+                      const drafted = percents[key] != null;
                       return (
                         <tr key={project.projectId}>
                           <td>
@@ -959,13 +984,19 @@ export function AiCostAdmin({
                                 min="0"
                                 max="100"
                                 step="0.01"
-                                className="ml-auto w-24"
+                                className={
+                                  manual || drafted
+                                    ? 'kh-ops-percent-input ml-auto w-24'
+                                    : 'kh-ops-percent-input kh-ops-percent-computed ml-auto w-24'
+                                }
                                 value={
                                   percents[key] ??
-                                  (project.overridePercent == null
-                                    ? ''
-                                    : String(project.overridePercent))
+                                  (manual && project.overridePercent != null
+                                    ? String(project.overridePercent)
+                                    : '')
                                 }
+                                placeholder={manual ? undefined : formatShare(share)}
+                                title={manual ? undefined : t('percentComputed')}
                                 disabled={pending}
                                 aria-label={t('percentFor', { project: project.name })}
                                 onChange={(event) =>
@@ -976,8 +1007,12 @@ export function AiCostAdmin({
                                 }
                                 onBlur={() => void savePercent(pool, project)}
                               />
+                            ) : manual && project.overridePercent != null ? (
+                              `${project.overridePercent}%`
                             ) : (
-                              (project.overridePercent ?? '—')
+                              <span className="kh-ops-percent-computed">
+                                {formatShare(share)}%
+                              </span>
                             )}
                           </td>
                           <td
@@ -997,10 +1032,24 @@ export function AiCostAdmin({
                       );
                     })}
                   </tbody>
+                  <tfoot>
+                    <tr>
+                      <th>{t('total')}</th>
+                      <td className="kh-ops-num">
+                        {pool.projects.reduce((sum, project) => sum + project.tokens, 0)}
+                      </td>
+                      <td />
+                      <td className="kh-ops-num">{formatPercentTotal(shares)}</td>
+                      <td className="kh-ops-num">
+                        {formatMoney(pool.paidTotal, pool.currency, locale)}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </section>
 

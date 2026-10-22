@@ -11,6 +11,7 @@ import {
   workspaces,
 } from '@project-knowledge-hub/database';
 import {
+  allocationTokenSlices,
   assertAiBillingPeriod,
   assertAllocationPercent,
   assertServiceDate,
@@ -31,6 +32,7 @@ import {
   splitBillingEntryByMonth,
   usageHasTokenBreakdown,
   type AiBillingAllocationMethod,
+  type AllocationTokenSlice,
   type AiBillingEntryType,
   type AiBillingProjectShare,
   type AiCostUsageSlice,
@@ -535,6 +537,19 @@ export async function setAiBillingAllocation(database: Database, input: {
   });
 }
 
+function tokensInSlices(
+  slices: readonly AllocationTokenSlice[],
+  projectId: string,
+  period: string,
+  aiSystemId: string | null,
+): number {
+  return slices.reduce((sum, slice) => {
+    if (slice.projectId !== projectId || slice.period !== period) return sum;
+    if (aiSystemId != null && slice.aiSystemId !== aiSystemId) return sum;
+    return sum + slice.tokens;
+  }, 0);
+}
+
 function usagePeriod(
   billingPeriod: string | null,
   usageOccurredAt: Date | null,
@@ -839,6 +854,16 @@ export async function loadProjectPaidAi(
   const billableUsages = usages.filter(
     (row) => !taskSupersededByImport(row.cloudAgentId, imported.agentIds),
   );
+  const tokenSlices = allocationTokenSlices({
+    tasks: usages.map((row) => ({
+      projectId: row.projectId,
+      aiSystemId: row.aiSystemId,
+      cloudAgentId: row.cloudAgentId,
+      period: row.period,
+      tokens: row.tokens,
+    })),
+    events: imported.allocationEvents,
+  });
 
   const ratesBySystem = new Map(
     systemInputs.map((system) => [system.systemId, system.rates]),
@@ -851,15 +876,7 @@ export async function loadProjectPaidAi(
     projectId: string,
     period: string,
     aiSystemId: string | null,
-  ) =>
-    usages
-      .filter(
-        (row) =>
-          row.projectId === projectId &&
-          row.period === period &&
-          (aiSystemId == null || row.aiSystemId === aiSystemId),
-      )
-      .reduce((sum, row) => sum + row.tokens, 0);
+  ) => tokensInSlices(tokenSlices, projectId, period, aiSystemId);
 
   const openProjects = projectRows.filter(
     (row) => !row.archivedAt && row.status !== 'archived',
@@ -1080,6 +1097,8 @@ export type WorkspaceAiAllocationProject = {
 
 export type WorkspaceAiCostPool = {
   period: string;
+  /** True when this month is after the viewer's current month. */
+  scheduled?: boolean;
   currency: ProjectCurrency;
   originalCurrency: string;
   aiSystemId: string | null;
@@ -1215,7 +1234,18 @@ export async function loadWorkspaceAiCostOverview(
 
   const today = new Date().toISOString().slice(0, 10);
   const imported = await loadImportedTheoretical(database, workspaceId);
-  const usages = (await taskUsageRows(database, taskRows, today)).filter(
+  const taskUsages = await taskUsageRows(database, taskRows, today);
+  const tokenSlices = allocationTokenSlices({
+    tasks: taskUsages.map((row) => ({
+      projectId: row.projectId,
+      aiSystemId: row.aiSystemId,
+      cloudAgentId: row.cloudAgentId,
+      period: row.period,
+      tokens: row.tokens,
+    })),
+    events: imported.allocationEvents,
+  });
+  const usages = taskUsages.filter(
     (row) => !taskSupersededByImport(row.cloudAgentId, imported.agentIds),
   );
 
@@ -1245,15 +1275,7 @@ export async function loadWorkspaceAiCostOverview(
     projectId: string,
     period: string,
     aiSystemId: string | null,
-  ) =>
-    usages
-      .filter(
-        (row) =>
-          row.projectId === projectId &&
-          row.period === period &&
-          (aiSystemId == null || row.aiSystemId === aiSystemId),
-      )
-      .reduce((sum, row) => sum + row.tokens, 0);
+  ) => tokensInSlices(tokenSlices, projectId, period, aiSystemId);
 
   const paidSlices = slicesFromEntries(entryRows);
   const fxDates = [
