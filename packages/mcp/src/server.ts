@@ -893,6 +893,9 @@ export type McpToolHandlers = {
     archived?: boolean;
     deliveryLinks?: Array<{ entityType: string; entityId: string }>;
   }) => Promise<unknown>;
+  applyProjectChangeToBaseline: (input: {
+    changeId: string;
+  }) => Promise<unknown>;
   getKnowledgeRecordDeliveryLinks: (input: {
     recordId: string;
   }) => Promise<unknown>;
@@ -1626,6 +1629,7 @@ export function createKnowledgeHubMcpServer(
         title: z.string(),
         slug: z.string(),
         recordType: z.string(),
+        humanKey: z.string().nullable(),
       })
       .nullable();
   const projectBaselineOutput = {
@@ -1645,6 +1649,8 @@ export function createKnowledgeHubMcpServer(
       workdaysPerWeek: z.number().int(),
       nonWorkingDays: z.array(z.string()),
       finishDate: nullableOutputText(),
+      forecastFinishDate: nullableOutputText(),
+      baselineFinishDate: nullableOutputText(),
       durationWorkingDays: z.number().int().nullable(),
       charterRecordId: nullableOutputText(),
       charterRecord: pinnedRecordOutput(),
@@ -1700,7 +1706,7 @@ export function createKnowledgeHubMcpServer(
     'get_project',
     {
       description:
-        'Get a project by id or projectSlug. Returns status (lifecycle stage), health (health.overall is the RAG), methodology, baseline, calendar, finishDate, durationWorkingDays, charter/plan, keyPrefix, budgets, definitionOfDone, url, and MCP provenance. health.financial is null when the budget summary failed.',
+        'Get a project by id or projectSlug. Returns status (lifecycle stage), health.overall (RAG; financial null if budget summary failed), baseline, calendar, finishDate, forecastFinishDate, baselineFinishDate, durationWorkingDays, charter/plan, keyPrefix, budgets, definitionOfDone, url, MCP provenance.',
       inputSchema: {
         projectId: z.string().uuid().optional(),
         projectSlug: z.string().min(1).max(80).optional(),
@@ -1726,7 +1732,7 @@ export function createKnowledgeHubMcpServer(
     'update_project_baseline',
     {
       description:
-        'Update project baseline window, working calendar, pinned docs, definitionOfDone, currency, budgets, and issue key prefix. hoursPerWorkday, workdaysPerWeek (Monday-first, 1–7), and nonWorkingDays (YYYY-MM-DD, replaces the list) drive scheduling. finishDate and durationWorkingDays are calculated from the plan and are not inputs. Returns the saved project, including definitionOfDone (string or null). Budget fields accept number or string and are returned as JSON numbers. Requires pm:write.',
+        'Update project baseline window, working calendar, pinned docs, definitionOfDone, currency, budgets, and issue key prefix. charterRecordId and initialPlanRecordId accept a UUID or document key in this project, any record type. hoursPerWorkday, workdaysPerWeek (Monday-first, 1–7), and nonWorkingDays (YYYY-MM-DD, replaces the list) drive scheduling. endDate is the approved baseline finish. finishDate, forecastFinishDate, baselineFinishDate, and durationWorkingDays are calculated and are not inputs. Apply an approved schedule change with apply_project_change_to_baseline. Returns the saved project, including definitionOfDone and pinned key and title. Budget fields accept number or string and are returned as JSON numbers. Requires pm:write.',
       inputSchema: {
         projectId: z.string().uuid(),
         startDate: isoDateNullableSchema.optional(),
@@ -1734,8 +1740,8 @@ export function createKnowledgeHubMcpServer(
         hoursPerWorkday: hoursPerWorkdaySchema.optional(),
         workdaysPerWeek: workdaysPerWeekSchema.optional(),
         nonWorkingDays: nonWorkingDaysSchema.nullable().optional(),
-        charterRecordId: z.string().uuid().nullable().optional(),
-        initialPlanRecordId: z.string().uuid().nullable().optional(),
+        charterRecordId: entityRef.nullable().optional(),
+        initialPlanRecordId: entityRef.nullable().optional(),
         definitionOfDone: z.string().max(20000).nullable().optional(),
         currency: projectCurrencyEnum.optional(),
         initialBudget: moneyInput.optional(),
@@ -4216,6 +4222,18 @@ export function createKnowledgeHubMcpServer(
     async (args) =>
       wrap('update_project_change_item', 'pm:write', () =>
         handlers.updateProjectChangeItem(args),
+      )(),
+  );
+
+  server.tool(
+    'apply_project_change_to_baseline',
+    'Apply an approved change request that stores a baseline start or finish. Writes those dates onto the project, marks the change implemented, and records an audit entry. A second call does not write again. changeId may be a UUID or human key. Requires pm:write.',
+    {
+      changeId: entityRef,
+    },
+    async (args) =>
+      wrap('apply_project_change_to_baseline', 'pm:write', () =>
+        handlers.applyProjectChangeToBaseline(args),
       )(),
   );
 

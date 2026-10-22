@@ -137,6 +137,8 @@ function scheduleFields(
     workdaysPerWeek: calendar.workdaysPerWeek,
     nonWorkingDays: facts?.nonWorkingDays ?? [],
     finishDate: facts?.finishDate ?? null,
+    forecastFinishDate: facts?.forecastFinishDate ?? facts?.finishDate ?? null,
+    baselineFinishDate: facts?.baselineFinishDate ?? project.endDate ?? null,
     durationWorkingDays: facts?.durationWorkingDays ?? null,
   };
 }
@@ -357,14 +359,12 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       await assertPinnedKnowledgeRecord(app.database, {
         recordId: body.charterRecordId,
         projectId: created.id,
-        expectedTypes: ['project-charter'],
       });
     }
     if (body.initialPlanRecordId) {
       await assertPinnedKnowledgeRecord(app.database, {
         recordId: body.initialPlanRecordId,
         projectId: created.id,
-        expectedTypes: ['plan'],
       });
     }
     if (body.charterRecordId || body.initialPlanRecordId) {
@@ -560,14 +560,12 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       await assertPinnedKnowledgeRecord(app.database, {
         recordId: nextCharterId,
         projectId: project.id,
-        expectedTypes: ['project-charter'],
       });
     }
     if (nextPlanId) {
       await assertPinnedKnowledgeRecord(app.database, {
         recordId: nextPlanId,
         projectId: project.id,
-        expectedTypes: ['plan'],
       });
     }
 

@@ -305,12 +305,30 @@ export function planWindowFromDatedItems(
   return { start, finish };
 }
 
-/** Working days from the plan's earliest start to its latest finish. */
+/**
+ * Inclusive working days from `start` through `finish`.
+ * A working start day counts, so one working day is duration 1.
+ * A non-working start day does not. `diffWorkingDays` stays exclusive of
+ * the start day because task scheduling uses that span.
+ */
+export function inclusiveWorkingDays(
+  start: string,
+  finish: string,
+  calendar: ProjectWorkingCalendar = DEFAULT_PROJECT_CALENDAR,
+): number {
+  const span = diffWorkingDays(start, finish, calendar);
+  return span + (isWorkingDay(start, calendar) ? 1 : 0);
+}
+
+/**
+ * Working days from a baseline start through its approved finish.
+ * The start day counts when it is a working day.
+ */
 export function planDurationWorkingDays(
   window: { start: string | null; finish: string | null },
   calendar: ProjectWorkingCalendar = DEFAULT_PROJECT_CALENDAR,
 ): number | null {
   if (!window.start || !window.finish) return null;
   if (window.finish < window.start) return null;
-  return diffWorkingDays(window.start, window.finish, calendar);
+  return inclusiveWorkingDays(window.start, window.finish, calendar);
 }

@@ -1406,6 +1406,7 @@ export {
   coerceProjectCalendar,
   diffWorkingDays,
   hoursPerWorkdaySchema,
+  inclusiveWorkingDays,
   isWorkingDay,
   isoWeekday,
   nonWorkingDaySchema,

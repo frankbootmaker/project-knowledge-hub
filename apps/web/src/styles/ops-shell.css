@@ -4014,6 +4014,19 @@ a.kh-ops-choice {
   font-weight: 400;
   letter-spacing: normal;
   line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.kh-input[type='date'],
+.kh-input[type='number'],
+.kh-input[type='date']::-webkit-datetime-edit,
+.kh-input[type='date']::-webkit-datetime-edit-fields-wrapper,
+.kh-input[type='date']::-webkit-datetime-edit-text,
+.kh-input[type='date']::-webkit-datetime-edit-month-field,
+.kh-input[type='date']::-webkit-datetime-edit-day-field,
+.kh-input[type='date']::-webkit-datetime-edit-year-field {
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
 .kh-btn.kh-btn-danger-outline {

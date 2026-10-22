@@ -21,7 +21,12 @@ import {
 
 export type ProjectScheduleFacts = {
   nonWorkingDays: string[];
+  /** Latest delivery-item finish. Forecast, not the approved baseline. */
   finishDate: string | null;
+  forecastFinishDate: string | null;
+  /** Approved baseline finish (`projects.end_date`). */
+  baselineFinishDate: string | null;
+  /** Inclusive working days from the project start through the baseline finish. */
   durationWorkingDays: number | null;
 };
 
@@ -29,6 +34,8 @@ type CalendarProject = {
   id: string;
   hoursPerWorkday?: number | string | null;
   workdaysPerWeek?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
 };
 
 type DatedRow = {
@@ -94,10 +101,11 @@ export async function replaceProjectNonWorkingDays(
 }
 
 /**
- * Plan finish and working-day duration from scheduled delivery items.
- * Parent rows already store the PRO-T-73 rollup (earliest child start,
- * latest child end). Cancelled and archived items are left out, matching
- * that rollup. The window is the earliest remaining start to the latest end.
+ * Forecast finish is the latest scheduled delivery end. Parent rows already
+ * store the PRO-T-73 rollup (earliest child start, latest child end).
+ * Cancelled and archived items are left out. Duration is not that window:
+ * it is the inclusive working-day count from the project start through the
+ * approved baseline finish (`endDate`).
  */
 export async function loadProjectScheduleFacts(
   database: Database,
@@ -209,10 +217,16 @@ export async function loadProjectScheduleFacts(
       nonWorkingDays,
     });
     const window = planWindowFromDatedItems(dated.get(project.id) ?? []);
+    const baselineFinishDate = project.endDate ?? null;
     result.set(project.id, {
       nonWorkingDays: calendar.nonWorkingDays.slice(),
       finishDate: window.finish,
-      durationWorkingDays: planDurationWorkingDays(window, calendar),
+      forecastFinishDate: window.finish,
+      baselineFinishDate,
+      durationWorkingDays: planDurationWorkingDays(
+        { start: project.startDate ?? null, finish: baselineFinishDate },
+        calendar,
+      ),
     });
   }
   return result;

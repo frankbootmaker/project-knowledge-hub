@@ -21,6 +21,7 @@ import {
   requireProjectContext,
 } from '../lib/project-delivery.js';
 import {
+  applyChangeToBaseline,
   createChangeItem,
   deleteChangeItem,
   getChangeItem,
@@ -175,6 +176,44 @@ export async function registerProjectChangeRoutes(
 
     return { changeItem };
   });
+
+  app.post(
+    '/api/v1/project-change-items/:changeId/apply-baseline',
+    async (request) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z.object({ changeId: z.string().uuid() }).parse(request.params);
+      const existing = await getChangeItem(app.database, params.changeId);
+      const { project } = await requireProjectContext(
+        app.database,
+        existing.projectId,
+      );
+      requireWorkspaceMaintainer(principal, project.workspaceId);
+      assertProjectNotArchived(project);
+
+      const result = await applyChangeToBaseline(app.database, params.changeId);
+      if (result.applied) {
+        await writeAuditEvent(app.database, {
+          organizationId: await workspaceOrgId(app, project.workspaceId),
+          actorType: 'user',
+          actorId: principal.userId,
+          action: 'project.change_baseline_applied',
+          entityType: 'project_change_item',
+          entityId: result.changeItem.id,
+          metadata: {
+            projectId: project.id,
+            baselineStartBefore: project.startDate,
+            baselineStartAfter: result.changeItem.baselineStartAfter,
+            baselineEndBefore: project.endDate,
+            baselineEndAfter: result.changeItem.baselineEndAfter,
+          },
+          ipAddress: request.ip,
+        });
+      }
+
+      return result;
+    },
+  );
 
   app.delete('/api/v1/project-change-items/:changeId', async (request) => {
     assertMutatingOrigin(app, request);
