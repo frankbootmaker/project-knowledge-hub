@@ -340,12 +340,24 @@ importers:
 
   packages/document-import:
     dependencies:
+      '@project-knowledge-hub/blob-store':
+        specifier: workspace:*
+        version: link:../blob-store
+      '@project-knowledge-hub/config':
+        specifier: workspace:*
+        version: link:../config
       '@project-knowledge-hub/conversation-import':
         specifier: workspace:*
         version: link:../conversation-import
+      '@project-knowledge-hub/database':
+        specifier: workspace:*
+        version: link:../database
       '@project-knowledge-hub/domain':
         specifier: workspace:*
         version: link:../domain
+      drizzle-orm:
+        specifier: ^0.44.2
+        version: 0.44.7(postgres@3.4.9)
       zod:
         specifier: ^3.25.76
         version: 3.25.76

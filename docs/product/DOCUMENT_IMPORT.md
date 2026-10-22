@@ -58,6 +58,16 @@ Health: `GET {MARKITDOWN_URL}/health` reports `vision`, `tesseract`, and availab
 
 System Admin → **AI providers** registers named OpenAI-compatible connections and binds them to **Vision OCR** (and separately **Translation**). When a binding is set, the worker passes `visionBaseUrl` / `visionApiKey` / `visionModel` into `kh-markitdown` `/convert` so OCR can use a different model than translation. Unbound services fall back to `VISION_LLM_*`.
 
+## Agents (MCP)
+
+`import_document_knowledge_record` (`knowledge:write`, via `call_hub_tool` on the ChatGPT OAuth surface) runs this same pipeline and returns the draft in one call:
+
+* Input: `workspaceId`, plus `contentBase64` + `filename` + `contentType`, **or** `mediaId` of a file already stored in that workspace. Optional `projectId`, `title`, `recordType` (default `note`), `language`.
+* The acting user must be a workspace maintainer (same gate as the upload form). Type and size checks are `isAllowedUpload` and `DOCUMENT_IMPORT_MAX_BYTES`.
+* The original is stored, converted by `processDocumentImportConvert` (the worker's converter; no second copy of the MarkItDown logic), then saved as a draft with `sourceType: import` and `sourceOfTruthMode: imported_snapshot`.
+* Success returns `knowledgeRecord.id`, `humanKey` / `key`, and `contentMarkdown`.
+* Bad input is an MCP error (`isError`) whose text starts with the code: `VALIDATION_ERROR`, `DOCUMENT_IMPORT_TYPE_UNSUPPORTED`, `DOCUMENT_IMPORT_TOO_LARGE`, `DOCUMENT_IMPORT_DISABLED`, or `FORBIDDEN`.
+
 ## UI entry
 
 Workspace → **New import** → Documents or Images → choose OCR engine → upload → wait for status `ready` → **Create draft**.

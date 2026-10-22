@@ -223,6 +223,18 @@ export type McpToolHandlers = {
     generatedByModel?: string;
     sourceTitle?: string;
   }) => Promise<unknown>;
+  importDocumentKnowledgeRecord: (input: {
+    workspaceId: string;
+    projectId?: string;
+    title?: string;
+    recordType?: string;
+    language?: string;
+    acknowledgeSecrets?: boolean;
+    filename?: string;
+    contentType?: string;
+    contentBase64?: string;
+    mediaId?: string;
+  }) => Promise<unknown>;
   updateKnowledgeRecord: (input: {
     recordId: string;
     changeMessage: string;
@@ -2059,6 +2071,33 @@ export function createKnowledgeHubMcpServer(
           workspaceId: args.workspaceId,
           projectId: args.projectId,
           systemId: args.systemId,
+        },
+      )(),
+  );
+
+  server.tool(
+    'import_document_knowledge_record',
+    'Import a PDF or DOCX as a draft Markdown knowledge record. Pass contentBase64, filename, and contentType, or mediaId of a file already in the workspace. Optional projectId, title, recordType, language. Same type and size checks as the web import. Requires knowledge:write and a workspace maintainer. Returns id, humanKey, and contentMarkdown.',
+    {
+      workspaceId: z.string().uuid(),
+      projectId: z.string().uuid().optional(),
+      title: z.string().min(1).max(300).optional(),
+      recordType: z.string().min(1).max(64).optional(),
+      language: z.string().min(2).max(16).optional(),
+      acknowledgeSecrets: z.boolean().optional(),
+      filename: z.string().min(1).max(200).optional(),
+      contentType: z.string().min(1).max(200).optional(),
+      contentBase64: z.string().min(1).max(40_000_000).optional(),
+      mediaId: z.string().uuid().optional(),
+    },
+    async (args) =>
+      wrap(
+        'import_document_knowledge_record',
+        'knowledge:write',
+        () => handlers.importDocumentKnowledgeRecord(args),
+        {
+          workspaceId: args.workspaceId,
+          projectId: args.projectId,
         },
       )(),
   );

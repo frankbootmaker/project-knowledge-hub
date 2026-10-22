@@ -30,6 +30,7 @@ Require API client scope `knowledge:write` (not granted by default), a non-empty
 workspace allowlist, and `actingUserId`:
 
 * `create_knowledge_record` — always creates a **draft** with `ai_generated_draft` provenance
+* `import_document_knowledge_record` — import a PDF or DOCX (or other document-lane file) as a **draft** Markdown record. Pass `contentBase64` + `filename` + `contentType`, or `mediaId` of a file already stored in the workspace. Optional `projectId`, `title`, `recordType` (default `note`), and `language`. The acting user must be a workspace maintainer. Same type and size checks as the web import (`DOCUMENT_IMPORT_MAX_BYTES`, default 25 MiB). Conversion uses the shared MarkItDown pipeline and returns `id`, `humanKey` / `key`, and `contentMarkdown`. Validation errors are `isError` with a `CODE: message` text (`DOCUMENT_IMPORT_TYPE_UNSUPPORTED`, `DOCUMENT_IMPORT_TOO_LARGE`, `FORBIDDEN`). ChatGPT calls it through `call_hub_tool`.
 * `update_knowledge_record` — updates as **draft**; requires `changeMessage`
 * `set_knowledge_record_delivery_links` — replace epic/story/task/**sprint** links (record must be project-scoped; entity ids may be human keys)
 * `set_knowledge_record_relations` — replace relations stored from a record (`relates_to`, `depends_on`, `refines`, `derived_from`, `contradicts`). Does not change lifecycle. Rejects cycles on `depends_on` and `refines`
