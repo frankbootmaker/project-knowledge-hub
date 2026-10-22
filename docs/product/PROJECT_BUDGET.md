@@ -24,7 +24,7 @@ Track **project currency and BAC**, **stakeholder hourly rates and capacity**, *
 | System OpEx modes | On other catalogue systems linked to the project: `flat` \| `one_time` \| `note_only` (`note_only` / unset → **$0**) |
 | Flat fee | Monthly amount accrued over project start→end (calendar-day fraction); shared by AI and IT flat modes |
 | One-time fee | Full `it_one_time_cost` counted in AC when mode is `one_time` |
-| Token fee | Tasks with only `tokens_used`: `(tokens_used / 1000) × ai_token_rate_per_1k`. Tasks with `tokens_input` / `tokens_output` / `tokens_cache` / `tokens_cache_write`: each part × its per-1k rate. A null split rate uses the blended `ai_token_rate_per_1k`. Cache write is a separate price from cache read. `tokens_used` is the sum of the breakdown. This list-price figure is the theoretical API cost. It is not added to AC when a billing-ledger month covers the usage. |
+| Token fee | Task tokens are priced from `ai_model_prices` using the task model (glob: workspace row, then global). Amounts are per 1,000,000 tokens. Tasks with only `tokens_used` use the blended rate. A breakdown uses input, output, cache read, and cache write. No matching row is unpriced and listed, not counted as a silent zero. Imported usage for the same cloud agent replaces the task. This list-price figure is the theoretical API cost. It is not added to AC when a billing-ledger month covers the usage. |
 | Budget allocation | Optional soft caps (`ai_budget_allocation` / `it_budget_allocation`); warn in UI; do not block writes in v1 |
 | Capacity | Employee assignment / contractor contract window × Mon–Fri × `allocated_daily_hours` |
 | Utilization | Views planned / burn / combined; badges under &lt;70%, on_track 70–110%, over &gt;110% |
@@ -43,7 +43,7 @@ Ledger rows live on the workspace (`ai_billing_entries`), optionally on one AI s
 
 A month with no ledger rows for that project keeps the PRO-T-38 rule: `aiFlatMonthlyFee` accrued over the project window for `flat` / `mixed`, plus token list-price cost for `api` / `mixed`. With no ledger rows at all, `aiAc` is unchanged.
 
-Theoretical API cost is the same list-price math for every mode, including `tokens_cache_write` × `ai_token_rate_cache_write_per_1k` when that split is present. It is reported beside paid cost (`difference` = paid − theoretical, `ratio` = paid / theoretical) and is not added on top of a ledger month. Soft allocation warnings use the paid amount.
+Theoretical API cost is the catalog list price for every mode, including cache write as its own rate. It is reported beside paid cost (`difference` = paid − theoretical, `ratio` = paid / theoretical) and is not added on top of a ledger month. Soft allocation warnings use the paid amount. Allocation of a paid pool is still by token share, then equal split, then a manual percent.
 
 Sprint rows on the summary are theoretical only. Paid fees stay on the calendar month.
 
@@ -69,13 +69,15 @@ project_stakeholders
 systems (ai_assistant)
   ├── ai_cost_mode
   ├── ai_flat_monthly_fee
-  ├── ai_token_rate_per_1k            (blended fallback)
-  ├── ai_token_rate_input_per_1k
-  ├── ai_token_rate_output_per_1k
-  ├── ai_token_rate_cache_per_1k
-  ├── ai_token_rate_cache_write_per_1k
   ├── ai_cost_notes
   └── ai_budget_allocation
+
+ai_model_prices
+  ├── workspace_id null = platform list; set = workspace override
+  ├── model (exact id or glob)
+  ├── input / output / cache read / cache write / blended per 1,000,000 tokens
+  ├── currency, effective_from, source_note, retired_at
+  └── per-system per-1k columns on systems are retired (migration 0080)
 
 systems (non-AI, project-linked)
   ├── it_cost_mode

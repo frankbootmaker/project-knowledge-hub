@@ -298,7 +298,10 @@ export const systems = pgTable(
     /** AI assistant cost mode: flat | api | mixed | note_only. */
     aiCostMode: text('ai_cost_mode'),
     aiFlatMonthlyFee: numeric('ai_flat_monthly_fee', { precision: 14, scale: 2, mode: 'number' }),
-    /** Blended per-1k rate. Fallback when a split rate is null or usage has no breakdown. */
+    /**
+     * Retired per-1k rates. Migration 0080 copied filled values into
+     * ai_model_prices. Pricing uses the catalog. Writes are rejected.
+     */
     aiTokenRatePer1k: numeric('ai_token_rate_per_1k', { precision: 14, scale: 4, mode: 'number' }),
     aiTokenRateInputPer1k: numeric('ai_token_rate_input_per_1k', {
       precision: 14,

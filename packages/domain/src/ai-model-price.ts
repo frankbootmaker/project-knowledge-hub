@@ -48,6 +48,8 @@ export const AI_MODEL_PRICE_SOURCE_GUIDE = [
   'scope global edits the platform list and needs a platform administrator.',
   'scope workspace overrides one pattern or adds a pattern and needs a workspace administrator.',
   'Resolution is workspace override, then global, otherwise unpriced.',
+  'Task-recorded tokens use that same resolution for the task model.',
+  'A task or import with no matching row is listed as unpriced, not priced at zero.',
   'A pattern with more literal characters wins. cursor-grok-4.5-high matches *grok*.',
   'Retire with retire_ai_model_price. List with list_ai_model_prices.',
 ].join(' ');
@@ -523,6 +525,75 @@ export function taskSupersededByImport(
   const id = cloudAgentId?.trim();
   if (!id) return false;
   return imported.has(id);
+}
+
+/** Shown when a task recorded tokens and no model id. */
+export const UNPRICED_MODEL_LABEL = '(no model)';
+
+export type CatalogPer1kRates = {
+  blendedPer1k: number;
+  inputPer1k: number;
+  outputPer1k: number;
+  cachePer1k: number;
+  cacheWritePer1k: number;
+  currency: string;
+};
+
+function perMillionToPer1k(amount: number): number {
+  return amount / 1000;
+}
+
+/** Catalog row as the per-1k rates the legacy token math already rounds with. */
+export function catalogPriceToPer1k(price: AiModelPrice): CatalogPer1kRates {
+  return {
+    blendedPer1k: perMillionToPer1k(price.blendedPerMillion),
+    inputPer1k: perMillionToPer1k(price.inputPerMillion),
+    outputPer1k: perMillionToPer1k(price.outputPerMillion),
+    cachePer1k: perMillionToPer1k(price.cacheReadPerMillion),
+    cacheWritePer1k: perMillionToPer1k(price.cacheWritePerMillion),
+    currency: price.currency,
+  };
+}
+
+/**
+ * Catalog rate for one task. Null is unpriced (listed), not a silent zero rate.
+ * Blank model does not match a pattern. Same glob order as imported usage:
+ * workspace override, then global.
+ */
+export function resolveTaskCatalogRate(
+  model: string | null | undefined,
+  onDate: string,
+  prices: readonly AiModelPrice[],
+): CatalogPer1kRates | null {
+  const name = model?.trim() ?? '';
+  if (!name) return null;
+  const price = matchAiModelPrice(name, onDate, prices);
+  if (!price) return null;
+  return catalogPriceToPer1k(price);
+}
+
+export function unpricedModelKey(model: string | null | undefined): string {
+  const name = model?.trim() ?? '';
+  return name || UNPRICED_MODEL_LABEL;
+}
+
+export function mergeUnpricedModels(
+  lists: readonly (readonly UnpricedModel[])[],
+): UnpricedModel[] {
+  const merged = new Map<string, UnpricedModel>();
+  for (const list of lists) {
+    for (const row of list) {
+      const current = merged.get(row.model) ?? {
+        model: row.model,
+        rowCount: 0,
+        tokensTotal: 0,
+      };
+      current.rowCount += row.rowCount;
+      current.tokensTotal += row.tokensTotal;
+      merged.set(row.model, current);
+    }
+  }
+  return [...merged.values()].sort((left, right) => left.model.localeCompare(right.model));
 }
 
 /**

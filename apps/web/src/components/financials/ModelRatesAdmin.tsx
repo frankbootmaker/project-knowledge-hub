@@ -1,10 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { projectCurrencySchema, type ProjectCurrency } from '@project-knowledge-hub/domain';
-import { parseOptionalNumber } from '../../lib/project-currency';
 import {
   Badge,
   Button,
@@ -16,7 +14,6 @@ import {
   Select,
   useToast,
 } from '../ui';
-import type { AiSystemPrice } from './AiCostAdmin';
 
 type PriceRow = {
   id: string;
@@ -76,21 +73,6 @@ const EMPTY_DRAFT: Draft = {
   inherited: {},
 };
 
-type SystemRateField =
-  | 'aiTokenRatePer1k'
-  | 'aiTokenRateInputPer1k'
-  | 'aiTokenRateOutputPer1k'
-  | 'aiTokenRateCachePer1k'
-  | 'aiTokenRateCacheWritePer1k';
-
-const SYSTEM_FIELDS: SystemRateField[] = [
-  'aiTokenRatePer1k',
-  'aiTokenRateInputPer1k',
-  'aiTokenRateOutputPer1k',
-  'aiTokenRateCachePer1k',
-  'aiTokenRateCacheWritePer1k',
-];
-
 function emptyDraft(model = ''): Draft {
   return { ...EMPTY_DRAFT, model, inherited: {} };
 }
@@ -98,15 +80,11 @@ function emptyDraft(model = ''): Draft {
 export function ModelRatesAdmin({
   scope,
   workspaceId,
-  workspaceSlug,
   canEdit,
-  systems = [],
 }: {
   scope: 'global' | 'workspace';
   workspaceId?: string;
-  workspaceSlug?: string;
   canEdit: boolean;
-  systems?: AiSystemPrice[];
 }) {
   const t = useTranslations('financials');
   const { pushToast } = useToast();
@@ -119,7 +97,6 @@ export function ModelRatesAdmin({
   const [importText, setImportText] = useState<string | null>(null);
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const [plan, setPlan] = useState<ImportPlan | null>(null);
-  const [rates, setRates] = useState<Record<string, Record<string, string>>>({});
   const base = scope === 'global'
     ? '/api/v1/admin/ai-model-prices'
     : `/api/v1/workspaces/${workspaceId}/ai-model-prices`;
@@ -130,10 +107,9 @@ export function ModelRatesAdmin({
     const payload = (await response.json()) as { prices: PriceRow[] };
     setPrices(payload.prices);
     if (scope === 'workspace' && workspaceId) {
-      const usage = await fetch(
-        `/api/v1/workspaces/${workspaceId}/ai-usage-events/unassigned`,
-        { credentials: 'include' },
-      );
+      const usage = await fetch(`/api/v1/workspaces/${workspaceId}/ai-cost`, {
+        credentials: 'include',
+      });
       if (usage.ok) {
         const body = (await usage.json()) as { unpricedModels?: UnpricedModel[] };
         setUnpriced(body.unpricedModels ?? []);
@@ -359,8 +335,6 @@ export function ModelRatesAdmin({
     URL.revokeObjectURL(url);
   }
 
-  const aiSystems = systems.filter((system) => system.systemType === 'ai_assistant');
-
   return (
     <div className="grid gap-3">
       <section className="kh-ops-panel">
@@ -582,19 +556,6 @@ export function ModelRatesAdmin({
         </section>
       ) : null}
 
-      {scope === 'workspace' && workspaceSlug ? (
-        <SystemRates
-          systems={aiSystems}
-          workspaceSlug={workspaceSlug}
-          canEdit={canEdit}
-          pending={pending}
-          rates={rates}
-          setRates={setRates}
-          onError={setError}
-          onSaved={() => pushToast(t('ratesSaved'), 'success')}
-        />
-      ) : null}
-
       {canEdit ? (
         <section className="kh-ops-panel">
           <div className="kh-ops-panel-head">
@@ -747,189 +708,5 @@ async function reprice(
     setError(err instanceof Error ? err.message : t('priceSaveFailed'));
   } finally {
     setPending(false);
-  }
-}
-
-function systemValue(system: AiSystemPrice, field: SystemRateField): number | null {
-  return system[field];
-}
-
-function SystemRates({
-  systems,
-  workspaceSlug,
-  canEdit,
-  pending,
-  rates,
-  setRates,
-  onError,
-  onSaved,
-}: {
-  systems: AiSystemPrice[];
-  workspaceSlug: string;
-  canEdit: boolean;
-  pending: boolean;
-  rates: Record<string, Record<string, string>>;
-  setRates: (value: Record<string, Record<string, string>>) => void;
-  onError: (value: string | null) => void;
-  onSaved: () => void;
-}) {
-  const t = useTranslations('financials');
-
-  function shown(system: AiSystemPrice, field: SystemRateField): string {
-    return rates[system.id]?.[field] ?? (systemValue(system, field) == null
-      ? ''
-      : String(systemValue(system, field)));
-  }
-
-  function fallback(system: AiSystemPrice, field: SystemRateField): number | null {
-    if (field === 'aiTokenRatePer1k') return null;
-    const typed = rates[system.id]?.aiTokenRatePer1k;
-    if (typed != null && typed.trim() !== '') {
-      const parsed = Number(typed);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-    return system.aiTokenRatePer1k;
-  }
-
-  async function save(system: AiSystemPrice) {
-    const body: Record<string, number | null> = {};
-    for (const field of SYSTEM_FIELDS) {
-      const parsed = parseOptionalNumber(shown(system, field));
-      if (parsed === undefined) {
-        onError(t('rateInvalid'));
-        return;
-      }
-      body[field] = parsed;
-    }
-    onError(null);
-    const response = await fetch(`/api/v1/systems/${system.id}`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        Origin: window.location.origin,
-      },
-      body: JSON.stringify(body),
-    });
-    const payload = (await response.json().catch(() => ({}))) as {
-      error?: { message?: string };
-    };
-    if (!response.ok) {
-      onError(payload.error?.message || t('priceSaveFailed'));
-      return;
-    }
-    onSaved();
-  }
-
-  return (
-    <section className="kh-ops-panel">
-      <div className="kh-ops-panel-head">
-        <h2 className="kh-ops-panel-title">{t('pricesTitle')}</h2>
-      </div>
-      <p className="kh-ops-card-body m-0 px-3 pt-3 text-[13px] text-ink-muted">{t('pricesHint')}</p>
-      {systems.length === 0 ? (
-        <p className="kh-ops-empty">{t('pricesEmpty')}</p>
-      ) : (
-        <div className="kh-ops-table-wrap">
-          <table className="kh-ops-data-table">
-            <thead>
-              <tr>
-                <th>{t('system')}</th>
-                <th className="kh-ops-num">{t('rateBlended')}</th>
-                <th className="kh-ops-num">{t('rateInput')}</th>
-                <th className="kh-ops-num">{t('rateOutput')}</th>
-                <th className="kh-ops-num">{t('rateCache')}</th>
-                <th className="kh-ops-num">{t('rateCacheWrite')}</th>
-                {canEdit ? <th>{t('actions')}</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {systems.map((system) => (
-                <tr key={system.id}>
-                  <td>
-                    <Link
-                      href={`/workspaces/${workspaceSlug}/systems/${system.slug}`}
-                      className="kh-text-link"
-                    >
-                      {system.name}
-                    </Link>
-                  </td>
-                  {SYSTEM_FIELDS.map((field) => {
-                    const current = shown(system, field);
-                    const inherited = current.trim() === '' ? fallback(system, field) : null;
-                    const placeholder = inherited == null
-                      ? undefined
-                      : `${inherited} (${t('inherited')})`;
-                    return (
-                      <td key={field} className="kh-ops-num">
-                        {canEdit ? (
-                          <>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.0001"
-                              className="ml-auto w-28 tabular-nums"
-                              value={current}
-                              placeholder={placeholder}
-                              disabled={pending}
-                              aria-label={`${system.name} ${t(systemFieldLabel(field))}`}
-                              onChange={(event) =>
-                                setRates({
-                                  ...rates,
-                                  [system.id]: {
-                                    ...rates[system.id],
-                                    [field]: event.target.value,
-                                  },
-                                })
-                              }
-                            />
-                            {placeholder ? (
-                              <span className="kh-ops-menu-type mt-1 block text-ink-muted">
-                                {placeholder}
-                              </span>
-                            ) : null}
-                          </>
-                        ) : (
-                          current || placeholder || '—'
-                        )}
-                      </td>
-                    );
-                  })}
-                  {canEdit ? (
-                    <td>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={pending}
-                        onClick={() => void save(system)}
-                      >
-                        {t('saveRates')}
-                      </Button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function systemFieldLabel(
-  field: SystemRateField,
-): 'rateBlended' | 'rateInput' | 'rateOutput' | 'rateCache' | 'rateCacheWrite' {
-  switch (field) {
-    case 'aiTokenRatePer1k':
-      return 'rateBlended';
-    case 'aiTokenRateInputPer1k':
-      return 'rateInput';
-    case 'aiTokenRateOutputPer1k':
-      return 'rateOutput';
-    case 'aiTokenRateCachePer1k':
-      return 'rateCache';
-    case 'aiTokenRateCacheWritePer1k':
-      return 'rateCacheWrite';
   }
 }
