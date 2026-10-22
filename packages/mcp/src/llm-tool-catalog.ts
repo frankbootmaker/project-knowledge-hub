@@ -221,12 +221,17 @@ const pinnedRecordOutput = {
   type: 'object',
   nullable: true,
   additionalProperties: false,
-  required: ['id', 'title', 'slug', 'recordType'],
+  required: ['id', 'title', 'slug', 'recordType', 'humanKey'],
   properties: {
     id: uuidProp('Pinned knowledge record id'),
     title: stringProp('Record title'),
     slug: stringProp('Record slug'),
     recordType: stringProp('Knowledge record type'),
+    humanKey: {
+      type: 'string',
+      nullable: true,
+      description: 'Document key such as PRO-NT-1. Null when the record has no key.',
+    },
   },
 };
 
@@ -253,6 +258,8 @@ const projectBaselineResult = {
         'workdaysPerWeek',
         'nonWorkingDays',
         'finishDate',
+        'forecastFinishDate',
+        'baselineFinishDate',
         'durationWorkingDays',
         'charterRecordId',
         'charterRecord',
@@ -308,13 +315,26 @@ const projectBaselineResult = {
         finishDate: {
           ...ymd,
           nullable: true,
-          description: 'Latest scheduled delivery finish. Calculated. Not an input.',
+          description:
+            'Forecast finish: latest scheduled delivery end. Same as forecastFinishDate. Calculated. Not an input.',
+        },
+        forecastFinishDate: {
+          ...ymd,
+          nullable: true,
+          description:
+            'Forecast finish: latest scheduled delivery end. Calculated. Not an input.',
+        },
+        baselineFinishDate: {
+          ...ymd,
+          nullable: true,
+          description:
+            'Approved baseline finish. Same as endDate. Calculated from the stored baseline, not from delivery items.',
         },
         durationWorkingDays: {
           type: 'integer',
           nullable: true,
           description:
-            'Working days from the earliest scheduled start to finishDate. Calculated. Not an input.',
+            'Inclusive working days from the project start through baselineFinishDate. A single working day is 1. Null when start or baseline finish is missing. Calculated. Not an input.',
         },
         charterRecordId: { ...uuidProp('Pinned charter id'), nullable: true },
         charterRecord: pinnedRecordOutput,
@@ -787,7 +807,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_project',
     description:
-      'Get a project by id. projectId (UUID) is required. status is the lifecycle stage. health.overall is the RAG (worst of timeline, risk, and financial; financial is null when the budget summary failed). health.riskReasons explains an amber or red risk RAG (empty when green) using the same rule as get_project_budget_summary riskRag. Returns baseline, working calendar, finishDate, durationWorkingDays, definitionOfDone, keyPrefix, budgets, methodology, url, health, and MCP provenance (createdVia, createdByApiClientId, createdByOauthGrantId, createdByUserId, generatedByModel).',
+      'Get a project by id. projectId (UUID) is required. status is the lifecycle stage. health.overall is the RAG (worst of timeline, risk, and financial; financial is null when the budget summary failed). health.riskReasons explains an amber or red risk RAG (empty when green) using the same rule as get_project_budget_summary riskRag. Returns baseline, working calendar, baselineFinishDate (approved endDate), forecastFinishDate and finishDate (latest delivery finish), durationWorkingDays (inclusive working days from the project start through the baseline finish; a single working day is 1), charter and plan records with key and title, definitionOfDone, keyPrefix, budgets, methodology, url, health, and MCP provenance (createdVia, createdByApiClientId, createdByOauthGrantId, createdByUserId, generatedByModel).',
     scope: 'projects:read',
     openApi: true,
     output: projectBaselineResult,
@@ -2655,7 +2675,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project_baseline',
     description:
-      'Update baseline window, working calendar, DoD, currency, budgets, and keyPrefix. projectId (UUID) is required. hoursPerWorkday, workdaysPerWeek (1–7, Monday-first), and nonWorkingDays replace the calendar used by scheduling. finishDate and durationWorkingDays are calculated from the plan and are not inputs. Returns saved definitionOfDone. Requires pm:write.',
+      'Update baseline window, working calendar, pinned docs, DoD, currency, budgets, and keyPrefix. projectId (UUID) is required. charterRecordId and initialPlanRecordId accept a UUID or document key in this project, any record type, and the result includes key and title. hoursPerWorkday, workdaysPerWeek (1–7, Monday-first), and nonWorkingDays replace the calendar used by scheduling. endDate is the approved baseline finish. finishDate, forecastFinishDate, baselineFinishDate, and durationWorkingDays are calculated and are not inputs. Apply an approved schedule change with apply_project_change_to_baseline. Returns saved definitionOfDone. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     output: projectBaselineResult,
@@ -2683,6 +2703,14 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           nullable: true,
           items: ymd,
           description: 'Replaces public holidays and other non-working dates. Null clears the list.',
+        },
+        charterRecordId: {
+          ...entityRefProp('Pinned charter document, UUID or key'),
+          nullable: true,
+        },
+        initialPlanRecordId: {
+          ...entityRefProp('Pinned initial plan document, UUID or key'),
+          nullable: true,
         },
         definitionOfDone: { type: 'string', nullable: true, maxLength: 20000 },
         currency: {
@@ -3100,9 +3128,24 @@ const EXTRA_HUB_TOOLS: Array<{
   output?: Record<string, unknown>;
 }> = [
   {
+    name: 'apply_project_change_to_baseline',
+    description:
+      'Apply an approved change request that stores a baseline start or finish. Writes those dates onto the project, marks the change implemented, and records an audit entry. A second call does not write again. changeId may be a UUID or human key. Requires pm:write.',
+    scope: 'pm:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['changeId'],
+      properties: {
+        changeId: entityRefProp('Change item id or human key'),
+      },
+    },
+  },
+  {
     name: 'update_project_change_item',
     description:
-      'Update a change-management item. changeId is required. Requires pm:write.',
+      'Update a change-management item. changeId is required. baselineEndAfter stores a proposed finish and does not change the project until apply_project_change_to_baseline. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {

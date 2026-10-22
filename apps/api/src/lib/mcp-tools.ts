@@ -240,6 +240,7 @@ import {
 } from './project-calendar.js';
 import { rescheduleProjectCalendar } from './delivery-dependencies.js';
 import {
+  applyChangeToBaseline,
   createChangeItem,
   getChangeItem,
   listChangeItems,
@@ -1343,6 +1344,8 @@ function toMcpProject(
     workdaysPerWeek: calendar.workdaysPerWeek,
     nonWorkingDays: facts?.nonWorkingDays ?? [],
     finishDate: facts?.finishDate ?? null,
+    forecastFinishDate: facts?.forecastFinishDate ?? facts?.finishDate ?? null,
+    baselineFinishDate: facts?.baselineFinishDate ?? project.endDate ?? null,
     durationWorkingDays: facts?.durationWorkingDays ?? null,
     charterRecordId: project.charterRecordId,
     charterRecord: project.charterRecordId
@@ -1873,18 +1876,30 @@ export function createMcpToolHandlers(
         input.initialPlanRecordId === undefined
           ? project.initialPlanRecordId
           : input.initialPlanRecordId;
-      if (nextCharterId) {
+      const resolvedCharterId =
+        nextCharterId == null
+          ? nextCharterId
+          : await resolveKnowledgeRecordId(app.database, {
+              idOrKey: nextCharterId,
+              projectId: project.id,
+            });
+      const resolvedPlanId =
+        nextPlanId == null
+          ? nextPlanId
+          : await resolveKnowledgeRecordId(app.database, {
+              idOrKey: nextPlanId,
+              projectId: project.id,
+            });
+      if (resolvedCharterId) {
         await assertPinnedKnowledgeRecord(app.database, {
-          recordId: nextCharterId,
+          recordId: resolvedCharterId,
           projectId: project.id,
-          expectedTypes: ['project-charter'],
         });
       }
-      if (nextPlanId) {
+      if (resolvedPlanId) {
         await assertPinnedKnowledgeRecord(app.database, {
-          recordId: nextPlanId,
+          recordId: resolvedPlanId,
           projectId: project.id,
-          expectedTypes: ['plan'],
         });
       }
       const nextKeyPrefix =
@@ -1911,8 +1926,8 @@ export function createMcpToolHandlers(
             input.workdaysPerWeek === undefined
               ? project.workdaysPerWeek
               : input.workdaysPerWeek,
-          charterRecordId: nextCharterId,
-          initialPlanRecordId: nextPlanId,
+          charterRecordId: resolvedCharterId,
+          initialPlanRecordId: resolvedPlanId,
           definitionOfDone:
             input.definitionOfDone === undefined
               ? project.definitionOfDone
@@ -5930,6 +5945,44 @@ export function createMcpToolHandlers(
         ipAddress: ipAddress ?? null,
       });
       return { changeItem };
+    },
+
+    async applyProjectChangeToBaseline(input: { changeId: string }) {
+      const actingUserId = requireActingUserId(client);
+      const workspaceIds = client.allowedWorkspaceIds.length > 0
+        ? client.allowedWorkspaceIds
+        : undefined;
+      const changeId = await resolveEntityId(app.database, {
+        entityType: 'change',
+        idOrKey: input.changeId,
+        workspaceIds,
+      });
+      const existing = await getChangeItem(app.database, changeId);
+      const project = await requirePmProject(app, client, existing.projectId, {
+        forWrite: true,
+      });
+      const result = await applyChangeToBaseline(app.database, changeId);
+      if (result.applied) {
+        await writeAuditEvent(app.database, {
+          organizationId: client.organizationId,
+          actorType: 'api_client',
+          actorId: client.id,
+          action: 'project.change_baseline_applied',
+          entityType: 'project_change_item',
+          entityId: result.changeItem.id,
+          metadata: {
+            projectId: project.id,
+            via: 'mcp',
+            actingUserId,
+            baselineEndBefore: project.endDate,
+            baselineEndAfter: result.changeItem.baselineEndAfter,
+            baselineStartBefore: project.startDate,
+            baselineStartAfter: result.changeItem.baselineStartAfter,
+          },
+          ipAddress: ipAddress ?? null,
+        });
+      }
+      return result;
     },
 
     async setKnowledgeRecordDeliveryLinks(input) {

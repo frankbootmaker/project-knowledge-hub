@@ -10,10 +10,12 @@ import {
   projectMilestones,
   projectTasks,
   projectUserStories,
+  projects,
   users,
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  assertDateRange,
   changeDeliveryEntityTypeSchema,
   changeKindSchema,
   changeStatusSchema,
@@ -76,6 +78,7 @@ export type PublicChangeItem = {
   baselineStartAfter: string | null;
   baselineEndBefore: string | null;
   baselineEndAfter: string | null;
+  baselineAppliedAt: string | null;
   knowledgeRecordId: string | null;
   knowledgeRecordTitle: string | null;
   records: PublicChangeRecordLink[];
@@ -291,6 +294,7 @@ function toPublicChangeItem(
     baselineStartAfter: row.baselineStartAfter,
     baselineEndBefore: row.baselineEndBefore,
     baselineEndAfter: row.baselineEndAfter,
+    baselineAppliedAt: row.baselineAppliedAt?.toISOString() ?? null,
     knowledgeRecordId: row.knowledgeRecordId,
     knowledgeRecordTitle: knowledgeTitle,
     records,
@@ -816,6 +820,95 @@ export async function updateChangeItem(
   }
 
   return getChangeItem(database, changeId);
+}
+
+/** True when the change stores a baseline start or finish to write onto the project. */
+export function changeHasScheduleChange(item: {
+  baselineStartAfter: string | null;
+  baselineEndAfter: string | null;
+}): boolean {
+  return item.baselineStartAfter != null || item.baselineEndAfter != null;
+}
+
+/**
+ * Write an approved change's schedule onto the project baseline.
+ * Sets the project end (and start, when present), marks the change
+ * implemented, and records baselineAppliedAt. A second call is a no-op.
+ */
+export async function applyChangeToBaseline(
+  database: Database,
+  changeId: string,
+): Promise<{ changeItem: PublicChangeItem; applied: boolean }> {
+  const existing = await getChangeItem(database, changeId);
+  if (existing.baselineAppliedAt) {
+    return { changeItem: existing, applied: false };
+  }
+  if (existing.archivedAt) {
+    throw new AppError({
+      code: 'CHANGE_ARCHIVED',
+      message: 'Archived change requests cannot be applied to the baseline',
+      statusCode: 409,
+    });
+  }
+  if (existing.status !== 'approved') {
+    throw new AppError({
+      code: 'CHANGE_NOT_APPROVED',
+      message: 'Only an approved change request can be applied to the baseline',
+      statusCode: 409,
+    });
+  }
+  if (!changeHasScheduleChange(existing)) {
+    throw new AppError({
+      code: 'CHANGE_NO_SCHEDULE',
+      message: 'This change request has no baseline start or finish to apply',
+      statusCode: 409,
+    });
+  }
+
+  const { project } = await requireProjectContext(database, existing.projectId);
+  assertProjectNotArchived(project);
+  const nextStart = existing.baselineStartAfter ?? project.startDate;
+  const nextEnd = existing.baselineEndAfter ?? project.endDate;
+  assertDateRange({
+    start: nextStart,
+    end: nextEnd,
+    startField: 'startDate',
+    endField: 'endDate',
+  });
+
+  let applied = false;
+  await database.db.transaction(async (tx) => {
+    const [locked] = await tx
+      .update(projectChangeItems)
+      .set({
+        status: 'implemented',
+        baselineAppliedAt: new Date(),
+        decidedAt: existing.decidedAt ? new Date(existing.decidedAt) : new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(projectChangeItems.id, changeId),
+          isNull(projectChangeItems.baselineAppliedAt),
+        ),
+      )
+      .returning({ id: projectChangeItems.id });
+    if (!locked) return;
+    await tx
+      .update(projects)
+      .set({
+        startDate: nextStart,
+        endDate: nextEnd,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, project.id));
+    applied = true;
+  });
+
+  return {
+    changeItem: await getChangeItem(database, changeId),
+    applied,
+  };
 }
 
 export async function deleteChangeItem(

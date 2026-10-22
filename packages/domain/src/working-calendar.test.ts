@@ -4,6 +4,7 @@ import {
   EVERY_DAY_CALENDAR,
   addWorkingDays,
   diffWorkingDays,
+  inclusiveWorkingDays,
   isWorkingDay,
   planDurationWorkingDays,
   planWindowFromDatedItems,
@@ -80,8 +81,39 @@ describe('project working calendar', () => {
       { start: '2026-11-02', end: null },
     ]);
     expect(window).toEqual({ start: '2026-10-01', finish: '2026-10-20' });
-    expect(planDurationWorkingDays(window, mondayFriday)).toBe(13);
+    // Thursday 1 Oct through Tuesday 20 Oct, start day included.
+    expect(planDurationWorkingDays(window, mondayFriday)).toBe(14);
     expect(planDurationWorkingDays({ start: null, finish: '2026-10-20' }, mondayFriday)).toBeNull();
+  });
+
+  it('counts baseline duration inclusive of the start day (PRO-B-41)', () => {
+    const calendar: ProjectWorkingCalendar = {
+      hoursPerWorkday: 8,
+      workdaysPerWeek: 5,
+      nonWorkingDays: ['2026-08-20', '2026-08-21'],
+    };
+    expect(
+      inclusiveWorkingDays('2026-08-01', '2026-10-22', calendar),
+    ).toBe(57);
+    expect(
+      planDurationWorkingDays(
+        { start: '2026-08-01', finish: '2026-10-22' },
+        calendar,
+      ),
+    ).toBe(57);
+    // Monday 5 Oct is one working day. The start day counts.
+    expect(
+      planDurationWorkingDays(
+        { start: '2026-10-05', finish: '2026-10-05' },
+        mondayFriday,
+      ),
+    ).toBe(1);
+    expect(
+      planDurationWorkingDays(
+        { start: '2026-10-03', finish: '2026-10-03' },
+        mondayFriday,
+      ),
+    ).toBe(0);
   });
 });
 

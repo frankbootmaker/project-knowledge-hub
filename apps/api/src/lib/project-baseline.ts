@@ -9,6 +9,7 @@ import {
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  formatHumanKey,
   projectStakeholderRoleSchema,
   type ProjectStakeholderRole,
 } from '@project-knowledge-hub/domain';
@@ -20,6 +21,7 @@ export type PublicPinnedRecord = {
   title: string;
   slug: string;
   recordType: string;
+  humanKey: string | null;
 };
 
 export type PublicInitialStakeholder = {
@@ -116,11 +118,25 @@ export async function loadPinnedRecords(
       title: knowledgeRecords.title,
       slug: knowledgeRecords.slug,
       recordType: knowledgeRecords.recordType,
+      documentKeyType: knowledgeRecords.documentKeyType,
+      documentNumber: knowledgeRecords.documentNumber,
+      keyPrefix: projects.keyPrefix,
     })
     .from(knowledgeRecords)
+    .leftJoin(projects, eq(knowledgeRecords.projectId, projects.id))
     .where(inArray(knowledgeRecords.id, ids));
   for (const row of rows) {
-    map.set(row.id, row);
+    map.set(row.id, {
+      id: row.id,
+      title: row.title,
+      slug: row.slug,
+      recordType: row.recordType,
+      humanKey: formatHumanKey(
+        row.keyPrefix,
+        row.documentKeyType,
+        row.documentNumber,
+      ),
+    });
   }
   return map;
 }
