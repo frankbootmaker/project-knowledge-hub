@@ -17,6 +17,8 @@ import {
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  auditModelPriceMetadata,
+  modelPriceScopeDenial,
   assertDateRange,
   buildKnowledgeRecordMetadata,
   buildProjectMetadata,
@@ -260,7 +262,7 @@ import {
   updateAiBillingEntry,
 } from './ai-billing.js';
 import { presentWorkspaceAiCost } from './ai-cost-window.js';
-import { listAiModelPrices } from './ai-usage-pricing.js';
+import { listAiModelPrices, retireScopedAiModelPrice, upsertScopedAiModelPrice } from './ai-usage-pricing.js';
 import {
   importAiUsageCsv as commitAiUsageCsv,
   listAiUsageImportSummaries,
@@ -515,6 +517,55 @@ function mapMcpAiUsage(input: {
         ? undefined
         : parseBillingPeriod(input.billingPeriod),
   };
+}
+
+async function assertAiModelPriceScope(
+  app: FastifyInstance,
+  client: McpClientContext,
+  scope: 'global' | 'workspace',
+  workspaceId: string | undefined,
+): Promise<string> {
+  const actingUserId = requireActingUserId(client);
+  const [user] = await app.database.db
+    .select({ isSystemAdmin: users.isSystemAdmin, status: users.status })
+    .from(users)
+    .where(eq(users.id, actingUserId))
+    .limit(1);
+  let workspaceRole: string | null = null;
+  if (scope === 'workspace') {
+    if (!workspaceId) {
+      throw new AppError({
+        code: 'MODEL_PRICE_INVALID',
+        message: 'workspaceId is required when scope is workspace',
+        statusCode: 400,
+      });
+    }
+    assertWorkspaceAllowed(client, workspaceId);
+    assertWriteWorkspaceAllowed(client, workspaceId);
+    if (user && !user.isSystemAdmin) {
+      const [membership] = await app.database.db
+        .select({ role: memberships.role })
+        .from(memberships)
+        .where(
+          and(eq(memberships.userId, actingUserId), eq(memberships.workspaceId, workspaceId)),
+        )
+        .limit(1);
+      workspaceRole = membership?.role ?? null;
+    }
+  }
+  const denial = modelPriceScopeDenial(scope, {
+    active: Boolean(user && user.status === 'active'),
+    isSystemAdmin: Boolean(user?.isSystemAdmin),
+    workspaceRole,
+  });
+  if (denial) {
+    throw new AppError({
+      code: 'FORBIDDEN',
+      message: denial,
+      statusCode: 403,
+    });
+  }
+  return actingUserId;
 }
 
 function requireActingUserId(client: McpClientContext): string {
@@ -4977,6 +5028,93 @@ export function createMcpToolHandlers(
     async listAiModelPrices(input) {
       assertWorkspaceAllowed(client, input.workspaceId);
       return { prices: await listAiModelPrices(app.database, input.workspaceId) };
+    },
+
+    async upsertAiModelPrice(input) {
+      const scope = input.scope;
+      const actingUserId = await assertAiModelPriceScope(
+        app,
+        client,
+        scope,
+        input.workspaceId,
+      );
+      const workspaceId = scope === 'global' ? null : input.workspaceId ?? null;
+      const price = await upsertScopedAiModelPrice(
+        app.database,
+        workspaceId,
+        {
+          model: input.model,
+          inputPerMillion: Number(input.inputPerMillion),
+          outputPerMillion: Number(input.outputPerMillion),
+          cacheReadPerMillion: Number(input.cacheReadPerMillion),
+          cacheWritePerMillion: Number(input.cacheWritePerMillion),
+          blendedPerMillion: Number(input.blendedPerMillion),
+          currency: input.currency,
+          effectiveFrom: input.effectiveFrom,
+          sourceNote: input.sourceNote,
+        },
+        { requireSourceNote: true },
+      );
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'ai_model_price.saved',
+        entityType: 'ai_model_price',
+        entityId: price.id,
+        metadata: {
+          ...auditModelPriceMetadata({
+            scope,
+            workspaceId,
+            model: price.model,
+            effectiveFrom: price.effectiveFrom,
+            currency: price.currency,
+            sourceNote: price.sourceNote,
+            via: 'mcp',
+          }),
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { price };
+    },
+
+    async retireAiModelPrice(input) {
+      const scope = input.scope;
+      const actingUserId = await assertAiModelPriceScope(
+        app,
+        client,
+        scope,
+        input.workspaceId,
+      );
+      const workspaceId = scope === 'global' ? null : input.workspaceId ?? null;
+      const price = await retireScopedAiModelPrice(app.database, workspaceId, {
+        ...(input.priceId ? { priceId: input.priceId } : {}),
+        ...(input.model ? { model: input.model } : {}),
+        ...(input.effectiveFrom ? { effectiveFrom: input.effectiveFrom } : {}),
+      });
+      await writeAuditEvent(app.database, {
+        organizationId: client.organizationId,
+        actorType: 'api_client',
+        actorId: client.id,
+        action: 'ai_model_price.retired',
+        entityType: 'ai_model_price',
+        entityId: price.id,
+        metadata: {
+          ...auditModelPriceMetadata({
+            scope,
+            workspaceId,
+            model: price.model,
+            effectiveFrom: price.effectiveFrom,
+            currency: price.currency,
+            sourceNote: price.sourceNote,
+            via: 'mcp',
+          }),
+          actingUserId,
+        },
+        ipAddress: ipAddress ?? null,
+      });
+      return { price };
     },
 
     async createAiBillingEntry(input) {

@@ -1736,9 +1736,10 @@ export const aiUsageEvents = pgTable(
 );
 
 /**
- * Per-model theoretical API prices. workspace_id null is a seeded default.
- * Amounts are USD (or another ISO code) per 1,000,000 tokens.
- * model may be an exact id or a glob (`claude*sonnet*`).
+ * Per-model theoretical API prices. workspace_id null is the platform list.
+ * Amounts are an ISO currency per 1,000,000 tokens.
+ * model may be an exact id or a glob (`*claude*sonnet*`).
+ * A workspace row with the same pattern overrides the global row.
  */
 export const aiModelPrices = pgTable(
   'ai_model_prices',
@@ -1768,8 +1769,15 @@ export const aiModelPrices = pgTable(
       scale: 6,
       mode: 'number',
     }).notNull(),
+    blendedPerMillion: numeric('blended_per_million', {
+      precision: 14,
+      scale: 6,
+      mode: 'number',
+    }).notNull(),
     currency: text('currency').notNull(),
     effectiveFrom: date('effective_from', { mode: 'string' }).notNull(),
+    sourceNote: text('source_note'),
+    retiredAt: timestamp('retired_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
   },
   (table) => [
