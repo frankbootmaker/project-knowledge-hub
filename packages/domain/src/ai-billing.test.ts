@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { AppError } from './index.js';
 import {
   allocateAiBillingPool,
+  allocationDisplayPercents,
+  allocationTokenSlices,
   buildPlatformAiCost,
   defaultAiBillingWindow,
   flatFeeMonthShares,
@@ -13,6 +15,7 @@ import {
   settleProjectAiCost,
   splitAiMoney,
   splitBillingEntryByMonth,
+  utcUsagePeriod,
   type AiBillingAllocationProject,
   type AiBillingMonthParts,
 } from './ai-billing.js';
@@ -158,6 +161,117 @@ describe('allocateAiBillingPool', () => {
     });
     expect(sumShares(shares)).toBe(-10);
     expect(shares.map((share) => share.amount)).toEqual([-5, -5]);
+  });
+});
+
+describe('allocationDisplayPercents', () => {
+  it('shows 100/n for an equal split and sums to 100 (PRO-B-38)', () => {
+    const amounts = [28.86, 28.85, 28.85, 28.85, 28.85, 28.85, 28.85];
+    const percents = allocationDisplayPercents(
+      amounts.map((amount) => ({
+        method: 'equal' as const,
+        tokens: 0,
+        overridePercent: null,
+        amount,
+      })),
+      201.96,
+    );
+    expect(percents.filter((value) => value === 14.29)).toHaveLength(4);
+    expect(percents.filter((value) => value === 14.28)).toHaveLength(3);
+    expect(roundAiMoney(percents.reduce((sum, value) => sum + value, 0))).toBe(100);
+  });
+
+  it('uses token weights and keeps a stored manual percent', () => {
+    const percents = allocationDisplayPercents(
+      [
+        {
+          method: 'override',
+          tokens: 0,
+          overridePercent: 33.333,
+          amount: 33.33,
+        },
+        { method: 'tokens', tokens: 1, overridePercent: null, amount: 16.67 },
+        { method: 'tokens', tokens: 3, overridePercent: null, amount: 50 },
+      ],
+      100,
+    );
+    expect(percents[0]).toBe(33.333);
+    expect(roundAiMoney(percents.reduce((sum, value) => sum + value, 0))).toBe(100);
+    expect(percents[2]).toBeGreaterThan(percents[1] ?? 0);
+  });
+
+  it('gives a zero-amount equal row no share', () => {
+    expect(
+      allocationDisplayPercents(
+        [
+          { method: 'equal', tokens: 0, overridePercent: null, amount: 15 },
+          { method: 'equal', tokens: 0, overridePercent: null, amount: 0 },
+          { method: 'equal', tokens: 0, overridePercent: null, amount: 15 },
+        ],
+        30,
+      ),
+    ).toEqual([50, 0, 50]);
+  });
+});
+
+describe('allocation token months', () => {
+  it('keeps a Budapest midnight on the UTC month and does not open the next one', () => {
+    expect(utcUsagePeriod(new Date('2026-10-31T23:30:00+02:00'))).toBe('2026-10');
+    expect(utcUsagePeriod(new Date('2026-11-01T00:30:00+02:00'))).toBe('2026-10');
+    expect(utcUsagePeriod(new Date('2026-11-01T00:30:00Z'))).toBe('2026-11');
+  });
+
+  it('counts imported cloud-agent tokens in each UTC month instead of dropping them', () => {
+    const slices = allocationTokenSlices({
+      tasks: [
+        {
+          projectId: 'alpha',
+          aiSystemId: 'sys-1',
+          cloudAgentId: 'agent-1',
+          period: '2026-11',
+          tokens: 900,
+        },
+        {
+          projectId: 'beta',
+          aiSystemId: null,
+          cloudAgentId: null,
+          period: '2026-10',
+          tokens: 40,
+        },
+      ],
+      events: [
+        {
+          projectId: null,
+          aiSystemId: null,
+          cloudAgentId: 'agent-1',
+          occurredAt: new Date('2026-10-22T18:00:00Z'),
+          tokens: 100,
+        },
+        {
+          projectId: 'alpha',
+          aiSystemId: 'sys-1',
+          cloudAgentId: 'agent-1',
+          occurredAt: new Date('2026-11-01T00:30:00+02:00'),
+          tokens: 25,
+        },
+        {
+          projectId: null,
+          aiSystemId: null,
+          cloudAgentId: 'unassigned',
+          occurredAt: new Date('2026-11-02T00:00:00Z'),
+          tokens: 80,
+        },
+      ],
+    });
+    const of = (projectId: string, period: string) =>
+      slices
+        .filter((slice) => slice.projectId === projectId && slice.period === period)
+        .reduce((sum, slice) => sum + slice.tokens, 0);
+    expect(of('alpha', '2026-10')).toBe(125);
+    expect(of('alpha', '2026-11')).toBe(0);
+    expect(of('beta', '2026-10')).toBe(40);
+    expect(slices.some((slice) => slice.tokens === 900)).toBe(false);
+    expect(slices.some((slice) => slice.tokens === 80)).toBe(false);
   });
 });
 

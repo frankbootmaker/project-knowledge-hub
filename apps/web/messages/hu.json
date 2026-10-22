@@ -3903,6 +3903,7 @@
     },
     "percent": "Százalék",
     "percentFor": "Százalék: {project}",
+    "percentComputed": "Számított rész. Százalék beírása kézi felülírást ment.",
     "allocated": "Kiosztott",
     "pricesTitle": "Modellárak",
     "pricesHint": "Listaár 1000 tokenenként. Üres cache-írási ár esetén a kevert ár érvényes. A cache-olvasás és a cache-írás külön ár.",

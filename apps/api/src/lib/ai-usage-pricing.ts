@@ -30,9 +30,19 @@ export type PublicAiModelPrice = {
   source: 'default' | 'workspace';
 };
 
+export type ImportedAllocationEvent = {
+  projectId: string | null;
+  aiSystemId: string | null;
+  cloudAgentId: string | null;
+  occurredAt: Date;
+  tokens: number;
+};
+
 export type ImportedTheoretical = {
   rows: PricedImportedUsage[];
   agentIds: Set<string>;
+  /** Imported events that still carry a cloud agent id, for allocation tokens. */
+  allocationEvents: ImportedAllocationEvent[];
   unpricedModels: UnpricedModel[];
   months: TheoreticalMonthSplit[];
   prices: PublicAiModelPrice[];
@@ -130,7 +140,9 @@ export async function loadImportedTheoretical(
       cost: aiUsageEvents.cost,
       projectTaskId: aiUsageEvents.projectTaskId,
       cloudAgentId: aiUsageEvents.cloudAgentId,
+      tokensTotal: aiUsageEvents.tokensTotal,
       projectId: projectTasks.projectId,
+      aiSystemId: projectTasks.aiSystemId,
       projectName: projects.name,
     })
     .from(aiUsageEvents)
@@ -156,6 +168,21 @@ export async function loadImportedTheoretical(
   return {
     rows: priced.rows,
     agentIds: importedCloudAgentIds(priced.rows),
+    allocationEvents: events.map((row) => {
+      const parts =
+        Number(row.tokensInput) +
+        Number(row.tokensCacheWrite) +
+        Number(row.tokensCache) +
+        Number(row.tokensOutput);
+      const total = Number(row.tokensTotal);
+      return {
+        projectId: row.projectId,
+        aiSystemId: row.aiSystemId,
+        cloudAgentId: row.cloudAgentId,
+        occurredAt: row.occurredAt,
+        tokens: total > 0 ? total : parts,
+      };
+    }),
     unpricedModels: priced.unpricedModels,
     months: priced.months,
     prices,

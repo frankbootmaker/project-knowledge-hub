@@ -3903,6 +3903,7 @@
     },
     "percent": "Percent",
     "percentFor": "Percent for {project}",
+    "percentComputed": "Calculated share. Type a percent to set a manual override.",
     "allocated": "Allocated",
     "pricesTitle": "Model prices",
     "pricesHint": "List prices per 1,000 tokens. A blank cache-write rate falls back to the blended rate. Cache read and cache write are separate.",
