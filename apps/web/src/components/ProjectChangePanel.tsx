@@ -56,6 +56,7 @@ export type ChangeItem = {
   baselineStartAfter: string | null;
   baselineEndBefore: string | null;
   baselineEndAfter: string | null;
+  baselineAppliedAt?: string | null;
   knowledgeRecordId: string | null;
   knowledgeRecordTitle: string | null;
   records?: ChangeRecordLink[];
@@ -148,6 +149,7 @@ export function ProjectChangePanel({
   milestones,
   tasks,
   records,
+  initialOpenChangeId = null,
 }: {
   projectId: string;
   canMutate: boolean;
@@ -158,6 +160,7 @@ export function ProjectChangePanel({
   milestones: DeliveryOption[];
   tasks: DeliveryOption[];
   records: RecordOption[];
+  initialOpenChangeId?: string | null;
 }) {
   const t = useTranslations('changes');
   const tRecords = useTranslations('records');
@@ -188,6 +191,11 @@ export function ProjectChangePanel({
   const [pending, setPending] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [manageId, setManageId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!initialOpenChangeId) return;
+    if (!initialChangeItems.some((item) => item.id === initialOpenChangeId)) return;
+    setManageId(initialOpenChangeId);
+  }, [initialOpenChangeId, initialChangeItems]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
   const [changeTab, setChangeTab] = useState<ChangeTab>('details');
@@ -391,6 +399,48 @@ export function ProjectChangePanel({
       refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedCreate'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const managedItem = items.find((item) => item.id === manageId) ?? null;
+  const canApplyBaseline = Boolean(
+    canMutate
+    && managedItem
+    && managedItem.status === 'approved'
+    && !managedItem.baselineAppliedAt
+    && (managedItem.baselineEndAfter || managedItem.baselineStartAfter),
+  );
+
+  async function applyBaseline() {
+    if (!manageId || !canApplyBaseline) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/project-change-items/${manageId}/apply-baseline`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { Origin: window.location.origin },
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as {
+        changeItem?: ChangeItem;
+        error?: { message?: string };
+      };
+      if (!response.ok || !payload.changeItem) {
+        throw new Error(payload.error?.message || t('failedApply'));
+      }
+      const saved = payload.changeItem;
+      setItems((prev) => prev.map((item) => (
+        item.id === saved.id ? { ...item, ...saved } : item
+      )));
+      pushToast(t('baselineApplied'), 'success');
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failedApply'));
     } finally {
       setPending(false);
     }
@@ -932,6 +982,11 @@ export function ProjectChangePanel({
             </Field>
           </div>
         ) : null}
+        {managedItem?.baselineAppliedAt ? (
+          <p className="kh-ops-menu-type m-0 text-ink-muted">{t('baselineAppliedNote')}</p>
+        ) : canApplyBaseline ? (
+          <p className="kh-ops-menu-type m-0 text-ink-muted">{t('applyToBaselineHint')}</p>
+        ) : null}
       </div>
     );
   }
@@ -1111,6 +1166,16 @@ export function ProjectChangePanel({
               ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {canApplyBaseline ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={pending || confirmDelete}
+                  onClick={() => void applyBaseline()}
+                >
+                  {t('applyToBaseline')}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="secondary"

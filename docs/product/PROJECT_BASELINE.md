@@ -12,10 +12,10 @@ Capture a project’s **planned kickoff baseline** (dates, charter, initial plan
 | Topic | Decision |
 | --- | --- |
 | Baseline location | Fields on `projects` + `project_initial_stakeholders` snapshot |
-| Project information | Start date is editable. Duration and finish are calculated from scheduled delivery items (earliest start to latest end, including the parent date rollup). Duration is working days. |
+| Project information | Start date is editable. Baseline finish is the approved `end_date`. Forecast finish is the latest delivery-item end. Duration is inclusive working days from the project start through the baseline finish (a single working day is 1). |
 | Working calendar | `hours_per_workday` (default 8), Monday-first `workdays_per_week` (default 5), and `project_non_working_days`. Scheduling and the future Gantt share this calendar. |
 | Issue key prefix | Workspace-unique `key_prefix` (`AAA` or `AA0`) on Baseline; used for human keys (ADR-019) |
-| Charter / plan | Nullable FKs to project-scoped knowledge records (`project-charter` / `plan`) |
+| Charter / plan | Nullable FKs to any project-scoped knowledge record. Matching types are listed first. The stored id may be a UUID; MCP also accepts a document key and returns key and title. |
 | Initial stakeholders | Editable snapshot of workspace user IDs — **not** auto-synced with live Stakeholders |
 | Change management | First-class register (like RAID), not markdown-only |
 | Timeline view | Delivery mode `timeline`: project window + epic/story bars + milestone markers |
@@ -46,6 +46,7 @@ project_epics / project_user_stories / project_milestones
 * `kind`: `scope` \| `timeline` \| `stakeholder` \| `budget` \| `other`
 * `status`: `proposed` \| `approved` \| `rejected` \| `implemented` \| `cancelled`
 * Optional requester / approver, effective date, baseline before/after dates
+* **Apply to baseline** (`POST /api/v1/project-change-items/:id/apply-baseline`, MCP `apply_project_change_to_baseline`) writes an approved schedule change onto the project, marks the change implemented, sets `baseline_applied_at`, and writes `project.change_baseline_applied`. A second call does not write again.
 * Optional documents (`project_change_record_links`; the legacy `knowledge_record_id` column stores the first link for older clients) and delivery links for epics, stories, milestones, and tasks. Sprints stay out. The manage dialog uses Details, Items, Documents, and Media tabs; Add opens a searchable paged picker with a type filter. Media links workspace images and titled URLs and is stored with the change item.
 
 ### Boundaries
@@ -73,7 +74,7 @@ project_epics / project_user_stories / project_milestones
 
 MCP `pm:read` / `pm:write`:
 
-* `get_project` includes baseline fields  
-* `update_project_baseline`, `list_project_initial_stakeholders`, `set_project_initial_stakeholders`  
-* `list_project_change_items`, `create_project_change_item`, `update_project_change_item`  
+* `get_project` includes baseline fields, `baselineFinishDate`, `forecastFinishDate`, and inclusive `durationWorkingDays`  
+* `update_project_baseline` accepts a charter or plan UUID or document key and returns key and title. `list_project_initial_stakeholders`, `set_project_initial_stakeholders`  
+* `list_project_change_items`, `create_project_change_item`, `update_project_change_item`, `apply_project_change_to_baseline`  
 * Epic / story / milestone create/update accept start/end (or start/target) dates  

@@ -2277,6 +2277,11 @@ export const projectChangeItems = pgTable(
     baselineStartAfter: date('baseline_start_after', { mode: 'string' }),
     baselineEndBefore: date('baseline_end_before', { mode: 'string' }),
     baselineEndAfter: date('baseline_end_after', { mode: 'string' }),
+    /** Set when an approved schedule change was written onto the project baseline. */
+    baselineAppliedAt: timestamp('baseline_applied_at', {
+      withTimezone: true,
+      mode: 'date',
+    }),
     knowledgeRecordId: uuid('knowledge_record_id').references(
       () => knowledgeRecords.id,
       { onDelete: 'set null' },

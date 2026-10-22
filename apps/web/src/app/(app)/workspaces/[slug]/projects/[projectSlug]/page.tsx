@@ -73,6 +73,8 @@ type Project = {
   workdaysPerWeek?: number | null;
   nonWorkingDays?: string[];
   finishDate?: string | null;
+  forecastFinishDate?: string | null;
+  baselineFinishDate?: string | null;
   durationWorkingDays?: number | null;
   currency: string;
   initialBudget: string | null;
@@ -83,6 +85,7 @@ type Project = {
     title: string;
     slug: string;
     recordType: string;
+    humanKey?: string | null;
   } | null;
   initialPlanRecordId: string | null;
   initialPlanRecord: {
@@ -90,6 +93,7 @@ type Project = {
     title: string;
     slug: string;
     recordType: string;
+    humanKey?: string | null;
   } | null;
   definitionOfDone?: string | null;
   keyPrefix?: string | null;
@@ -134,7 +138,11 @@ export default async function ProjectDetailPage({
   searchParams,
 }: {
   params: Promise<{ slug: string; projectSlug: string }>;
-  searchParams: Promise<{ task?: string | string[]; raid?: string | string[] }>;
+  searchParams: Promise<{
+    task?: string | string[];
+    raid?: string | string[];
+    change?: string | string[];
+  }>;
 }) {
   const session = await requireSession();
   const t = await getTranslations('projects');
@@ -144,6 +152,7 @@ export default async function ProjectDetailPage({
   const query = await searchParams;
   const openTaskRaw = query.task;
   const openRaidRaw = query.raid;
+  const openChangeRaw = query.change;
   const initialOpenTaskId =
     typeof openTaskRaw === 'string'
       ? openTaskRaw
@@ -155,6 +164,12 @@ export default async function ProjectDetailPage({
       ? openRaidRaw
       : Array.isArray(openRaidRaw)
         ? (openRaidRaw[0] ?? null)
+        : null;
+  const initialOpenChangeId =
+    typeof openChangeRaw === 'string'
+      ? openChangeRaw
+      : Array.isArray(openChangeRaw)
+        ? (openChangeRaw[0] ?? null)
         : null;
 
   const workspacesResponse = await apiFetch('/api/v1/workspaces');
@@ -530,6 +545,18 @@ export default async function ProjectDetailPage({
         initialStakeholders={initialStakeholders}
         members={members}
         knowledgeRecords={knowledgeRecords}
+        scheduleChanges={changeItems
+          .filter((item) => (
+            item.status === 'approved'
+            && !item.baselineAppliedAt
+            && (item.baselineEndAfter || item.baselineStartAfter)
+          ))
+          .map((item) => ({
+            id: item.id,
+            humanKey: item.humanKey ?? null,
+            title: item.title,
+            baselineEndAfter: item.baselineEndAfter,
+          }))}
       />
 
       <ProjectStakeholdersPanel
@@ -630,6 +657,7 @@ export default async function ProjectDetailPage({
         projectId={project.id}
         canMutate={canMutate && !isArchived}
         initialChangeItems={changeItems}
+        initialOpenChangeId={initialOpenChangeId}
         members={members}
         epics={epics.map((epic) => ({
           id: epic.id,

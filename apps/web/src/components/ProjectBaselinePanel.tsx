@@ -1,11 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { suggestKeyPrefix } from '@project-knowledge-hub/domain';
+import {
+  coerceProjectCalendar,
+  planDurationWorkingDays,
+  suggestKeyPrefix,
+} from '@project-knowledge-hub/domain';
 import { CollapsibleSection } from './CollapsibleSection';
+import {
+  DeliveryDocumentsEditor,
+  type DeliveryDocumentRecord,
+} from './DeliveryDocumentsEditor';
 import { LocalDateTime } from './LocalDateTime';
 import { recordHref } from '../lib/record-href';
 import {
@@ -32,6 +40,14 @@ export type PinnedRecord = {
   title: string;
   slug: string;
   recordType: string;
+  humanKey?: string | null;
+};
+
+export type BaselineScheduleChange = {
+  id: string;
+  humanKey: string | null;
+  title: string;
+  baselineEndAfter: string | null;
 };
 
 export type InitialStakeholder = {
@@ -53,6 +69,8 @@ export type BaselineProject = {
   workdaysPerWeek?: number | null;
   nonWorkingDays?: string[];
   finishDate?: string | null;
+  forecastFinishDate?: string | null;
+  baselineFinishDate?: string | null;
   durationWorkingDays?: number | null;
   charterRecordId: string | null;
   charterRecord: PinnedRecord | null;
@@ -79,6 +97,7 @@ type KnowledgeOption = {
   title: string;
   slug: string;
   recordType: string;
+  humanKey?: string | null;
 };
 
 const PROJECT_ROLES = [
@@ -108,6 +127,7 @@ export function ProjectBaselinePanel({
   initialStakeholders,
   members,
   knowledgeRecords,
+  scheduleChanges = [],
 }: {
   projectId: string;
   workspaceSlug: string;
@@ -116,6 +136,7 @@ export function ProjectBaselinePanel({
   initialStakeholders: InitialStakeholder[];
   members: Member[];
   knowledgeRecords: KnowledgeOption[];
+  scheduleChanges?: BaselineScheduleChange[];
 }) {
   const t = useTranslations('baseline');
   const tStakeholders = useTranslations('stakeholders');
@@ -130,6 +151,7 @@ export function ProjectBaselinePanel({
   }, [initialStakeholders]);
 
   const [editOpen, setEditOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -179,14 +201,45 @@ export function ProjectBaselinePanel({
       ? null
       : Number(project.initialBudget);
 
-  const charterOptions = useMemo(
-    () => knowledgeRecords.filter((row) => row.recordType === 'project-charter'),
-    [knowledgeRecords],
-  );
-  const planOptions = useMemo(
-    () => knowledgeRecords.filter((row) => row.recordType === 'plan'),
-    [knowledgeRecords],
-  );
+  function preferType(
+    records: KnowledgeOption[],
+    preferred: string,
+  ): DeliveryDocumentRecord[] {
+    return [...records]
+      .sort((left, right) => {
+        const leftRank = left.recordType === preferred ? 0 : 1;
+        const rightRank = right.recordType === preferred ? 0 : 1;
+        if (leftRank !== rightRank) return leftRank - rightRank;
+        return left.title.localeCompare(right.title);
+      })
+      .map((row) => ({
+        id: row.id,
+        title: row.title,
+        slug: row.slug,
+        humanKey: row.humanKey ?? null,
+        recordType: row.recordType,
+      }));
+  }
+
+  function singleRecordId(current: string, next: string[]): string {
+    if (next.length === 0) return '';
+    const added = next.filter((id) => id !== current);
+    if (added.length > 0) return added[added.length - 1] ?? '';
+    return next[next.length - 1] ?? '';
+  }
+
+  function pinnedDocument(
+    record: PinnedRecord | null,
+  ): DeliveryDocumentRecord[] {
+    if (!record) return [];
+    return [{
+      id: record.id,
+      title: record.title,
+      slug: record.slug,
+      humanKey: record.humanKey ?? null,
+      recordType: record.recordType,
+    }];
+  }
 
   function openEdit() {
     setStartDate(project.startDate ?? '');
@@ -333,13 +386,28 @@ export function ProjectBaselinePanel({
 
   function dateLabel(value: string | null | undefined) {
     if (!value) return tCommon('none');
-    return <LocalDateTime value={value} dateOnly />;
+    return <LocalDateTime value={value} dateOnly className="tabular-nums" />;
   }
+
+  const baselineFinish = project.baselineFinishDate ?? project.endDate;
+  const forecastFinish = project.forecastFinishDate ?? project.finishDate;
 
   const durationLabel =
     project.durationWorkingDays == null
       ? tCommon('none')
       : t('durationValue', { count: project.durationWorkingDays });
+  const draftDuration = planDurationWorkingDays(
+    { start: startDate || null, finish: baselineFinish },
+    coerceProjectCalendar({
+      hoursPerWorkday,
+      workdaysPerWeek: Number(workdaysPerWeek),
+      nonWorkingDays,
+    }),
+  );
+  const draftDurationLabel =
+    draftDuration == null
+      ? tCommon('none')
+      : t('durationValue', { count: draftDuration });
   const hoursLabel = String(project.hoursPerWorkday ?? 8);
   const workdays = project.workdaysPerWeek ?? 5;
   const holidayList = [...(project.nonWorkingDays ?? [])].sort();
@@ -376,15 +444,19 @@ export function ProjectBaselinePanel({
               </div>
               <div className="kh-ops-field-cell">
                 <small>{t('duration')}</small>
-                <strong>{durationLabel}</strong>
+                <strong className="tabular-nums">{durationLabel}</strong>
               </div>
               <div className="kh-ops-field-cell">
-                <small>{t('finishDate')}</small>
-                <strong>{dateLabel(project.finishDate)}</strong>
+                <small>{t('baselineFinish')}</small>
+                <strong>{dateLabel(baselineFinish)}</strong>
+              </div>
+              <div className="kh-ops-field-cell">
+                <small>{t('forecastFinish')}</small>
+                <strong>{dateLabel(forecastFinish)}</strong>
               </div>
               <div className="kh-ops-field-cell">
                 <small>{t('hoursPerWorkday')}</small>
-                <strong>{hoursLabel}</strong>
+                <strong className="tabular-nums">{hoursLabel}</strong>
               </div>
               <div className="kh-ops-field-cell">
                 <small>{t('workdaysPerWeek')}</small>
@@ -403,18 +475,24 @@ export function ProjectBaselinePanel({
               <div className="kh-ops-field-cell">
                 <small>{t('initialBudget')}</small>
                 <strong>
-                  {formatMoney(
+                  <span className="tabular-nums">{formatMoney(
                     Number.isFinite(initialBudgetNumber as number)
                       ? (initialBudgetNumber as number)
                       : null,
                     currencyCode,
                     locale,
-                  )}
+                  )}</span>
                 </strong>
               </div>
               <div className="kh-ops-field-cell">
                 <small>{t('keyPrefix')}</small>
-                <strong>{project.keyPrefix || tCommon('none')}</strong>
+                <strong>
+                  {project.keyPrefix ? (
+                    <span className="kh-ops-key-badge">{project.keyPrefix}</span>
+                  ) : (
+                    tCommon('none')
+                  )}
+                </strong>
               </div>
               <div className="kh-ops-field-cell">
                 <small>{t('scheduleSlipTitle')}</small>
@@ -424,7 +502,7 @@ export function ProjectBaselinePanel({
               </div>
               <div className="kh-ops-field-cell">
                 <small>{t('scheduleSlipThreshold')}</small>
-                <strong>{project.scheduleSlipThresholdDays ?? 2}</strong>
+                <strong className="tabular-nums">{project.scheduleSlipThresholdDays ?? 2}</strong>
               </div>
               <div className="kh-ops-field-cell">
                 <small>{t('scheduleSlipTypes')}</small>
@@ -475,6 +553,11 @@ export function ProjectBaselinePanel({
                 <span className="kh-ops-code-box">CH</span>
                 <div>
                   <h3>
+                    {project.charterRecord.humanKey ? (
+                      <span className="kh-ops-key-badge mr-2">
+                        {project.charterRecord.humanKey}
+                      </span>
+                    ) : null}
                     <Link
                       href={pinnedRecordHref(project.charterRecord)}
                       className="text-inherit no-underline hover:underline"
@@ -500,6 +583,11 @@ export function ProjectBaselinePanel({
                 <span className="kh-ops-code-box">PL</span>
                 <div>
                   <h3>
+                    {project.initialPlanRecord.humanKey ? (
+                      <span className="kh-ops-key-badge mr-2">
+                        {project.initialPlanRecord.humanKey}
+                      </span>
+                    ) : null}
                     <Link
                       href={pinnedRecordHref(project.initialPlanRecord)}
                       className="text-inherit no-underline hover:underline"
@@ -568,6 +656,7 @@ export function ProjectBaselinePanel({
         title={t('editTitle')}
         description={t('editDescription')}
         size={DELIVERY_ITEM_MODAL_SIZE}
+        closeOnEscape={!pickerOpen}
         footer={
           <>
             <Button
@@ -601,12 +690,37 @@ export function ProjectBaselinePanel({
               />
             </Field>
             <Field label={t('duration')}>
-              <p className="kh-ops-menu-type m-0 min-h-10 py-2">{durationLabel}</p>
+              <p className="kh-ops-menu-type m-0 min-h-10 py-2 tabular-nums">{draftDurationLabel}</p>
             </Field>
           </div>
-          <Field label={t('finishDate')}>
-            <p className="kh-ops-menu-type m-0">{dateLabel(project.finishDate)}</p>
-            <p className="kh-ops-menu-type mt-1 mb-0 text-ink-muted">{t('finishHint')}</p>
+          <Field label={t('baselineFinish')}>
+            <p className="kh-ops-menu-type m-0">{dateLabel(baselineFinish)}</p>
+            <p className="kh-ops-menu-type mt-1 mb-0 text-ink-muted">{t('finishLockedHint')}</p>
+            {scheduleChanges.length > 0 ? (
+              <ul className="m-0 mt-2 grid list-none gap-1 p-0">
+                {scheduleChanges.map((change) => (
+                  <li key={change.id}>
+                    <Link
+                      href={`?change=${change.id}#project-change`}
+                      className="kh-text-link"
+                    >
+                      {change.humanKey ? `${change.humanKey} · ` : ''}
+                      {change.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="kh-ops-menu-type mt-1 mb-0">
+                <Link href="#project-change" className="kh-text-link">
+                  {t('finishLockedLink')}
+                </Link>
+              </p>
+            )}
+          </Field>
+          <Field label={t('forecastFinish')}>
+            <p className="kh-ops-menu-type m-0">{dateLabel(forecastFinish)}</p>
+            <p className="kh-ops-menu-type mt-1 mb-0 text-ink-muted">{t('forecastHint')}</p>
           </Field>
           <div className="kh-ops-form-grid">
             <Field label={t('hoursPerWorkday')}>
@@ -773,32 +887,28 @@ export function ProjectBaselinePanel({
             </p>
           </Field>
           <Field label={t('charter')}>
-            <Select
-              value={charterRecordId}
-              onChange={(e) => setCharterRecordId(e.target.value)}
+            <DeliveryDocumentsEditor
+              records={preferType(knowledgeRecords, 'project-charter')}
+              linkedRecords={pinnedDocument(project.charterRecord)}
+              linkedIds={charterRecordId ? [charterRecordId] : []}
+              onChange={(ids) => setCharterRecordId(singleRecordId(charterRecordId, ids))}
+              canEdit={canMutate}
               disabled={pending}
-            >
-              <option value="">{tCommon('none')}</option>
-              {charterOptions.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.title}
-                </option>
-              ))}
-            </Select>
+              onPickerOpenChange={setPickerOpen}
+            />
+            <p className="mt-1 mb-0 text-xs text-ink-muted">{t('charterPickerHint')}</p>
           </Field>
           <Field label={t('initialPlan')}>
-            <Select
-              value={initialPlanRecordId}
-              onChange={(e) => setInitialPlanRecordId(e.target.value)}
+            <DeliveryDocumentsEditor
+              records={preferType(knowledgeRecords, 'plan')}
+              linkedRecords={pinnedDocument(project.initialPlanRecord)}
+              linkedIds={initialPlanRecordId ? [initialPlanRecordId] : []}
+              onChange={(ids) => setInitialPlanRecordId(singleRecordId(initialPlanRecordId, ids))}
+              canEdit={canMutate}
               disabled={pending}
-            >
-              <option value="">{tCommon('none')}</option>
-              {planOptions.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.title}
-                </option>
-              ))}
-            </Select>
+              onPickerOpenChange={setPickerOpen}
+            />
+            <p className="mt-1 mb-0 text-xs text-ink-muted">{t('planPickerHint')}</p>
           </Field>
           <Field label={t('initialStakeholders')}>
             <div className="kh-ops-scope-checks max-h-56 overflow-auto">

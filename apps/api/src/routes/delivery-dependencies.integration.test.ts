@@ -1,14 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { hashPassword } from '@project-knowledge-hub/auth';
 import { loadEnv } from '@project-knowledge-hub/config';
 import {
+  auditEvents,
   createDatabase,
   memberships,
   organizations,
   users,
   workspaces,
+  type Database,
 } from '@project-knowledge-hub/database';
 import { buildApp } from '../app.js';
 import type { FastifyInstance } from 'fastify';
@@ -59,6 +62,7 @@ type LinkBody = {
 describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
   let app: FastifyInstance | undefined;
   let redis: Redis | undefined;
+  let database: Database | undefined;
   let closeDatabase: (() => Promise<void>) | undefined;
   let adminCookie = '';
   let workspaceId = '';
@@ -67,8 +71,8 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
 
   beforeAll(async () => {
     const env = testEnv();
-    const database = createDatabase(env.DATABASE_URL);
-    closeDatabase = () => database.close();
+    database = createDatabase(env.DATABASE_URL);
+    closeDatabase = () => database!.close();
     redis = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: 1,
       lazyConnect: true,
@@ -78,11 +82,11 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
     await redis.connect();
 
     const suffix = randomUUID();
-    const [org] = await database.db
+    const [org] = await database!.db
       .insert(organizations)
       .values({ name: `Org ${suffix}`, slug: `org-${suffix}` })
       .returning();
-    const [admin] = await database.db
+    const [admin] = await database!.db
       .insert(users)
       .values({
         email: `admin-dep-${suffix}@example.com`,
@@ -92,7 +96,7 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
         status: 'active',
       })
       .returning();
-    const [workspace] = await database.db
+    const [workspace] = await database!.db
       .insert(workspaces)
       .values({
         organizationId: org?.id ?? '',
@@ -104,13 +108,13 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
       throw new Error('fixture missing');
     }
     workspaceId = workspace.id;
-    await database.db.insert(memberships).values({
+    await database!.db.insert(memberships).values({
       userId: admin.id,
       workspaceId: workspace.id,
       role: 'workspace_admin',
     });
 
-    app = await buildApp({ env, database, redis });
+    app = await buildApp({ env, database: database!, redis });
     await app.ready();
     const login = await app.inject({
       method: 'POST',
@@ -491,9 +495,148 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
     });
     expect(read.statusCode).toBe(200);
     const planned = (read.json() as {
-      project: { finishDate: string | null; durationWorkingDays: number | null };
+      project: {
+        finishDate: string | null;
+        forecastFinishDate: string | null;
+        baselineFinishDate: string | null;
+        durationWorkingDays: number | null;
+      };
     }).project;
     expect(planned.finishDate).toBe('2026-10-15');
-    expect(planned.durationWorkingDays).toBe(4);
+    expect(planned.forecastFinishDate).toBe('2026-10-15');
+    expect(planned.baselineFinishDate).toBeNull();
+    expect(planned.durationWorkingDays).toBeNull();
+  });
+
+  it('counts inclusive baseline duration and applies an approved schedule change (PRO-B-41, PRO-B-40)', async () => {
+    const projectId = await createProject('DPF');
+    const note = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/knowledge-records',
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        workspaceId,
+        projectId,
+        title: 'Kickoff notes',
+        recordType: 'note',
+        contentMarkdown: 'Notes',
+      },
+    });
+    expect(note.statusCode).toBe(200);
+    const record = (note.json() as {
+      knowledgeRecord: { id: string; humanKey: string | null; title: string };
+    }).knowledgeRecord;
+
+    const pinned = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/projects/${projectId}`,
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        charterRecordId: record.id,
+        startDate: '2026-08-01',
+        endDate: '2026-10-22',
+        workdaysPerWeek: 5,
+        nonWorkingDays: ['2026-08-20', '2026-08-21'],
+      },
+    });
+    expect(pinned.statusCode).toBe(200);
+    const baseline = (pinned.json() as {
+      project: {
+        durationWorkingDays: number | null;
+        baselineFinishDate: string | null;
+        finishDate: string | null;
+        charterRecord: { humanKey: string | null; title: string; recordType: string } | null;
+      };
+    }).project;
+    expect(baseline.durationWorkingDays).toBe(57);
+    expect(baseline.baselineFinishDate).toBe('2026-10-22');
+    expect(baseline.finishDate).toBeNull();
+    expect(baseline.charterRecord).toMatchObject({
+      title: 'Kickoff notes',
+      recordType: 'note',
+      humanKey: record.humanKey,
+    });
+
+    const oneDay = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/projects/${projectId}`,
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        startDate: '2026-10-05',
+        endDate: '2026-10-05',
+        nonWorkingDays: [],
+      },
+    });
+    expect(oneDay.statusCode).toBe(200);
+    expect(
+      (oneDay.json() as { project: { durationWorkingDays: number | null } }).project
+        .durationWorkingDays,
+    ).toBe(1);
+
+    const restored = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/projects/${projectId}`,
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        startDate: '2026-08-01',
+        endDate: '2026-10-22',
+        nonWorkingDays: ['2026-08-20', '2026-08-21'],
+      },
+    });
+    expect(restored.statusCode).toBe(200);
+
+    const created = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/change-items`,
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        kind: 'timeline',
+        title: 'Move the approved finish',
+        status: 'approved',
+        baselineEndBefore: '2026-10-22',
+        baselineEndAfter: '2026-11-02',
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const changeId = (created.json() as { changeItem: { id: string } }).changeItem.id;
+
+    const applied = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/project-change-items/${changeId}/apply-baseline`,
+      headers: { cookie: adminCookie, origin },
+    });
+    expect(applied.statusCode).toBe(200);
+    const applyBody = applied.json() as {
+      applied: boolean;
+      changeItem: { status: string; baselineAppliedAt: string | null };
+    };
+    expect(applyBody.applied).toBe(true);
+    expect(applyBody.changeItem.status).toBe('implemented');
+    expect(applyBody.changeItem.baselineAppliedAt).toBeTruthy();
+
+    const again = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/project-change-items/${changeId}/apply-baseline`,
+      headers: { cookie: adminCookie, origin },
+    });
+    expect(again.statusCode).toBe(200);
+    expect((again.json() as { applied: boolean }).applied).toBe(false);
+
+    const read = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectId}`,
+      headers: { cookie: adminCookie },
+    });
+    const project = (read.json() as {
+      project: { endDate: string | null; baselineFinishDate: string | null };
+    }).project;
+    expect(project.endDate).toBe('2026-11-02');
+    expect(project.baselineFinishDate).toBe('2026-11-02');
+
+    const audits = await database!.db
+      .select({ action: auditEvents.action })
+      .from(auditEvents)
+      .where(eq(auditEvents.entityId, changeId));
+    expect(audits.filter((row) => row.action === 'project.change_baseline_applied')).toHaveLength(1);
   });
 });
