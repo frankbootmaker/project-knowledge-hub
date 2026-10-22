@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **MCP tool error audit (PRO-T-121):** `mcp.tool_error` now stores `errorType` (`validation`, `not_found`, `forbidden`, or `internal`), a shortened sanitized message (300 characters, no tokens, secrets, or argument values), the API or OAuth client (id, name, and MCP `clientInfo` when the session initialized), and the acting user. Input validation (`-32602`), which the SDK rejects before the handler, is logged too. `get_platform_status` `recentAuditErrors` returns those fields. Admin → Monitoring filters the list by error type and client.
+
 * **Select menus (PRO-B-35):** Dropdowns use the shared `Select` listbox, so Firefox shows the same 1px ink frame around the selected option as Edge. The native popup ignored author CSS. Arrows, Home, End, type-ahead, Enter, Space, and Escape work, and focus returns to the trigger. Long lists scroll inside the viewport, including over a dialog. Forms still submit name and value, including required and disabled. The alert test-type picker uses the same control.
 
 * **AI cost date window (PRO-B-36):** `from` and `to` on `get_ai_usage_theoretical_cost`, `GET /api/v1/workspaces/:workspaceId/ai-cost`, and `GET /api/v1/admin/ai-cost` must be a real `YYYY-MM` or `YYYY-MM-DD`. Values such as `oct`, `2026-13`, and `2026-02-30` return 400 naming the field. They no longer fall back to the last 12 months. `get_platform_ai_cost` still accepts `YYYY-MM` only, and an invalid `from` or `to` names that field instead of a generic period error.

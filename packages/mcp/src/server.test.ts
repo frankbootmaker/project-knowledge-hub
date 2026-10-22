@@ -1792,3 +1792,187 @@ describe('get_workspace_media', () => {
     );
   });
 });
+
+describe('MCP tool error audit (PRO-T-121)', () => {
+  const secret = 'kh_super_secret_token_value';
+
+  async function withAuditClient(
+    scopes: string[],
+    handlers: Partial<McpToolHandlers>,
+    run: (client: Client) => Promise<void>,
+  ) {
+    const server = createKnowledgeHubMcpServer(
+      { ...testClient(scopes), actingUserId: 'user-1' },
+      handlers as McpToolHandlers,
+    );
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'cursor-test', version: '1.2.3' });
+    await Promise.all([
+      client.connect(clientTransport),
+      server.connect(serverTransport),
+    ]);
+    try {
+      await run(client);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  }
+
+  function errorDetail(onToolCall: ReturnType<typeof vi.fn>) {
+    const call = onToolCall.mock.calls.at(-1);
+    return call?.[2] as {
+      error?: { errorType?: string; message?: string };
+      clientInfo?: { name?: string; version?: string };
+      nestedTool?: string;
+    };
+  }
+
+  test('a bad-args call is logged as validation without argument values', async () => {
+    const onToolCall = vi.fn();
+    const listDeliveryDependencies = vi.fn();
+    await withAuditClient(
+      ['pm:read'],
+      { onToolCall, listDeliveryDependencies },
+      async (client) => {
+        const result = await client.callTool({
+          name: 'list_delivery_dependencies',
+          arguments: {
+            entityId: 'PRO-T-1',
+            projectId: 'not-a-uuid',
+            leaked: secret,
+          },
+        });
+        expect(result.isError).toBe(true);
+        expect(listDeliveryDependencies).not.toHaveBeenCalled();
+      },
+    );
+
+    expect(onToolCall).toHaveBeenCalledTimes(1);
+    expect(onToolCall).toHaveBeenCalledWith(
+      'list_delivery_dependencies',
+      false,
+      expect.objectContaining({
+        clientInfo: { name: 'cursor-test', version: '1.2.3' },
+        error: expect.objectContaining({ errorType: 'validation' }),
+      }),
+    );
+    const detail = errorDetail(onToolCall);
+    expect(detail.error?.message).toContain('projectId');
+    expect(detail.error?.message).not.toContain(secret);
+    expect(detail.error?.message).not.toContain('not-a-uuid');
+    expect(JSON.stringify(onToolCall.mock.calls)).not.toContain(secret);
+  });
+
+  test('not_found and forbidden calls are logged with type, message, and client', async () => {
+    const onToolCall = vi.fn();
+    const getPlatformStatus = vi.fn(async () => {
+      throw new AppError({
+        code: 'SNAPSHOT_NOT_FOUND',
+        message: 'Status snapshot not found',
+        statusCode: 404,
+      });
+    });
+    await withAuditClient(
+      ['monitoring:read'],
+      { onToolCall, getPlatformStatus },
+      async (client) => {
+        const result = await client.callTool({ name: 'get_platform_status', arguments: {} });
+        expect(result.isError).toBe(true);
+        expect(toolText(result)).toBe('Status snapshot not found');
+      },
+    );
+    expect(errorDetail(onToolCall).error).toEqual({
+      errorType: 'not_found',
+      message: 'Status snapshot not found',
+    });
+    expect(errorDetail(onToolCall).clientInfo).toEqual({
+      name: 'cursor-test',
+      version: '1.2.3',
+    });
+
+    const denied = vi.fn();
+    const deniedHandler = vi.fn();
+    await withAuditClient(
+      ['projects:read'],
+      { onToolCall: denied, getPlatformStatus: deniedHandler },
+      async (client) => {
+        const result = await client.callTool({ name: 'get_platform_status', arguments: {} });
+        expect(result.isError).toBe(true);
+        expect(toolText(result)).toBe('Missing required scope: monitoring:read');
+      },
+    );
+    expect(deniedHandler).not.toHaveBeenCalled();
+    expect(errorDetail(denied).error).toEqual({
+      errorType: 'forbidden',
+      message: 'Missing required scope: monitoring:read',
+    });
+    expect(JSON.stringify(denied.mock.calls)).not.toContain(secret);
+  });
+
+  test('an internal handler error does not log the raw message', async () => {
+    const onToolCall = vi.fn();
+    await withAuditClient(
+      ['monitoring:read'],
+      {
+        onToolCall,
+        getPlatformStatus: async () => {
+          throw new Error(`postgres://user:${secret}@db/knowledge`);
+        },
+      },
+      async (client) => {
+        const result = await client.callTool({ name: 'get_platform_status', arguments: {} });
+        expect(result.isError).toBe(true);
+      },
+    );
+    const detail = errorDetail(onToolCall);
+    expect(detail.error?.errorType).toBe('internal');
+    expect(detail.error?.message).toContain('Internal error');
+    expect(detail.error?.message).not.toContain(secret);
+    expect(detail.error?.message).not.toContain('postgres://');
+  });
+
+  test('call_hub_tool validation records the nested tool name only', async () => {
+    const onToolCall = vi.fn();
+    const listDeliveryDependencies = vi.fn();
+    const server = createKnowledgeHubMcpServer(
+      testClient(['projects:read', 'pm:read']),
+      { onToolCall, listDeliveryDependencies } as McpToolHandlers,
+      {
+        oauth: {
+          resourceMetadataUrl: 'https://knowledge.example.com/.well-known/oauth-protected-resource',
+          profile: { id: 'user-1', name: 'Ada' },
+        },
+      },
+    );
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'chatgpt', version: '0.1.0' });
+    await Promise.all([
+      client.connect(clientTransport),
+      server.connect(serverTransport),
+    ]);
+    try {
+      const result = await client.callTool({
+        name: 'call_hub_tool',
+        arguments: {
+          toolName: 'list_delivery_dependencies',
+          arguments: { entityId: 'PRO-T-1', leaked: secret },
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect(listDeliveryDependencies).not.toHaveBeenCalled();
+    } finally {
+      await client.close();
+      await server.close();
+    }
+    expect(onToolCall).toHaveBeenCalledWith(
+      'call_hub_tool',
+      false,
+      expect.objectContaining({
+        nestedTool: 'list_delivery_dependencies',
+        error: expect.objectContaining({ errorType: 'validation' }),
+      }),
+    );
+    expect(JSON.stringify(onToolCall.mock.calls)).not.toContain(secret);
+  });
+});

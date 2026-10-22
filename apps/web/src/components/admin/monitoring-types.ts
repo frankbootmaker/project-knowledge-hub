@@ -1,5 +1,25 @@
 /** Shared admin monitoring API payload (health + backups). */
 
+export type MonitoringAuditErrorType = 'validation' | 'not_found' | 'forbidden' | 'internal';
+
+export type MonitoringAuditError = {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  createdAt: string;
+  errorType: MonitoringAuditErrorType | null;
+  message: string | null;
+  client: {
+    id: string | null;
+    name: string | null;
+    kind: 'api_client' | 'oauth' | null;
+    oauthClientId: string | null;
+  };
+  clientInfo: { name: string; version: string } | null;
+  user: { id: string | null; name: string | null } | null;
+};
+
 export type MonitoringPayload = {
   overall: 'healthy' | 'degraded';
   generatedAt: string;
@@ -53,6 +73,7 @@ export type MonitoringPayload = {
       toolErrorCount: number;
     }>;
   };
+  recentAuditErrors?: MonitoringAuditError[];
   catalogue: {
     range: string;
     topRecords: Array<{ entityId: string; label: string | null; count: number }>;
