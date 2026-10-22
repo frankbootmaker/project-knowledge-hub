@@ -120,11 +120,13 @@
     @apply w-auto min-w-[8rem] flex-1 shrink basis-0 sm:min-w-[10rem];
   }
 
-  .kh-function-header-controls select.kh-input {
+  .kh-function-header-controls select.kh-input,
+  .kh-function-header-controls .kh-select-trigger {
     @apply w-auto max-w-[11rem] shrink-0;
   }
 
-  .kh-function-header-controls select.kh-input.kh-ops-inline-select {
+  .kh-function-header-controls select.kh-input.kh-ops-inline-select,
+  .kh-function-header-controls .kh-select-trigger.kh-ops-inline-select {
     width: max-content;
     max-width: none;
     field-sizing: content;

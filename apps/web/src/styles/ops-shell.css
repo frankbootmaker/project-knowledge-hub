@@ -1333,13 +1333,15 @@ a.kh-section-shortcut[aria-current='location'] {
    rules are unlayered so they beat the components-layer input recipe.
    7.5rem is the floor (~25% under the previous 10rem). field-sizing grows
    past it when the current label is longer. Text columns stay wrapping. */
-.kh-ops-data-table td:has(> select.kh-input) {
+.kh-ops-data-table td:has(> select.kh-input),
+.kh-ops-data-table td:has(> .kh-select) {
   width: auto;
   min-width: max-content;
 }
 
 .kh-ops-inline-select,
-.kh-ops-data-table td select.kh-input {
+.kh-ops-data-table td select.kh-input,
+.kh-ops-data-table td > .kh-select > .kh-select-trigger {
   box-sizing: border-box;
   width: max-content;
   min-width: 7.5rem;
@@ -4462,7 +4464,101 @@ a.kh-ops-record-link:hover {
   border-top: 1px solid var(--kh-line);
 }
 
-.kh-ops-alert-type-trigger::after {
+/* Shared select. The trigger keeps the input (or secondary button) face.
+   The menu is portaled, so it needs a z-index above dialogs. Firefox does
+   not paint author CSS on a native <select> popup. */
+.kh-select {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.kh-select-button,
+.kh-function-header-controls .kh-select,
+.kh-select:has(> .kh-ops-inline-select),
+.kh-select:has(> .w-auto),
+.kh-ops-data-table td > .kh-select {
+  width: auto;
+  max-width: none;
+}
+
+.kh-function-header-controls .kh-select:not(:has(> .kh-ops-inline-select)) {
+  max-width: 11rem;
+  flex-shrink: 0;
+}
+
+.kh-select-native {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  appearance: none;
+}
+
+.kh-select-trigger {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  letter-spacing: normal;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kh-select-trigger:disabled {
+  cursor: not-allowed;
+}
+
+.kh-select-trigger.kh-input:disabled {
+  opacity: 0.6;
+}
+
+.kh-select-trigger.kh-input {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-inline-end: 1.75rem;
+}
+
+.kh-select-trigger.kh-input::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+.kh-select-trigger.w-auto {
+  width: auto;
+  max-width: none;
+}
+
+.kh-select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kh-ops-inline-select > .kh-select-value {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.kh-ops-alert-type-trigger::after,
+.kh-select-trigger-button::after {
   content: '';
   width: 0.42rem;
   height: 0.42rem;
@@ -4471,28 +4567,43 @@ a.kh-ops-record-link:hover {
   transform: translateY(-0.12rem) rotate(45deg);
 }
 
-.kh-ops-popover.kh-ops-alert-type-menu {
+.kh-ops-popover.kh-ops-alert-type-menu,
+.kh-ops-popover.kh-ops-select-menu {
   position: fixed;
   top: var(--kh-pop-top, 0);
   left: var(--kh-pop-left, 0);
-  z-index: var(--kh-z-popover);
+  z-index: calc(var(--kh-z-modal) + 2);
   width: max-content;
-  min-width: 12rem;
+  min-width: max(12rem, var(--kh-pop-anchor-width, 12rem));
+  max-width: min(36rem, calc(100vw - 1rem));
   max-height: min(24rem, calc(100vh - 1rem));
   margin-top: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   gap: 4px;
   padding: 6px;
   background: var(--kh-panel-solid);
   color: var(--kh-ink);
 }
 
-.kh-ops-alert-type-menu [role='listbox'] {
+.kh-ops-alert-type-menu [role='listbox'],
+.kh-ops-select-menu [role='listbox'] {
   display: grid;
   gap: 4px;
 }
 
-.kh-ops-alert-type-menu .kh-ops-choice {
+.kh-select-group-label {
+  padding: 6px 8px 2px;
+  color: var(--kh-ink-muted);
+  font-family: var(--font-sans), 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: normal;
+  line-height: 1.45;
+}
+
+.kh-ops-alert-type-menu .kh-ops-choice,
+.kh-ops-select-menu .kh-ops-choice {
   appearance: none;
   border: 1px solid transparent;
   background: transparent;
@@ -4501,24 +4612,35 @@ a.kh-ops-record-link:hover {
   font-size: 13px;
   font-weight: 400;
   line-height: 1.45;
+  letter-spacing: normal;
   outline: none;
   box-shadow: none;
 }
 
-.kh-ops-alert-type-menu .kh-ops-choice::-moz-focus-inner {
+.kh-ops-alert-type-menu .kh-ops-choice::-moz-focus-inner,
+.kh-ops-select-menu .kh-ops-choice::-moz-focus-inner {
   border: 0;
   padding: 0;
 }
 
-.kh-ops-alert-type-menu .kh-ops-choice:hover {
+.kh-ops-alert-type-menu .kh-ops-choice:hover,
+.kh-ops-select-menu .kh-ops-choice:hover,
+.kh-ops-select-menu .kh-ops-choice[data-active='true']:not([aria-selected='true']) {
   border-color: transparent;
   background: var(--kh-neutral-soft);
+  outline: none;
+  box-shadow: none;
 }
 
 .kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true'],
 .kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true']:hover,
 .kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true']:focus,
-.kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true']:focus-visible {
+.kh-ops-alert-type-menu .kh-ops-choice[aria-selected='true']:focus-visible,
+.kh-ops-select-menu .kh-ops-choice[aria-selected='true'],
+.kh-ops-select-menu .kh-ops-choice[aria-selected='true']:hover,
+.kh-ops-select-menu .kh-ops-choice[aria-selected='true']:focus,
+.kh-ops-select-menu .kh-ops-choice[aria-selected='true']:focus-visible,
+.kh-ops-select-menu .kh-ops-choice[aria-selected='true'][data-active='true'] {
   border: 1px solid var(--kh-ink);
   background: transparent;
   outline: none;

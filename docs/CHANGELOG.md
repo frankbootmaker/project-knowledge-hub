@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Select menus (PRO-B-35):** Dropdowns use the shared `Select` listbox, so Firefox shows the same 1px ink frame around the selected option as Edge. The native popup ignored author CSS. Arrows, Home, End, type-ahead, Enter, Space, and Escape work, and focus returns to the trigger. Long lists scroll inside the viewport, including over a dialog. Forms still submit name and value, including required and disabled. The alert test-type picker uses the same control.
+
 * **CSV import buttons (PRO-B-28):** Preview and Import are enabled as soon as the first CSV is read, including a file that was imported before. The file input is cleared after reading, so choosing the same file again works.
 
 * **Archived and cancelled parents (PRO-B-29):** Linking or updating items no longer turns an archived cancelled milestone into `in_progress`. Recompute skips archived stories, epics, and milestones and never overwrites a cancelled status. `set_project_milestone_item_links`, task story/milestone/sprint assignment, and moving a story onto an epic reject an archived parent with `Milestone PNZ-M-12 is archived; unarchive it first` (409). The delivery dialogs show the same rule and leave an archived milestone's links unchanged. After unarchive, linking works again. A cancelled parent stays cancelled until an explicit status change.
