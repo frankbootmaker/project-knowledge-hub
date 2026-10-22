@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
-/** Add a tab here when another platform financials view lands. */
-export const PLATFORM_FINANCIALS_TABS = ['ai-cost'] as const;
+/** Platform Financials. Model rates edits the global price list. */
+export const PLATFORM_FINANCIALS_TABS = ['ai-cost', 'model-rates'] as const;
 
 export type PlatformFinancialsTab = (typeof PLATFORM_FINANCIALS_TABS)[number];
 

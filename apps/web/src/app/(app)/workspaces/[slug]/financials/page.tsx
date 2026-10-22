@@ -11,6 +11,7 @@ import {
   FinancialsTabs,
   parseFinancialsTab,
 } from '../../../../../components/financials/FinancialsTabs';
+import { ModelRatesAdmin } from '../../../../../components/financials/ModelRatesAdmin';
 import { UsageImportAdmin } from '../../../../../components/financials/UsageImportAdmin';
 import type {
   UnassignedUsageGroup,
@@ -90,7 +91,7 @@ export default async function WorkspaceFinancialsPage({
       tab === 'ai-cost'
         ? apiFetch(`/api/v1/workspaces/${workspace.id}/ai-cost${costSuffix}`)
         : Promise.resolve(null),
-      tab === 'ai-cost'
+      tab === 'ai-cost' || tab === 'model-rates'
         ? apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`)
         : Promise.resolve(null),
       tab === 'usage-import'
@@ -155,6 +156,7 @@ export default async function WorkspaceFinancialsPage({
         labels={{
           'ai-cost': t('tabAiCost'),
           'usage-import': t('tabUsageImport'),
+          'model-rates': t('tabModelRates'),
         }}
       />
       {tab === 'usage-import' ? (
@@ -166,6 +168,14 @@ export default async function WorkspaceFinancialsPage({
           unassigned={unassigned.groups}
           unassignedTheoretical={unassigned.theoretical}
           unpricedModels={unassigned.unpricedModels}
+        />
+      ) : tab === 'model-rates' ? (
+        <ModelRatesAdmin
+          scope="workspace"
+          workspaceId={workspace.id}
+          workspaceSlug={workspace.slug}
+          canEdit={canAdminWorkspace(session, workspace.id)}
+          systems={systems}
         />
       ) : (
         <AiCostAdmin
