@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
@@ -12,6 +13,14 @@ import {
   MCP_MAX_CONTENT_CHARS,
   MCP_MAX_LIST_LIMIT,
 } from './limits.js';
+import {
+  classifyMcpToolError,
+  classifyMcpToolErrorMessage,
+  sanitizeAuditErrorMessage,
+  sanitizeClientInfo,
+  type McpAuditClientInfo,
+  type McpToolErrorDetail,
+} from './audit-error.js';
 import { openMcpToolOutputSchemas } from './open-output-schema.js';
 import {
   dependencyLagDaysSchema,
@@ -40,6 +49,8 @@ export type McpClientContext = {
    * and must not be written to created_by_api_client_id.
    */
   oauthGrantId?: string | null;
+  /** External OAuth client id (not the grant uuid). */
+  oauthClientId?: string | null;
 };
 
 export type McpToolHandlers = {
@@ -222,6 +233,18 @@ export type McpToolHandlers = {
     translationGroupId?: string | null;
     generatedByModel?: string;
     sourceTitle?: string;
+  }) => Promise<unknown>;
+  importDocumentKnowledgeRecord: (input: {
+    workspaceId: string;
+    projectId?: string;
+    title?: string;
+    recordType?: string;
+    language?: string;
+    acknowledgeSecrets?: boolean;
+    filename?: string;
+    contentType?: string;
+    contentBase64?: string;
+    mediaId?: string;
   }) => Promise<unknown>;
   updateKnowledgeRecord: (input: {
     recordId: string;
@@ -882,6 +905,12 @@ export type McpToolCallContext = {
   systemId?: string;
   workspaceId?: string;
   mediaId?: string;
+  /** Set on failures. Message is already shortened and sanitized. */
+  error?: McpToolErrorDetail;
+  /** MCP initialize clientInfo when this session completed initialize. */
+  clientInfo?: McpAuditClientInfo;
+  /** call_hub_tool target name. Never argument values. */
+  nestedTool?: string;
 };
 
 /**
@@ -1087,6 +1116,129 @@ function extractToolContext(data: unknown): McpToolCallContext {
   return ctx;
 }
 
+const mcpAuditFlag = new AsyncLocalStorage<{ logged: boolean }>();
+
+function readMcpClientInfo(server: McpServer): McpAuditClientInfo | undefined {
+  const info = sanitizeClientInfo(server.server.getClientVersion());
+  return info ?? undefined;
+}
+
+function toolNameFromRequest(request: unknown): string {
+  if (!request || typeof request !== 'object') return 'unknown';
+  const params = (request as { params?: { name?: unknown } }).params;
+  const name = params?.name;
+  if (typeof name === 'string' && /^[A-Za-z0-9_]{1,80}$/.test(name)) return name;
+  return 'unknown';
+}
+
+/** Only the hub tool name, never the arguments object. */
+function nestedToolFromRequest(request: unknown, toolName: string): string | undefined {
+  if (toolName !== 'call_hub_tool') return undefined;
+  if (!request || typeof request !== 'object') return undefined;
+  const params = (request as { params?: { arguments?: unknown } }).params;
+  const args = params?.arguments;
+  if (!args || typeof args !== 'object') return undefined;
+  const nested = (args as { toolName?: unknown }).toolName;
+  if (typeof nested === 'string' && /^[a-z0-9_]{1,80}$/.test(nested)) return nested;
+  return undefined;
+}
+
+function errorTextFromResult(result: unknown): string {
+  if (!result || typeof result !== 'object') return 'MCP tool error';
+  const content = (result as { content?: Array<{ text?: unknown }> }).content;
+  const text = content?.find((block) => typeof block?.text === 'string')?.text;
+  return typeof text === 'string' && text.trim() ? text : 'MCP tool error';
+}
+
+function isToolErrorResult(result: unknown): boolean {
+  return Boolean(
+    result && typeof result === 'object' && (result as { isError?: unknown }).isError === true,
+  );
+}
+
+async function recordMcpToolError(
+  handlers: McpToolHandlers,
+  server: McpServer,
+  toolName: string,
+  error: unknown,
+  result: { content?: Array<{ text?: string }> },
+  argContext?: McpToolCallContext,
+  nestedTool?: string,
+): Promise<void> {
+  const flag = mcpAuditFlag.getStore();
+  if (flag?.logged) return;
+  if (flag) flag.logged = true;
+  if (!handlers.onToolCall) return;
+  const rawMessage = result.content?.[0]?.text
+    ?? (error instanceof Error ? error.message : 'MCP tool error');
+  const errorType = typeof error === 'string'
+    ? classifyMcpToolErrorMessage(error)
+    : classifyMcpToolError(error);
+  const message = sanitizeAuditErrorMessage(rawMessage, errorType);
+  const clientInfo = readMcpClientInfo(server);
+  try {
+    await handlers.onToolCall(toolName, false, {
+      ...argContext,
+      error: { errorType, message },
+      ...(clientInfo ? { clientInfo } : {}),
+      ...(nestedTool ? { nestedTool } : {}),
+    });
+  } catch (auditError) {
+    handlers.logger?.error({ err: auditError }, 'MCP tool error audit failed');
+  }
+}
+
+/**
+ * Schema checks run before the tool callback, so -32602 / input validation
+ * never enters wrap(). Audit those results here. Handler errors set the
+ * flag inside wrap() and are not recorded twice.
+ */
+function installMcpToolErrorAudit(server: McpServer, handlers: McpToolHandlers): void {
+  const protocol = server.server as unknown as {
+    _requestHandlers?: Map<string, (request: unknown, extra: unknown) => Promise<unknown>>;
+  };
+  const handlersMap = protocol._requestHandlers;
+  const current = handlersMap?.get('tools/call');
+  if (!handlersMap || !current) return;
+  handlersMap.set('tools/call', (request, extra) => {
+    const flag = { logged: false };
+    return mcpAuditFlag.run(flag, async () => {
+      try {
+        const result = await current(request, extra);
+        if (isToolErrorResult(result) && !flag.logged) {
+          const toolName = toolNameFromRequest(request);
+          const text = errorTextFromResult(result);
+          await recordMcpToolError(
+            handlers,
+            server,
+            toolName,
+            text,
+            { content: [{ text }] },
+            undefined,
+            nestedToolFromRequest(request, toolName),
+          );
+        }
+        return result;
+      } catch (error) {
+        if (!flag.logged) {
+          const toolName = toolNameFromRequest(request);
+          const text = error instanceof Error ? error.message : 'MCP tool error';
+          await recordMcpToolError(
+            handlers,
+            server,
+            toolName,
+            error,
+            { content: [{ text }] },
+            undefined,
+            nestedToolFromRequest(request, toolName),
+          );
+        }
+        throw error;
+      }
+    });
+  });
+}
+
 export function createKnowledgeHubMcpServer(
   client: McpClientContext,
   handlers: McpToolHandlers,
@@ -1128,8 +1280,8 @@ export function createKnowledgeHubMcpServer(
         });
         return present(data);
       } catch (error) {
-        await handlers.onToolCall?.(toolName, false, argContext);
         const result = toMcpErrorResult(error, handlers.logger);
+        await recordMcpToolError(handlers, server, toolName, error, result, argContext);
         if (!options?.oauth || !oauthReauthError(error)) {
           return result;
         }
@@ -2059,6 +2211,33 @@ export function createKnowledgeHubMcpServer(
           workspaceId: args.workspaceId,
           projectId: args.projectId,
           systemId: args.systemId,
+        },
+      )(),
+  );
+
+  server.tool(
+    'import_document_knowledge_record',
+    'Import a PDF or DOCX as a draft Markdown knowledge record. Pass contentBase64, filename, and contentType, or mediaId of a file already in the workspace. Optional projectId, title, recordType, language. Same type and size checks as the web import. Requires knowledge:write and a workspace maintainer. Returns id, humanKey, and contentMarkdown.',
+    {
+      workspaceId: z.string().uuid(),
+      projectId: z.string().uuid().optional(),
+      title: z.string().min(1).max(300).optional(),
+      recordType: z.string().min(1).max(64).optional(),
+      language: z.string().min(2).max(16).optional(),
+      acknowledgeSecrets: z.boolean().optional(),
+      filename: z.string().min(1).max(200).optional(),
+      contentType: z.string().min(1).max(200).optional(),
+      contentBase64: z.string().min(1).max(40_000_000).optional(),
+      mediaId: z.string().uuid().optional(),
+    },
+    async (args) =>
+      wrap(
+        'import_document_knowledge_record',
+        'knowledge:write',
+        () => handlers.importDocumentKnowledgeRecord(args),
+        {
+          workspaceId: args.workspaceId,
+          projectId: args.projectId,
         },
       )(),
   );
@@ -4200,7 +4379,9 @@ export function createKnowledgeHubMcpServer(
               toolName: args.toolName,
               arguments: args.arguments ?? {},
             }),
-          undefined,
+          /^[a-z0-9_]{1,80}$/.test(args.toolName)
+            ? { nestedTool: args.toolName }
+            : undefined,
           args.toolName === 'get_workspace_media' ? presentWorkspaceMediaRead : textResult,
         )(),
     );
@@ -4211,6 +4392,7 @@ export function createKnowledgeHubMcpServer(
   openMcpToolOutputSchemas(server);
   rejectUnknownToolArguments(server);
   describeRequiredToolInputs(server);
+  installMcpToolErrorAudit(server, handlers);
   return server;
 }
 

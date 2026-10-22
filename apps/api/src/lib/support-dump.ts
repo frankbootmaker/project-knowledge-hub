@@ -9,6 +9,7 @@ import {
   loadEffectiveAlertSettings,
   readAuditRetentionSnapshot,
 } from '@project-knowledge-hub/database';
+import type { RecentMcpAuditError } from '@project-knowledge-hub/mcp';
 import {
   listDumpArtifacts,
   readStamp,
@@ -86,13 +87,7 @@ export type SupportDump = {
     toolCallCount: number;
     toolErrorCount: number;
   };
-  recentAuditErrors: Array<{
-    id: string;
-    action: string;
-    entityType: string;
-    entityId: string | null;
-    createdAt: string;
-  }>;
+  recentAuditErrors: RecentMcpAuditError[];
   auditRetention: {
     retentionDays: number;
     source: 'override' | 'env';

@@ -23,6 +23,10 @@ import {
   workspaces,
   type Database,
 } from '@project-knowledge-hub/database';
+import {
+  projectRecentAuditError,
+  type RecentMcpAuditError,
+} from '@project-knowledge-hub/mcp';
 
 export async function getSchemaVersionLabel(database: Database): Promise<string> {
   try {
@@ -630,26 +634,24 @@ const ERROR_AUDIT_ACTION_SQL = sql`(
   OR ${auditEvents.action} IN ('mcp.tool_error', 'llm.tool_error')
 )`;
 
-/** Recent audit rows that look like failures (ids/actions only — no metadata). */
+/**
+ * Recent failure-like audit rows. Metadata is reduced to error type, a
+ * sanitized message, client identity, and user. Argument values are not returned.
+ */
 export async function getRecentErrorAuditEvents(
   database: Database,
   since: Date,
   limit = 40,
-): Promise<
-  Array<{
-    id: string;
-    action: string;
-    entityType: string;
-    entityId: string | null;
-    createdAt: string;
-  }>
-> {
+): Promise<RecentMcpAuditError[]> {
   const rows = await database.db
     .select({
       id: auditEvents.id,
       action: auditEvents.action,
       entityType: auditEvents.entityType,
       entityId: auditEvents.entityId,
+      actorType: auditEvents.actorType,
+      actorId: auditEvents.actorId,
+      metadataJson: auditEvents.metadataJson,
       createdAt: auditEvents.createdAt,
     })
     .from(auditEvents)
@@ -657,13 +659,18 @@ export async function getRecentErrorAuditEvents(
     .orderBy(desc(auditEvents.createdAt))
     .limit(limit);
 
-  return rows.map((row) => ({
-    id: row.id,
-    action: row.action,
-    entityType: row.entityType,
-    entityId: row.entityId,
-    createdAt: row.createdAt.toISOString(),
-  }));
+  return rows.map((row) =>
+    projectRecentAuditError({
+      id: row.id,
+      action: row.action,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      actorType: row.actorType,
+      actorId: row.actorId,
+      metadata: row.metadataJson,
+      createdAt: row.createdAt.toISOString(),
+    }),
+  );
 }
 
 /** Count error-like audit events since `since` (for Monitoring ops export). */

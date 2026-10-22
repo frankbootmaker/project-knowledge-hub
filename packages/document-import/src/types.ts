@@ -113,6 +113,7 @@ export function isAllowedUpload(input: {
 export const createDraftFromDocumentImportInputSchema = z.object({
   title: z.string().trim().min(1).max(300).optional(),
   recordType: z.enum(RECORD_TYPES).optional(),
+  language: z.string().trim().min(2).max(16).optional(),
   excerptNote: z.string().trim().max(2000).optional(),
   acknowledgeSecrets: z.boolean().optional(),
   contentMarkdown: z.string().max(500_000).optional(),

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **MCP tool error audit (PRO-T-121):** `mcp.tool_error` now stores `errorType` (`validation`, `not_found`, `forbidden`, or `internal`), a shortened sanitized message (300 characters, no tokens, secrets, or argument values), the API or OAuth client (id, name, and MCP `clientInfo` when the session initialized), and the acting user. Input validation (`-32602`), which the SDK rejects before the handler, is logged too. `get_platform_status` `recentAuditErrors` returns those fields. Admin → Monitoring filters the list by error type and client.
+
 * **Select menus (PRO-B-35):** Dropdowns use the shared `Select` listbox, so Firefox shows the same 1px ink frame around the selected option as Edge. The native popup ignored author CSS. Arrows, Home, End, type-ahead, Enter, Space, and Escape work, and focus returns to the trigger. Long lists scroll inside the viewport, including over a dialog. Forms still submit name and value, including required and disabled. The alert test-type picker uses the same control.
 
 * **AI cost date window (PRO-B-36):** `from` and `to` on `get_ai_usage_theoretical_cost`, `GET /api/v1/workspaces/:workspaceId/ai-cost`, and `GET /api/v1/admin/ai-cost` must be a real `YYYY-MM` or `YYYY-MM-DD`. Values such as `oct`, `2026-13`, and `2026-02-30` return 400 naming the field. They no longer fall back to the last 12 months. `get_platform_ai_cost` still accepts `YYYY-MM` only, and an invalid `from` or `to` names that field instead of a generic period error.
@@ -52,6 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **Linked knowledge titles:** Project linked-knowledge titles are plain links again, matching linked systems. The key chip opens the same record.
 
 ### Added
+
+* **PDF/DOCX knowledge import for agents (PRO task 26b913ca):** MCP `import_document_knowledge_record` (`knowledge:write`, ChatGPT via `call_hub_tool`) imports a PDF or DOCX as a draft Markdown knowledge record. Pass `contentBase64` with `filename` and `contentType`, or `mediaId` of a file already in the workspace, plus `workspaceId` and optional `projectId`, `title`, `recordType`, and `language`. The acting user must be a workspace maintainer. Type and size checks match the web import. Conversion reuses `processDocumentImportConvert` (no second MarkItDown path) and the response includes `id`, `humanKey`, and `contentMarkdown`. Validation failures are `isError` and the text starts with the error code (`DOCUMENT_IMPORT_TYPE_UNSUPPORTED`, `DOCUMENT_IMPORT_TOO_LARGE`, `FORBIDDEN`).
 
 * **AI Cost period presets (PRO-T-110):** This quarter and This month sit beside This year on the shared AI Cost period picker (workspace and platform). Presets use the calendar in the browser time zone and stay highlighted until the dates are edited. The selection applies to the chart, the monthly table, and the summary. English, German, and Hungarian.
 
