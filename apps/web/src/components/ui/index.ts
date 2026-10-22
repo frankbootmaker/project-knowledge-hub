@@ -6,7 +6,8 @@ export {
 } from './Badge';
 export { Button } from './Button';
 export { buttonClassName, type ButtonVariant } from './buttonStyles';
-export { ErrorText, Field, Input, Select, Textarea } from './Field';
+export { ErrorText, Field, Input, Textarea } from './Field';
+export { Select, type SelectProps, type SelectVariant } from './Select';
 export { DateField, DateRangeFields } from './DateField';
 export { FilePicker } from './FilePicker';
 export { FunctionHeader } from './FunctionHeader';

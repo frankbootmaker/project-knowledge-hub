@@ -515,9 +515,8 @@ export function KnowledgeRecordManageMenu(props: {
               >
                 {t('exportStylePack')}
               </label>
-              <select
+              <Select
                 id="export-style-pack"
-                className="kh-input"
                 value={stylePackId}
                 disabled={exportPending}
                 onChange={(event) => setStylePackId(event.target.value)}
@@ -528,7 +527,7 @@ export function KnowledgeRecordManageMenu(props: {
                     {pack.builtin ? ` (${t('exportStylePackBlank')})` : ''}
                   </option>
                 ))}
-              </select>
+              </Select>
               <p className="m-0 text-xs text-ink-muted">{t('exportStylePackHint')}</p>
             </li>
             <ManageMenuItem
