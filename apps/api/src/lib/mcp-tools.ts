@@ -66,6 +66,7 @@ import {
   userStoryStatusSchema,
 } from '@project-knowledge-hub/domain';
 import {
+  buildMcpToolAuditMetadata,
   ContentOffsetError,
   contentSha256,
   isTruncatedReadback,
@@ -5888,23 +5889,34 @@ export function createMcpToolHandlers(
     },
 
     async onToolCall(toolName, ok, context) {
+      let userName: string | null = null;
+      if (!ok && client.actingUserId) {
+        if (client.oauthGrantId) {
+          userName = client.name;
+        } else {
+          const [user] = await app.database.db
+            .select({ displayName: users.displayName })
+            .from(users)
+            .where(eq(users.id, client.actingUserId))
+            .limit(1);
+          userName = user?.displayName ?? null;
+        }
+      }
+      const actorType = client.oauthGrantId ? 'oauth_grant' : 'api_client';
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        actorType,
+        actorId: client.oauthGrantId ?? client.id,
         action: ok ? 'mcp.tool_call' : 'mcp.tool_error',
         entityType: 'mcp_tool',
         entityId: toolName,
-        metadata: {
-          clientName: client.name,
+        metadata: buildMcpToolAuditMetadata({
+          client,
           toolName,
           ok,
-          ...(context?.recordId ? { recordId: context.recordId } : {}),
-          ...(context?.projectId ? { projectId: context.projectId } : {}),
-          ...(context?.systemId ? { systemId: context.systemId } : {}),
-          ...(context?.workspaceId ? { workspaceId: context.workspaceId } : {}),
-          ...(context?.mediaId ? { mediaId: context.mediaId } : {}),
-        },
+          context,
+          userName,
+        }),
         ipAddress: ipAddress ?? null,
       });
     },

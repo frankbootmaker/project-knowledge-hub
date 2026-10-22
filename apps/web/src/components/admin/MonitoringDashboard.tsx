@@ -20,7 +20,13 @@ import {
   MonitoringAdminTabs,
   type MonitoringAdminTab,
 } from './MonitoringAdminTabs';
-import type { MonitoringPayload } from './monitoring-types';
+import {
+  auditErrorClientOptions,
+  auditErrorTypeTone,
+  filterAuditErrors,
+  type AuditErrorTypeFilter,
+} from './audit-error-filters';
+import type { MonitoringAuditErrorType, MonitoringPayload } from './monitoring-types';
 
 export type { MonitoringPayload } from './monitoring-types';
 
@@ -63,6 +69,8 @@ export function MonitoringDashboard({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reindexWorkspaceId, setReindexWorkspaceId] = useState('');
+  const [auditErrorType, setAuditErrorType] = useState<AuditErrorTypeFilter>('all');
+  const [auditClientKey, setAuditClientKey] = useState('all');
 
   useEffect(() => {
     const openHashedTab = () => {
@@ -92,6 +100,25 @@ export function MonitoringDashboard({
       window.removeEventListener('hashchange', scrollToHash);
     };
   }, [router, tab]);
+
+  const auditErrors = data.recentAuditErrors ?? [];
+  const auditClientOptions = auditErrorClientOptions(auditErrors);
+  const auditClientFilter = auditClientKey === 'all'
+    || auditClientOptions.some((option) => option.key === auditClientKey)
+    ? auditClientKey
+    : 'all';
+  const shownAuditErrors = filterAuditErrors(auditErrors, {
+    errorType: auditErrorType,
+    clientKey: auditClientFilter,
+  });
+
+  function auditTypeLabel(errorType: MonitoringAuditErrorType | null): string {
+    if (errorType === 'validation') return t('monitoringAuditErrorValidation');
+    if (errorType === 'not_found') return t('monitoringAuditErrorNotFound');
+    if (errorType === 'forbidden') return t('monitoringAuditErrorForbidden');
+    if (errorType === 'internal') return t('monitoringAuditErrorInternal');
+    return t('monitoringAuditErrorUnclassified');
+  }
 
   const overallOk = data.overall === 'healthy';
   const backupAge = formatAge(
@@ -517,6 +544,87 @@ export function MonitoringDashboard({
                   </tbody>
                 </table>
               </div>
+            )}
+          </section>
+
+          <section id="audit-errors" className="kh-ops-panel scroll-mt-6 overflow-hidden">
+            <div className="kh-ops-panel-head">
+              <div className="min-w-0">
+                <h2 className="kh-ops-panel-title">{t('monitoringAuditErrorsTitle')}</h2>
+                <p className="kh-ops-panel-sub">{t('monitoringAuditErrorsSub')}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  className="kh-ops-inline-control"
+                  aria-label={t('monitoringAuditErrorType')}
+                  value={auditErrorType}
+                  onChange={(event) => {
+                    setAuditErrorType(event.target.value as AuditErrorTypeFilter);
+                  }}
+                >
+                  <option value="all">{t('monitoringAuditErrorTypeAll')}</option>
+                  <option value="validation">{t('monitoringAuditErrorValidation')}</option>
+                  <option value="not_found">{t('monitoringAuditErrorNotFound')}</option>
+                  <option value="forbidden">{t('monitoringAuditErrorForbidden')}</option>
+                  <option value="internal">{t('monitoringAuditErrorInternal')}</option>
+                </Select>
+                <Select
+                  className="kh-ops-inline-control"
+                  aria-label={t('monitoringAuditErrorClient')}
+                  value={auditClientFilter}
+                  onChange={(event) => setAuditClientKey(event.target.value)}
+                >
+                  <option value="all">{t('monitoringAuditErrorClientAll')}</option>
+                  {auditClientOptions.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label === 'unknown'
+                        ? t('monitoringAuditErrorUnknownClient')
+                        : option.label}
+                    </option>
+                  ))}
+                </Select>
+                <span className="kh-ops-panel-meta">
+                  {t('monitoringAuditErrorCount', {
+                    shown: shownAuditErrors.length,
+                    total: auditErrors.length,
+                  })}
+                </span>
+              </div>
+            </div>
+            {auditErrors.length === 0 ? (
+              <p className="kh-ops-empty">{t('monitoringAuditErrorsEmpty')}</p>
+            ) : shownAuditErrors.length === 0 ? (
+              <p className="kh-ops-empty">{t('monitoringAuditErrorsFilteredEmpty')}</p>
+            ) : (
+              shownAuditErrors.map((row) => (
+                <div key={row.id} className="kh-ops-list-row">
+                  <div className="min-w-0">
+                    <div className="kh-ops-list-title font-mono">
+                      {row.entityId ?? row.action}
+                    </div>
+                    <div className="kh-ops-list-note">
+                      {row.client.name
+                        || row.clientInfo?.name
+                        || t('monitoringAuditErrorUnknownClient')}
+                      {row.clientInfo?.name && row.client.name
+                        && row.clientInfo.name !== row.client.name
+                        ? ` · ${row.clientInfo.name}`
+                        : ''}
+                      {row.user?.name || row.user?.id
+                        ? ` · ${row.user?.name || row.user?.id}`
+                        : ''}
+                      {' · '}
+                      {new Date(row.createdAt).toLocaleString()}
+                    </div>
+                    {row.message ? (
+                      <div className="kh-ops-list-note font-mono">{row.message}</div>
+                    ) : null}
+                  </div>
+                  <Badge tone={auditErrorTypeTone(row.errorType)}>
+                    {auditTypeLabel(row.errorType)}
+                  </Badge>
+                </div>
+              ))
             )}
           </section>
 

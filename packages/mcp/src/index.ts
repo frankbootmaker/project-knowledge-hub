@@ -25,8 +25,22 @@ export {
 export {
   createKnowledgeHubMcpServer,
   type McpClientContext,
+  type McpToolCallContext,
   type McpToolHandlers,
 } from './server.js';
+export {
+  buildMcpToolAuditMetadata,
+  classifyMcpToolError,
+  classifyMcpToolErrorMessage,
+  projectRecentAuditError,
+  sanitizeAuditErrorMessage,
+  sanitizeClientInfo,
+  MCP_AUDIT_ERROR_MESSAGE_MAX,
+  MCP_AUDIT_ERROR_TYPES,
+  type McpAuditClientInfo,
+  type McpAuditErrorType,
+  type RecentMcpAuditError,
+} from './audit-error.js';
 export {
   apiBaseFromMcpUrl,
   llmOpenApiUrlFromMcpUrl,

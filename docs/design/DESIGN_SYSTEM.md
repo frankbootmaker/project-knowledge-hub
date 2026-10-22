@@ -252,6 +252,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-22
 
+* **Monitoring tool errors (PRO-T-121)** — Admin → Monitoring lists recent tool errors under the client leaderboard. Two `Select` controls (`.kh-ops-inline-control`) filter by error type and client. The count is `{shown} of {total}`. Internal errors use a danger `Badge`, forbidden and not found use warn, and validation stays neutral. Rows reuse `.kh-ops-list-row`. Copy is in English, German, and Hungarian.
+
 * **Select listbox (PRO-B-35)** — `Select` opens a custom listbox instead of the native popup. Firefox was ignoring author CSS, so the selected row had no frame; Edge showed one. The selected row is a single 1px ink border with no inner line. Other rows are plain. Hover and the keyboard highlight only tint the row. Arrows, Home, End, type-ahead, Enter, Space, and Escape work, and focus returns to the trigger. The menu scrolls and stays in the viewport, including above a dialog. A hidden native select keeps the form name, value, required, and disabled. The alert test-type control uses the same listbox on a secondary button.
 
 ### 2026-10-21

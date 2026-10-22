@@ -173,6 +173,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
       archived,
       workspaceOptions,
       onDutyAdmins,
+      recentAuditErrors,
     ] = await Promise.all([
         collectDependencyChecks(app),
         getSchemaVersionLabel(app.database),
@@ -201,6 +202,10 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         getArchivedEntityCounts(app.database),
         listActiveWorkspacesForMonitoring(app.database),
         listOnDutyAdmins(app.database),
+        getRecentErrorAuditEvents(app.database, sinceForRange(range)).catch((error) => {
+          app.log.error({ err: error }, 'Monitoring recent audit errors failed');
+          return [];
+        }),
       ]);
 
     const ready = checks.postgres === 'ok' && checks.redis === 'ok';
@@ -288,6 +293,7 @@ export async function registerMonitoringRoutes(app: FastifyInstance): Promise<vo
         range,
         ...catalogue,
       },
+      recentAuditErrors,
       maintenance: {
         embeddingProvider: app.env.EMBEDDING_PROVIDER,
         workspaces: workspaceOptions,
