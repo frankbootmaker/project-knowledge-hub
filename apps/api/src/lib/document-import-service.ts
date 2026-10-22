@@ -5,6 +5,7 @@ import {
   createDocumentImportConvertQueue,
   enqueueDocumentImportConvertJob,
 } from '@project-knowledge-hub/jobs';
+import { processDocumentImportConvert } from '@project-knowledge-hub/document-import/process';
 import {
   createDraftFromDocumentImportInputSchema,
   detectContentSecrets,
@@ -27,7 +28,7 @@ import {
   workspaceMedia,
   workspaces,
 } from '@project-knowledge-hub/database';
-import { AppError } from '@project-knowledge-hub/domain';
+import { AppError, recordTypeSchema } from '@project-knowledge-hub/domain';
 import { writeAuditEvent } from './identity.js';
 import {
   assertProjectInWorkspace,
@@ -40,6 +41,11 @@ import {
   deleteImportOriginal,
   writeImportOriginal,
 } from './document-import-storage.js';
+import {
+  getWorkspaceMediaById,
+  mediaByteLocation,
+  readMediaBytes,
+} from './workspace-media.js';
 
 type ImportRow = typeof documentImports.$inferSelect;
 
@@ -232,6 +238,8 @@ export async function createDocumentImport(
     contentType: string;
     buffer: Buffer;
     title?: string;
+    /** Web uploads enqueue the worker. MCP converts in this request instead. */
+    enqueue?: boolean;
   },
   actor: KnowledgeActor,
   ipAddress?: string | null,
@@ -387,11 +395,13 @@ export async function createDocumentImport(
     });
   }
 
-  const queue = createDocumentImportConvertQueue(app.env.REDIS_URL);
-  try {
-    await enqueueDocumentImportConvertJob(queue, { importId });
-  } finally {
-    await queue.close();
+  if (input.enqueue !== false) {
+    const queue = createDocumentImportConvertQueue(app.env.REDIS_URL);
+    try {
+      await enqueueDocumentImportConvertJob(queue, { importId });
+    } finally {
+      await queue.close();
+    }
   }
 
   const [workspace] = await app.database.db
@@ -569,6 +579,7 @@ export async function createDraftFromDocumentImport(
       workspaceId: row.workspaceId,
       title: body.title ?? row.title,
       recordType: body.recordType ?? 'note',
+      language: body.language,
       lifecycleStatus: 'draft',
       sourceOfTruthMode: 'imported_snapshot',
       contentMarkdown,
@@ -619,5 +630,229 @@ export async function createDraftFromDocumentImport(
   return {
     documentImport: await getDocumentImport(app, row.id),
     knowledgeRecord,
+  };
+}
+
+const DOCX_MIME =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+function contentTypeFromFilename(filename: string): string {
+  const ext = filename.toLowerCase().slice(filename.lastIndexOf('.'));
+  if (ext === '.pdf') return 'application/pdf';
+  if (ext === '.docx') return DOCX_MIME;
+  if (ext === '.doc') return 'application/msword';
+  if (ext === '.pptx') {
+    return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  }
+  if (ext === '.xlsx') {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+  if (ext === '.html' || ext === '.htm') return 'text/html';
+  if (ext === '.md' || ext === '.markdown') return 'text/markdown';
+  if (ext === '.txt') return 'text/plain';
+  return 'application/octet-stream';
+}
+
+function decodeBase64Content(value: string): Buffer {
+  const trimmed = value.trim().replace(/^data:[^,]*,/i, '').replace(/\s/g, '');
+  if (
+    !trimmed ||
+    trimmed.length % 4 === 1 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(trimmed)
+  ) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: 'contentBase64 is not valid base64',
+      statusCode: 400,
+    });
+  }
+  const buffer = Buffer.from(trimmed, 'base64');
+  if (buffer.length === 0) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: 'contentBase64 decoded to an empty file',
+      statusCode: 400,
+    });
+  }
+  return buffer;
+}
+
+async function resolveImportBytes(
+  app: FastifyInstance,
+  workspaceId: string,
+  input: {
+    filename?: string;
+    contentType?: string;
+    contentBase64?: string;
+    mediaId?: string;
+  },
+): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+  const hasBase64 = Boolean(input.contentBase64?.trim());
+  const hasMedia = Boolean(input.mediaId);
+  if (hasBase64 === hasMedia) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: hasBase64
+        ? 'Provide contentBase64 or mediaId, not both'
+        : 'contentBase64 or mediaId is required',
+      statusCode: 400,
+    });
+  }
+
+  if (input.mediaId) {
+    const row = await getWorkspaceMediaById(app.database, input.mediaId);
+    if (!row || row.workspaceId !== workspaceId) {
+      throw new AppError({
+        code: 'MEDIA_NOT_FOUND',
+        message: 'Media not found',
+        statusCode: 404,
+      });
+    }
+    const located = mediaByteLocation(row);
+    const { store: blobStore } = await app.getBlobStore();
+    const buffer = await readMediaBytes(
+      app.env.MEDIA_UPLOAD_DIR,
+      located.workspaceId,
+      located.mediaId,
+      { blobStore },
+    );
+    if (!buffer) {
+      throw new AppError({
+        code: 'MEDIA_NOT_FOUND',
+        message: 'Media file bytes not found',
+        statusCode: 404,
+      });
+    }
+    const filename =
+      input.filename?.trim() || row.originalFilename?.trim() || 'upload.bin';
+    const contentType = input.contentType?.trim() || row.contentType;
+    return { buffer, filename, contentType };
+  }
+
+  const filename = input.filename?.trim() ?? '';
+  if (!filename) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: 'filename is required with contentBase64',
+      statusCode: 400,
+    });
+  }
+  return {
+    buffer: decodeBase64Content(input.contentBase64 ?? ''),
+    filename,
+    contentType:
+      input.contentType?.trim() || contentTypeFromFilename(filename),
+  };
+}
+
+/**
+ * Import a document as a draft knowledge record using the web pipeline:
+ * store the original, convert with the shared MarkItDown processor, then
+ * create the draft. Does not enqueue a second worker job.
+ */
+export async function importDocumentAsKnowledgeRecord(
+  app: FastifyInstance,
+  input: {
+    workspaceId: string;
+    projectId?: string | null;
+    title?: string;
+    recordType?: string;
+    language?: string;
+    acknowledgeSecrets?: boolean;
+    filename?: string;
+    contentType?: string;
+    contentBase64?: string;
+    mediaId?: string;
+  },
+  actor: KnowledgeActor,
+  ipAddress?: string | null,
+) {
+  const file = await resolveImportBytes(app, input.workspaceId, input);
+  let recordType: CreateDraftFromDocumentImportInput['recordType'];
+  if (input.recordType !== undefined) {
+    const parsed = recordTypeSchema.safeParse(input.recordType);
+    if (!parsed.success) {
+      throw new AppError({
+        code: 'VALIDATION_ERROR',
+        message: 'recordType is not a known knowledge record type',
+        statusCode: 400,
+      });
+    }
+    recordType = parsed.data;
+  }
+
+  const created = await createDocumentImport(
+    app,
+    {
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      lane: 'document',
+      filename: file.filename,
+      contentType: file.contentType,
+      buffer: file.buffer,
+      title: input.title,
+      enqueue: false,
+    },
+    actor,
+    ipAddress,
+  );
+
+  const { store: blobStore } = await app.getBlobStore();
+  try {
+    await processDocumentImportConvert({
+      env: app.env,
+      database: app.database,
+      blobStore,
+      importId: created.id,
+      log: {
+        info: (obj, msg) => {
+          app.log.info(obj as object, msg);
+        },
+        warn: (obj, msg) => {
+          app.log.warn(obj as object, msg);
+        },
+      },
+    });
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    const message =
+      error instanceof Error ? error.message : 'Document conversion failed';
+    throw new AppError({
+      code: 'DOCUMENT_IMPORT_CONVERT_FAILED',
+      message,
+      statusCode: 502,
+    });
+  }
+
+  const draft = await createDraftFromDocumentImport(
+    app,
+    created.id,
+    {
+      title: input.title,
+      recordType,
+      language: input.language,
+      acknowledgeSecrets: input.acknowledgeSecrets,
+    },
+    actor,
+    ipAddress,
+  );
+
+  const record = draft.knowledgeRecord;
+  return {
+    documentImportId: created.id,
+    knowledgeRecord: {
+      id: record.id,
+      humanKey: record.humanKey,
+      key: record.humanKey,
+      title: record.title,
+      slug: record.slug,
+      recordType: record.recordType,
+      language: record.language,
+      workspaceId: record.workspaceId,
+      projectId: record.projectId,
+      lifecycleStatus: record.lifecycleStatus,
+      sourceOfTruthMode: record.sourceOfTruthMode,
+      contentMarkdown: record.contentMarkdown,
+    },
   };
 }

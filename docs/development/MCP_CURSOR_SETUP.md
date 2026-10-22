@@ -168,6 +168,7 @@ Read:
 Write (requires `knowledge:write`):
 
 * `create_knowledge_record` — always `draft` / `ai_generated_draft`
+* `import_document_knowledge_record` — PDF/DOCX → draft Markdown record (`id`, `humanKey`, `contentMarkdown`). `contentBase64` + `filename` + `contentType`, or `mediaId`. Workspace maintainer required. Same file rules as the web import.
 * `update_knowledge_record` — forces `draft`; requires `changeMessage`
 
 Responses are size-limited. `get_knowledge_record` pages markdown at 50,000 characters: read again with `contentOffset` set to `nextOffset` until `nextOffset` is null before rewriting the record. A body that still ends with the truncation marker is rejected. If a page would exceed the 200 KB response cap, the server shortens that page and you keep following `nextOffset`. There is no separate content tool; later pages of `get_knowledge_record` omit tags and media. `contentSha256` is the hash of the full body; pass it back as `expectSha256` to detect a change (`409`). For a large rewrite, use `begin_record_content_upload`, `append_record_content` (40,000 characters per chunk), then `finalize_record_content_upload` with a `changeMessage` — one version per session. Project lists (`list_project_tasks`, milestones, epics, user stories, sprints, RAID, changes, and task activity) return 25 excerpted rows per page; follow `nextCursor` while `hasMore` is true. A result that still exceeds the cap is a tool error and includes `suggestedLimit`.

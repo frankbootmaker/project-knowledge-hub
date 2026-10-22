@@ -908,6 +908,46 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
     },
   },
   {
+    name: 'import_document_knowledge_record',
+    description:
+      'Import a PDF or DOCX as a draft Markdown knowledge record. Pass contentBase64, filename, and contentType, or mediaId. Optional projectId, title, recordType, language. Same type and size checks as web import. Requires knowledge:write and a workspace maintainer. Returns id, humanKey, and contentMarkdown.',
+    scope: 'knowledge:write',
+    write: true,
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['workspaceId'],
+      properties: {
+        workspaceId: uuidProp('Workspace id'),
+        projectId: uuidProp('Optional project id'),
+        title: stringProp('Optional title', { minLength: 1, maxLength: 300 }),
+        recordType: {
+          type: 'string',
+          enum: [...RECORD_TYPES],
+          description: 'Knowledge record type. Defaults to note.',
+        },
+        language: stringProp('Language code, e.g. en or de', {
+          minLength: 2,
+          maxLength: 16,
+        }),
+        acknowledgeSecrets: { type: 'boolean' },
+        filename: stringProp('Original filename, e.g. brief.pdf', {
+          minLength: 1,
+          maxLength: 200,
+        }),
+        contentType: stringProp('MIME type, e.g. application/pdf', {
+          minLength: 1,
+          maxLength: 200,
+        }),
+        contentBase64: stringProp('Raw base64 file bytes, no data: prefix', {
+          minLength: 1,
+          maxLength: 40_000_000,
+        }),
+        mediaId: uuidProp('Existing workspace media id instead of contentBase64'),
+      },
+    },
+  },
+  {
     name: 'create_record_translation',
     description:
       'Create a linked locale sibling (hu/de/…). Prefer translateWithAi when hub AI is configured. Requires knowledge:write.',

@@ -851,6 +851,7 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
           'REQUIRED for locales: call create_record_translation — NEVER create_knowledge_record for hu/de of an existing topic (that creates unlinked duplicates).',
           'If translateWithAi fails or AI is unconfigured, call create_record_translation again without translateWithAi and pass title/summary/contentMarkdown.',
           'Use list_record_translations to discover siblings. Update the sibling only — never overwrite the EN source with a translation.',
+          'PDF/DOCX: import_document_knowledge_record (contentBase64 + filename + contentType, or mediaId). Returns draft id, humanKey, and contentMarkdown. Requires a workspace maintainer.',
         ],
       },
     },
@@ -904,6 +905,7 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
       'Attach projectId/systemId when the record is scoped to catalogue entities.',
       'For charts/screenshots: begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload, then embed media.markdownSnippet — never upload_workspace_media or data: URIs.',
       'Locale siblings (hu/de/…): always create_record_translation; never a second create_knowledge_record.',
+      'To import a PDF or DOCX, call import_document_knowledge_record. Do not paste the file into create_knowledge_record.',
     ],
   };
 }

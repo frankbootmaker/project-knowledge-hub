@@ -89,6 +89,7 @@ import {
   resolveReviewedByUser,
   updateKnowledgeRecord,
 } from './knowledge-records-service.js';
+import { importDocumentAsKnowledgeRecord } from './document-import-service.js';
 import {
   appendMediaUploadChunk,
   beginMediaUploadSession,
@@ -2548,6 +2549,44 @@ export function createMcpToolHandlers(
           systemId: result.knowledgeRecord.systemId,
         },
       };
+    },
+
+    async importDocumentKnowledgeRecord(input) {
+      try {
+        assertWriteWorkspaceAllowed(client, input.workspaceId);
+        if (input.projectId) {
+          assertProjectAllowed(client, input.projectId);
+        }
+        const actingUserId = requireActingUserId(client);
+        await assertActingWorkspaceMaintainer(
+          app,
+          actingUserId,
+          input.workspaceId,
+        );
+        return await importDocumentAsKnowledgeRecord(
+          app,
+          input,
+          {
+            actorType: 'api_client',
+            actorId: client.id,
+            userId: actingUserId,
+          },
+          ipAddress,
+        );
+      } catch (error) {
+        if (error instanceof AppError) {
+          const prefix = `${error.code}: `;
+          if (!error.message.startsWith(prefix)) {
+            throw new AppError({
+              code: error.code,
+              message: `${prefix}${error.message}`,
+              statusCode: error.statusCode,
+              details: error.details,
+            });
+          }
+        }
+        throw error;
+      }
     },
 
     async updateKnowledgeRecord(input) {

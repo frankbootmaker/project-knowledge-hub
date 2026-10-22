@@ -55,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **PDF/DOCX knowledge import for agents (PRO task 26b913ca):** MCP `import_document_knowledge_record` (`knowledge:write`, ChatGPT via `call_hub_tool`) imports a PDF or DOCX as a draft Markdown knowledge record. Pass `contentBase64` with `filename` and `contentType`, or `mediaId` of a file already in the workspace, plus `workspaceId` and optional `projectId`, `title`, `recordType`, and `language`. The acting user must be a workspace maintainer. Type and size checks match the web import. Conversion reuses `processDocumentImportConvert` (no second MarkItDown path) and the response includes `id`, `humanKey`, and `contentMarkdown`. Validation failures are `isError` and the text starts with the error code (`DOCUMENT_IMPORT_TYPE_UNSUPPORTED`, `DOCUMENT_IMPORT_TOO_LARGE`, `FORBIDDEN`).
+
 * **AI Cost period presets (PRO-T-110):** This quarter and This month sit beside This year on the shared AI Cost period picker (workspace and platform). Presets use the calendar in the browser time zone and stay highlighted until the dates are edited. The selection applies to the chart, the monthly table, and the summary. English, German, and Hungarian.
 
 * **Calendar date picker (PRO-T-111):** The AI Cost from/to fields and the cost-entry service start/end open a shared calendar popover; picking a day fills the field and typed input still works (ISO plus EN/DE/HU forms). It selects one day or a range, supports keyboard (arrows, Enter, Escape) with ARIA, and rejects an end on or before the start.
