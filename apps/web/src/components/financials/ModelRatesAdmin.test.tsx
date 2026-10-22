@@ -82,7 +82,7 @@ async function renderRates(plan: ImportPlan) {
     vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
       calls.push({ method, url: String(url) });
-      if (String(url).includes('unassigned')) {
+      if (String(url).includes('/ai-cost')) {
         return json({
           unpricedModels: [{ model: 'cursor-grok-4.5-high', rowCount: 2 }],
         });
@@ -98,25 +98,7 @@ async function renderRates(plan: ImportPlan) {
   await act(async () => {
     root.render(
       <ToastProvider>
-        <ModelRatesAdmin
-          scope="workspace"
-          workspaceId="ws-1"
-          workspaceSlug="lab"
-          canEdit
-          systems={[
-            {
-              id: 'sys-1',
-              name: 'Cursor',
-              slug: 'cursor',
-              systemType: 'ai_assistant',
-              aiTokenRatePer1k: 1.25,
-              aiTokenRateInputPer1k: null,
-              aiTokenRateOutputPer1k: null,
-              aiTokenRateCachePer1k: null,
-              aiTokenRateCacheWritePer1k: null,
-            },
-          ]}
-        />
+        <ModelRatesAdmin scope="workspace" workspaceId="ws-1" canEdit />
       </ToastProvider>,
     );
   });
@@ -151,12 +133,7 @@ describe('ModelRatesAdmin', () => {
     expect(cacheWrite?.className).toContain('kh-input');
     expect(cacheWrite?.className).toContain('tabular-nums');
     expect(cacheWrite?.className).not.toContain('font-mono');
-    const blended = container.querySelector(
-      'input[aria-label="Cursor rateCacheWrite"]',
-    );
-    expect(blended?.getAttribute('placeholder')).toBe('1.25 (inherited)');
-    expect(blended?.className).toContain('kh-input');
-    expect(blended?.className).not.toContain('font-mono');
+    expect(container.textContent).not.toContain('pricesTitle');
     expect(container.querySelector('td.kh-ops-num')).toBeTruthy();
     expect(container.querySelector('.font-mono')).toBeNull();
   });

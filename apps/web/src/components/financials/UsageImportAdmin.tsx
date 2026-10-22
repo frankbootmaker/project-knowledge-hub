@@ -1,10 +1,14 @@
 'use client';
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { Button, ErrorText, Field, FilePicker, useToast } from '../ui';
+import { applyTableView, collectEnumOptions, compareText } from '../../lib/data-table';
 import { formatMoney } from '../../lib/project-currency';
+import { useSyncEnumFilters, useTableState } from '../../lib/use-table-state';
+import { Button, ErrorText, Field, FilePicker, Input, useToast } from '../ui';
+import { DataTable, dataTableFilterFields, type DataColumn } from '../ui/DataTable';
+import { TableFilterControl } from '../ui/TableFilterControl';
 
 export type UsageImportSummary = {
   dateFrom: string | null;
@@ -129,9 +133,10 @@ export function UsageImportAdmin({
       },
       body: JSON.stringify({ csv, fileName }),
     });
-    const payload = (await response.json().catch(() => ({}))) as ErrorPayload & UsagePreview & {
-      import?: UsageImportRow;
-    };
+    const payload = (await response.json().catch(() => ({}))) as ErrorPayload &
+      UsagePreview & {
+        import?: UsageImportRow;
+      };
     if (!response.ok) {
       throw new Error(payload.error?.message || t('usageImportFailed'));
     }
@@ -143,9 +148,7 @@ export function UsageImportAdmin({
     setPending(true);
     setError(null);
     try {
-      const payload = await postCsv(
-        `/api/v1/workspaces/${workspaceId}/ai-usage-imports/preview`,
-      );
+      const payload = await postCsv(`/api/v1/workspaces/${workspaceId}/ai-usage-imports/preview`);
       setPreview(payload);
     } catch (err) {
       setPreview(null);
@@ -240,10 +243,10 @@ export function UsageImportAdmin({
               </div>
               <p className="m-0 text-sm text-ink-muted">
                 {t('usageTotals')}: {t('usageInput')} {number(preview.totals.tokensInput)},{' '}
-                {t('usageCacheWrite')} {number(preview.totals.tokensCacheWrite)},{' '}
-                {t('usageCache')} {number(preview.totals.tokensCache)},{' '}
-                {t('usageOutput')} {number(preview.totals.tokensOutput)},{' '}
-                {t('usageTotal')} {number(preview.totals.tokensTotal)}
+                {t('usageCacheWrite')} {number(preview.totals.tokensCacheWrite)}, {t('usageCache')}{' '}
+                {number(preview.totals.tokensCache)}, {t('usageOutput')}{' '}
+                {number(preview.totals.tokensOutput)}, {t('usageTotal')}{' '}
+                {number(preview.totals.tokensTotal)}
               </p>
               {preview.theoretical?.map((row) => (
                 <p key={row.currency} className="m-0 text-sm">
@@ -373,33 +376,11 @@ export function UsageImportAdmin({
           ) : null}
           {unassignedTotal === 0 ? (
             <p className="m-0 text-sm text-ink-muted">{t('usageUnassignedEmpty')}</p>
-          ) : (
-            <div className="kh-ops-table-wrap">
-              <table className="kh-ops-data-table">
-                <thead>
-                  <tr>
-                    <th>{t('usageCloudAgent')}</th>
-                    <th>{t('usageRows')}</th>
-                    <th>{t('usageTotal')}</th>
-                    <th>{t('usageLatest')}</th>
-                    <th>{t('usageModels')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {unassigned.map((group) => (
-                    <tr key={group.cloudAgentId ?? 'none'}>
-                      <td>{group.cloudAgentId ?? t('usageNoAgent')}</td>
-                      <td>{number(group.rowCount)}</td>
-                      <td>{number(group.tokensTotal)}</td>
-                      <td>{when(group.latestAt)}</td>
-                      <td>{group.models.join(', ')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          ) : null}
         </div>
+        {unassignedTotal > 0 ? (
+          <UnassignedUsageTable groups={unassigned} number={number} when={when} />
+        ) : null}
       </section>
     </div>
   );
@@ -445,10 +426,10 @@ function ImportSummary({
       </p>
       <p className="m-0 text-sm text-ink-muted">
         {t('usageTotals')}: {t('usageInput')} {number(summary.totals.tokensInput)},{' '}
-        {t('usageCacheWrite')} {number(summary.totals.tokensCacheWrite)},{' '}
-        {t('usageCache')} {number(summary.totals.tokensCache)},{' '}
-        {t('usageOutput')} {number(summary.totals.tokensOutput)},{' '}
-        {t('usageTotal')} {number(summary.totals.tokensTotal)}
+        {t('usageCacheWrite')} {number(summary.totals.tokensCacheWrite)}, {t('usageCache')}{' '}
+        {number(summary.totals.tokensCache)}, {t('usageOutput')}{' '}
+        {number(summary.totals.tokensOutput)}, {t('usageTotal')}{' '}
+        {number(summary.totals.tokensTotal)}
       </p>
       <p className="m-0 text-sm text-ink-muted">
         {t('usageLinked')}: {number(summary.linkedCount)}. {t('usageUnassignedCount')}:{' '}
@@ -616,6 +597,255 @@ function UnassignedImportRows({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Inclusive local calendar day, matching the Latest cell. */
+function usageLocalDay(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function usageInDateRange(iso: string, from: string, to: string): boolean {
+  const day = usageLocalDay(iso);
+  if (from && (!day || day < from)) return false;
+  if (to && (!day || day > to)) return false;
+  return true;
+}
+
+function usageGroupKey(group: UnassignedUsageGroup): string {
+  return group.cloudAgentId ?? 'none';
+}
+
+function UnassignedUsageTable({
+  groups,
+  number,
+  when,
+}: {
+  groups: UnassignedUsageGroup[];
+  number: (value: number) => string;
+  when: (value: string | null) => string;
+}) {
+  const t = useTranslations('financials');
+  const tTable = useTranslations('table');
+  const locale = useLocale();
+  const table = useTableState({
+    namespace: 'usage',
+    defaultSortKey: 'latest',
+    defaultSortDir: 'desc',
+  });
+  const from = table.extras.from ?? '';
+  const to = table.extras.to ?? '';
+  const modelOptions = useMemo(
+    () =>
+      collectEnumOptions(
+        groups,
+        (group) => group.models,
+        (value) => value,
+        locale,
+      ),
+    [groups, locale],
+  );
+  const columns = useMemo<Array<DataColumn<UnassignedUsageGroup>>>(
+    () => [
+      {
+        id: 'agent',
+        header: t('usageCloudAgent'),
+        kind: 'text',
+        sort: {
+          type: 'text',
+          getValue: (group) => group.cloudAgentId ?? '',
+        },
+        filter: {
+          type: 'text',
+          getValue: (group) => group.cloudAgentId ?? t('usageNoAgent'),
+        },
+        cell: (group) => group.cloudAgentId ?? t('usageNoAgent'),
+      },
+      {
+        id: 'rows',
+        header: t('usageRows'),
+        kind: 'number',
+        sort: { type: 'number', getValue: (group) => group.rowCount },
+        cell: (group) => number(group.rowCount),
+      },
+      {
+        id: 'tokens',
+        header: t('usageTotal'),
+        kind: 'number',
+        sort: { type: 'number', getValue: (group) => group.tokensTotal },
+        cell: (group) => number(group.tokensTotal),
+      },
+      {
+        id: 'latest',
+        header: t('usageLatest'),
+        kind: 'date',
+        sort: {
+          type: 'date',
+          getValue: (group) => group.latestAt,
+          defaultDir: 'desc',
+        },
+        cell: (group) => when(group.latestAt),
+      },
+      {
+        id: 'model',
+        header: t('usageModels'),
+        kind: 'text',
+        sort: {
+          type: 'text',
+          getValue: (group) => group.models.join(', '),
+        },
+        filter: {
+          type: 'enum',
+          getValue: (group) => group.models,
+          options: modelOptions,
+        },
+        cell: (group) => (group.models.length > 0 ? group.models.join(', ') : '—'),
+      },
+    ],
+    [modelOptions, number, t, when],
+  );
+  useSyncEnumFilters(table.filters, columns, table.setEnumFilter);
+
+  const filtersActive = table.filtersActive || from !== '' || to !== '';
+  const visible = useMemo(
+    () =>
+      applyTableView({
+        rows: groups,
+        locale,
+        query: table.query,
+        search: (group, needle) =>
+          [group.cloudAgentId ?? '', t('usageNoAgent'), ...group.models]
+            .join(' ')
+            .toLowerCase()
+            .includes(needle),
+        sortKey: table.sortKey,
+        sortDir: table.sortDir,
+        filters: table.filters,
+        textFilters: table.textFilters,
+        columns,
+        tieBreak: (left, right) =>
+          compareText(left.cloudAgentId ?? '', right.cloudAgentId ?? '', locale),
+      }).filter((group) => usageInDateRange(group.latestAt, from, to)),
+    [
+      columns,
+      from,
+      groups,
+      locale,
+      t,
+      table.filters,
+      table.query,
+      table.sortDir,
+      table.sortKey,
+      table.textFilters,
+      to,
+    ],
+  );
+
+  function clearFilters() {
+    table.clearFilters();
+    table.setExtra('from', '');
+    table.setExtra('to', '');
+  }
+
+  const bareEmpty = visible.length === 0 && !filtersActive;
+
+  return (
+    <>
+      <div className="kh-ops-toolbar mb-0 border-0 border-b border-line">
+        <label className="flex min-w-[220px] flex-1 items-center gap-2">
+          <span className="sr-only">{t('usageUnassignedSearch')}</span>
+          <Input
+            type="search"
+            value={table.query}
+            onChange={(event) => table.setQuery(event.target.value)}
+            placeholder={t('usageUnassignedSearch')}
+            aria-label={t('usageUnassignedSearch')}
+            className="h-10 min-h-10 py-1.5 text-xs"
+          />
+        </label>
+        <TableFilterControl
+          fields={dataTableFilterFields(columns)}
+          enumFilters={table.filters}
+          textFilters={table.textFilters}
+          onEnumFilter={table.setEnumFilter}
+          onTextFilter={table.setTextFilter}
+          onClearFilters={clearFilters}
+          filtersActive={filtersActive}
+          insertAfter={{
+            id: 'agent',
+            content: (
+              <fieldset className="kh-ops-table-filter-group">
+                <legend>{t('usageLatest')}</legend>
+                <label className="grid gap-1">
+                  <span>{t('from')}</span>
+                  <Input
+                    type="date"
+                    value={from}
+                    aria-label={t('from')}
+                    className="h-10 min-h-10 py-1.5 text-xs"
+                    onChange={(event) => table.setExtra('from', event.target.value)}
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span>{t('to')}</span>
+                  <Input
+                    type="date"
+                    value={to}
+                    aria-label={t('to')}
+                    className="h-10 min-h-10 py-1.5 text-xs"
+                    onChange={(event) => table.setExtra('to', event.target.value)}
+                  />
+                </label>
+              </fieldset>
+            ),
+          }}
+        />
+        {filtersActive ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="kh-ops-tree-filter-clear h-8 min-h-8 px-2 text-xs"
+            onClick={clearFilters}
+          >
+            {tTable('clearFilters')}
+          </Button>
+        ) : null}
+      </div>
+      {bareEmpty ? (
+        <div className="kh-ops-empty-state">
+          <div className="kh-ops-empty-mark">00</div>
+          <h3>{t('usageUnassignedTitle')}</h3>
+          <p>{table.query.trim() ? tTable('emptyFiltered') : t('usageUnassignedEmpty')}</p>
+        </div>
+      ) : (
+        <DataTable
+          rows={visible}
+          rowKey={usageGroupKey}
+          columns={columns}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onToggleSort={table.toggleSort}
+          enumFilters={table.filters}
+          textFilters={table.textFilters}
+          onEnumFilter={table.setEnumFilter}
+          onTextFilter={table.setTextFilter}
+          onClearFilters={clearFilters}
+          filtersActive={filtersActive}
+          hideHeaderFilter
+          empty={
+            <>
+              <h3>{t('usageUnassignedTitle')}</h3>
+              <p>{tTable('emptyFiltered')}</p>
+            </>
+          }
+        />
+      )}
+    </>
   );
 }
 

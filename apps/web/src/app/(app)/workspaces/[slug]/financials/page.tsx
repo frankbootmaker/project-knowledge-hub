@@ -173,9 +173,7 @@ export default async function WorkspaceFinancialsPage({
         <ModelRatesAdmin
           scope="workspace"
           workspaceId={workspace.id}
-          workspaceSlug={workspace.slug}
           canEdit={canAdminWorkspace(session, workspace.id)}
-          systems={systems}
         />
       ) : (
         <AiCostAdmin

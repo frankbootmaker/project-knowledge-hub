@@ -561,6 +561,13 @@
       "when": 1794182400000,
       "tag": "0079_ai_model_price_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1794268800000,
+      "tag": "0080_migrate_system_token_rates",
+      "breakpoints": true
     }
   ]
 }

@@ -27,6 +27,7 @@ import {
   taskSupersededByImport,
   resolveAiBillingWindow,
   resolveBillingServiceWindow,
+  mergeUnpricedModels,
   roundAiMoney,
   settleProjectAiCost,
   splitBillingEntryByMonth,
@@ -56,13 +57,13 @@ import {
   addTheoreticalCost,
   foldBillingSlices,
   sumTheoreticalInCurrency,
-  tokenRateCurrency,
   type CostSlice,
   type FoldedChartPoint,
   type SliceCandidate,
 } from './ai-cost-fx.js';
 import {
-  tokenCostForUsages,
+  groupedCatalogCost,
+  priceTaskUsagesFromCatalog,
   usageTokenTotal,
   type AiTokenRates,
   type AiUsageForCost,
@@ -570,6 +571,7 @@ type TaskUsageRow = {
   period: string | null;
   usageOccurredAt: Date | null;
   onDate: string;
+  model: string | null;
   usage: AiUsageForCost;
   tokens: number;
 };
@@ -591,6 +593,7 @@ async function taskUsageRows(
     usageOccurredAt: Date | null;
     updatedAt: Date;
     cloudAgentId?: string | null;
+    aiModelId?: string | null;
   }>,
   today: string,
 ): Promise<TaskUsageRow[]> {
@@ -617,6 +620,7 @@ async function taskUsageRows(
       cloudAgentId: task.cloudAgentId ?? null,
       sprintId: task.sprintId ?? null,
       period,
+      model: task.aiModelId ?? null,
       usageOccurredAt: task.usageOccurredAt,
       onDate: theoreticalUsageDate({
         usageOccurredAt: task.usageOccurredAt,
@@ -770,6 +774,25 @@ export function entryMatchesBillingListFilter(
   return true;
 }
 
+function catalogTheoretical(
+  rows: readonly { rowAmount: number; currency: string | null; onDate: string }[],
+  to: string,
+  rates: Parameters<typeof sumTheoreticalInCurrency>[0]['rates'],
+): number {
+  const byCurrency = new Map<string, { amount: number; onDate: string }[]>();
+  for (const row of rows) {
+    if (!row.currency || row.rowAmount === 0) continue;
+    const list = byCurrency.get(row.currency) ?? [];
+    list.push({ amount: row.rowAmount, onDate: row.onDate });
+    byCurrency.set(row.currency, list);
+  }
+  let total = 0;
+  for (const [currency, parts] of byCurrency) {
+    total += sumTheoreticalInCurrency({ parts, from: currency, to, rates });
+  }
+  return roundAiMoney(total);
+}
+
 /**
  * Allocate the workspace ledger onto one project and compare it with the
  * theoretical API cost. With no applicable ledger entries, paid AC is the
@@ -833,6 +856,7 @@ export async function loadProjectPaidAi(
           tokensOutput: projectTasks.tokensOutput,
           tokensCache: projectTasks.tokensCache,
           tokensCacheWrite: projectTasks.tokensCacheWrite,
+          aiModelId: projectTasks.aiModelId,
           billingPeriod: projectTasks.billingPeriod,
           usageOccurredAt: projectTasks.usageOccurredAt,
           updatedAt: projectTasks.updatedAt,
@@ -865,9 +889,21 @@ export async function loadProjectPaidAi(
     events: imported.allocationEvents,
   });
 
-  const ratesBySystem = new Map(
-    systemInputs.map((system) => [system.systemId, system.rates]),
+  const catalog = priceTaskUsagesFromCatalog(
+    billableUsages.map((row) => ({
+      usage: row.usage,
+      model: row.model,
+      onDate: row.onDate,
+      tokens: row.tokens,
+    })),
+    imported.prices,
   );
+  const pricedBillable = billableUsages.map((row, index) => ({
+    ...row,
+    rates: catalog.rows[index]?.rates ?? null,
+    rowAmount: catalog.rows[index]?.rowAmount ?? 0,
+    currency: catalog.rows[index]?.currency ?? null,
+  }));
   const modeBySystem = new Map(
     systemInputs.map((system) => [system.systemId, system.costMode]),
   );
@@ -909,9 +945,9 @@ export async function loadProjectPaidAi(
 
   const sliceGroups = new Map<
     string,
-    { period: string | null; systemId: string | null; rows: TaskUsageRow[]; tokens: number }
+    { period: string | null; systemId: string | null; rows: typeof pricedBillable; tokens: number }
   >();
-  for (const row of billableUsages) {
+  for (const row of pricedBillable) {
     if (row.projectId !== project.id) continue;
     const key = `${row.period ?? ''}|${row.aiSystemId ?? ''}`;
     const group = sliceGroups.get(key) ?? {
@@ -925,21 +961,10 @@ export async function loadProjectPaidAi(
     sliceGroups.set(key, group);
   }
   const usageSlices: AiCostUsageSlice[] = [...sliceGroups.values()].map((group) => {
-    const rates = group.systemId ? ratesBySystem.get(group.systemId) : undefined;
-    const raw = rates ? tokenCostForUsages(group.rows.map((row) => row.usage), rates) : 0;
+    const raw = groupedCatalogCost(group.rows);
     const mode = group.systemId ? modeBySystem.get(group.systemId) : null;
-    const legacyToken = rates && (mode === 'api' || mode === 'mixed') ? raw : 0;
-    const theoretical = rates
-      ? sumTheoreticalInCurrency({
-          parts: group.rows.map((row) => ({
-            amount: tokenCostForUsages([row.usage], rates),
-            onDate: row.onDate,
-          })),
-          from: tokenRateCurrency(rates.currency, currency),
-          to: currency,
-          rates: fxBook.rates,
-        })
-      : 0;
+    const legacyToken = mode === 'api' || mode === 'mixed' ? raw : 0;
+    const theoretical = catalogTheoretical(group.rows, currency, fxBook.rates);
     return {
       period: group.period,
       systemId: group.systemId,
@@ -951,9 +976,9 @@ export async function loadProjectPaidAi(
 
   const sprintGroups = new Map<
     string,
-    { sprintId: string; rows: TaskUsageRow[]; tokens: number; systemId: string | null }
+    { sprintId: string; rows: typeof pricedBillable; tokens: number; systemId: string | null }
   >();
-  for (const row of billableUsages) {
+  for (const row of pricedBillable) {
     if (row.projectId !== project.id || !row.sprintId) continue;
     const key = `${row.sprintId}|${row.aiSystemId ?? ''}`;
     const group = sprintGroups.get(key) ?? {
@@ -968,18 +993,7 @@ export async function loadProjectPaidAi(
   }
   const sprintTotals = new Map<string, { theoreticalApiCost: number; tokens: number }>();
   for (const group of sprintGroups.values()) {
-    const rates = group.systemId ? ratesBySystem.get(group.systemId) : undefined;
-    const theoretical = rates
-      ? sumTheoreticalInCurrency({
-          parts: group.rows.map((row) => ({
-            amount: tokenCostForUsages([row.usage], rates),
-            onDate: row.onDate,
-          })),
-          from: tokenRateCurrency(rates.currency, currency),
-          to: currency,
-          rates: fxBook.rates,
-        })
-      : 0;
+    const theoretical = catalogTheoretical(group.rows, currency, fxBook.rates);
     const current = sprintTotals.get(group.sprintId) ?? {
       theoreticalApiCost: 0,
       tokens: 0,
@@ -1025,14 +1039,11 @@ export async function loadProjectPaidAi(
   });
 
   let theoreticalReporting = 0;
-  for (const row of billableUsages) {
-    if (row.projectId !== project.id || !row.aiSystemId) continue;
-    const rates = ratesBySystem.get(row.aiSystemId);
-    if (!rates) continue;
-    const amount = tokenCostForUsages([row.usage], rates);
+  for (const row of pricedBillable) {
+    if (row.projectId !== project.id || row.rowAmount === 0 || !row.currency) continue;
     theoreticalReporting += sumTheoreticalInCurrency({
-      parts: [{ amount, onDate: row.onDate }],
-      from: tokenRateCurrency(rates.currency, currency),
+      parts: [{ amount: row.rowAmount, onDate: row.onDate }],
+      from: row.currency,
       to: fxBook.reportingCurrency,
       rates: fxBook.rates,
     });
@@ -1190,12 +1201,6 @@ export async function loadWorkspaceAiCostOverview(
           id: systems.id,
           name: systems.name,
           projectId: systems.projectId,
-          aiTokenRatePer1k: systems.aiTokenRatePer1k,
-          aiTokenRateInputPer1k: systems.aiTokenRateInputPer1k,
-          aiTokenRateOutputPer1k: systems.aiTokenRateOutputPer1k,
-          aiTokenRateCachePer1k: systems.aiTokenRateCachePer1k,
-          aiTokenRateCacheWritePer1k: systems.aiTokenRateCacheWritePer1k,
-          aiTokenRateCurrency: systems.aiTokenRateCurrency,
         })
         .from(systems)
         .where(
@@ -1216,6 +1221,7 @@ export async function loadWorkspaceAiCostOverview(
           tokensOutput: projectTasks.tokensOutput,
           tokensCache: projectTasks.tokensCache,
           tokensCacheWrite: projectTasks.tokensCacheWrite,
+          aiModelId: projectTasks.aiModelId,
           billingPeriod: projectTasks.billingPeriod,
           usageOccurredAt: projectTasks.usageOccurredAt,
           updatedAt: projectTasks.updatedAt,
@@ -1249,18 +1255,14 @@ export async function loadWorkspaceAiCostOverview(
     (row) => !taskSupersededByImport(row.cloudAgentId, imported.agentIds),
   );
 
-  const ratesBySystem = new Map(
-    assistantRows.map((row) => [
-      row.id,
-      {
-        blendedPer1k: row.aiTokenRatePer1k,
-        inputPer1k: row.aiTokenRateInputPer1k,
-        outputPer1k: row.aiTokenRateOutputPer1k,
-        cachePer1k: row.aiTokenRateCachePer1k,
-        cacheWritePer1k: row.aiTokenRateCacheWritePer1k,
-        currency: row.aiTokenRateCurrency,
-      },
-    ]),
+  const taskCatalog = priceTaskUsagesFromCatalog(
+    usages.map((row) => ({
+      usage: row.usage,
+      model: row.model,
+      onDate: row.onDate,
+      tokens: row.tokens,
+    })),
+    imported.prices,
   );
   const projectById = new Map(projectRows.map((row) => [row.id, row]));
   const systemName = new Map(assistantRows.map((row) => [row.id, row.name]));
@@ -1352,19 +1354,17 @@ export async function loadWorkspaceAiCostOverview(
       projectName: input.projectName,
     });
   };
-  for (const row of usages) {
-    if (!row.period || !row.aiSystemId) continue;
+  for (const [index, row] of usages.entries()) {
+    const priced = taskCatalog.rows[index];
+    if (!row.period || !priced || priced.rowAmount === 0 || !priced.currency) continue;
     const project = projectById.get(row.projectId);
     const parsed = project ? projectCurrencySchema.safeParse(project.currency) : null;
     if (!parsed?.success) continue;
-    const tokenRates = ratesBySystem.get(row.aiSystemId);
-    if (!tokenRates) continue;
-    const amount = tokenCostForUsages([row.usage], tokenRates);
     addTheoreticalPoint({
       period: row.onDate.slice(0, 7),
       date: row.onDate,
-      amount,
-      currency: tokenRateCurrency(tokenRates.currency, parsed.data),
+      amount: priced.rowAmount,
+      currency: priced.currency,
       linked: true,
       projectId: row.projectId,
       projectName: project?.name ?? null,
@@ -1442,7 +1442,7 @@ export async function loadWorkspaceAiCostOverview(
     ),
     theoreticalDays,
     originalTheoreticalDays,
-    unpricedModels: imported.unpricedModels,
+    unpricedModels: mergeUnpricedModels([imported.unpricedModels, taskCatalog.unpriced]),
   };
 }
 

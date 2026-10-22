@@ -21,23 +21,6 @@ import { ProjectResourceUtilizationView } from './ProjectResourceUtilizationModa
 import { downloadAuthenticatedExport } from '../lib/download-export';
 import { parseOptionalNumber } from '../lib/project-currency';
 
-const RATE_CURRENCIES = [
-  'EUR',
-  'USD',
-  'GBP',
-  'CHF',
-  'HUF',
-  'PLN',
-  'CZK',
-  'RON',
-  'SEK',
-  'NOK',
-  'DKK',
-  'CAD',
-  'AUD',
-  'JPY',
-] as const;
-
 export type StakeholderCompetency = {
   name: string;
   skillId: string | null;
@@ -207,11 +190,6 @@ export function ProjectStakeholdersPanel({
 
   const [editAiCostMode, setEditAiCostMode] = useState('');
   const [editAiFlatMonthlyFee, setEditAiFlatMonthlyFee] = useState('');
-  const [editAiTokenRatePer1k, setEditAiTokenRatePer1k] = useState('');
-  const [editAiTokenRateInputPer1k, setEditAiTokenRateInputPer1k] = useState('');
-  const [editAiTokenRateOutputPer1k, setEditAiTokenRateOutputPer1k] = useState('');
-  const [editAiTokenRateCachePer1k, setEditAiTokenRateCachePer1k] = useState('');
-  const [editAiTokenRateCurrency, setEditAiTokenRateCurrency] = useState('');
   const [editAiCostNotes, setEditAiCostNotes] = useState('');
   const [editAiBudgetAllocation, setEditAiBudgetAllocation] = useState('');
 
@@ -349,21 +327,6 @@ export function ProjectStakeholdersPanel({
     setEditAiFlatMonthlyFee(
       row.aiFlatMonthlyFee != null ? String(row.aiFlatMonthlyFee) : '',
     );
-    setEditAiTokenRatePer1k(
-      row.aiTokenRatePer1k != null ? String(row.aiTokenRatePer1k) : '',
-    );
-    setEditAiTokenRateInputPer1k(
-      row.aiTokenRateInputPer1k != null ? String(row.aiTokenRateInputPer1k) : '',
-    );
-    setEditAiTokenRateOutputPer1k(
-      row.aiTokenRateOutputPer1k != null
-        ? String(row.aiTokenRateOutputPer1k)
-        : '',
-    );
-    setEditAiTokenRateCachePer1k(
-      row.aiTokenRateCachePer1k != null ? String(row.aiTokenRateCachePer1k) : '',
-    );
-    setEditAiTokenRateCurrency(row.aiTokenRateCurrency ?? '');
     setEditAiCostNotes(row.aiCostNotes ?? '');
     setEditAiBudgetAllocation(
       row.aiBudgetAllocation != null ? String(row.aiBudgetAllocation) : '',
@@ -630,14 +593,6 @@ export function ProjectStakeholdersPanel({
           body: JSON.stringify({
             aiCostMode: parsedMode,
             aiFlatMonthlyFee: parseOptionalNumber(editAiFlatMonthlyFee) ?? null,
-            aiTokenRatePer1k: parseOptionalNumber(editAiTokenRatePer1k) ?? null,
-            aiTokenRateInputPer1k:
-              parseOptionalNumber(editAiTokenRateInputPer1k) ?? null,
-            aiTokenRateOutputPer1k:
-              parseOptionalNumber(editAiTokenRateOutputPer1k) ?? null,
-            aiTokenRateCachePer1k:
-              parseOptionalNumber(editAiTokenRateCachePer1k) ?? null,
-            aiTokenRateCurrency: editAiTokenRateCurrency || null,
             aiCostNotes: editAiCostNotes.trim() || null,
             aiBudgetAllocation:
               parseOptionalNumber(editAiBudgetAllocation) ?? null,
@@ -1427,79 +1382,7 @@ export function ProjectStakeholdersPanel({
               placeholder={t('aiFlatMonthlyFeePlaceholder', { currency })}
             />
           </Field>
-          <Field label={t('aiTokenRateCurrency')}>
-            <Select
-              value={editAiTokenRateCurrency}
-              onChange={(event) => setEditAiTokenRateCurrency(event.target.value)}
-              disabled={pending}
-            >
-              <option value="">{t('aiTokenRateCurrencyProject', { currency })}</option>
-              {RATE_CURRENCIES.map((code) => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={t('aiTokenRatePer1k')}>
-            <Input
-              type="number"
-              min="0"
-              step="0.0001"
-              value={editAiTokenRatePer1k}
-              onChange={(event) => setEditAiTokenRatePer1k(event.target.value)}
-              disabled={pending}
-              placeholder={t('aiTokenRatePer1kPlaceholder', {
-                currency: editAiTokenRateCurrency || currency,
-              })}
-            />
-          </Field>
-          <p className="m-0 text-xs text-ink-muted">{t('aiTokenRateSplitHint')}</p>
-          <Field label={t('aiTokenRateInputPer1k')}>
-            <Input
-              type="number"
-              min="0"
-              step="0.0001"
-              value={editAiTokenRateInputPer1k}
-              onChange={(event) =>
-                setEditAiTokenRateInputPer1k(event.target.value)
-              }
-              disabled={pending}
-              placeholder={t('aiTokenRatePer1kPlaceholder', {
-                currency: editAiTokenRateCurrency || currency,
-              })}
-            />
-          </Field>
-          <Field label={t('aiTokenRateOutputPer1k')}>
-            <Input
-              type="number"
-              min="0"
-              step="0.0001"
-              value={editAiTokenRateOutputPer1k}
-              onChange={(event) =>
-                setEditAiTokenRateOutputPer1k(event.target.value)
-              }
-              disabled={pending}
-              placeholder={t('aiTokenRatePer1kPlaceholder', {
-                currency: editAiTokenRateCurrency || currency,
-              })}
-            />
-          </Field>
-          <Field label={t('aiTokenRateCachePer1k')}>
-            <Input
-              type="number"
-              min="0"
-              step="0.0001"
-              value={editAiTokenRateCachePer1k}
-              onChange={(event) =>
-                setEditAiTokenRateCachePer1k(event.target.value)
-              }
-              disabled={pending}
-              placeholder={t('aiTokenRatePer1kPlaceholder', {
-                currency: editAiTokenRateCurrency || currency,
-              })}
-            />
-          </Field>
+          <p className="m-0 text-[13px] text-ink-muted">{t('aiRatesOnModelRates')}</p>
           <Field label={t('aiCostNotes')}>
             <Textarea
               value={editAiCostNotes}

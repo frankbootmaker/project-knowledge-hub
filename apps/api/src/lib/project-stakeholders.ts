@@ -11,6 +11,8 @@ import {
 import {
   AppError,
   aiCostModeSchema,
+  retiredSystemTokenRateField,
+  systemTokenRatesRetiredMessage,
   assertDateRange,
   effectiveDateRange,
   projectStakeholderRoleSchema,
@@ -1231,6 +1233,14 @@ export async function updateAiAssistantCost(
     aiBudgetAllocation?: number | null;
   },
 ): Promise<PublicStakeholder> {
+  const retired = retiredSystemTokenRateField(input);
+  if (retired) {
+    throw new AppError({
+      code: 'TOKEN_RATES_RETIRED',
+      message: systemTokenRatesRetiredMessage(retired),
+      statusCode: 400,
+    });
+  }
   const [system] = await database.db
     .select()
     .from(systems)

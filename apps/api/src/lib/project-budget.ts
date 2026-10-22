@@ -18,13 +18,19 @@ import {
   computeFinancialRag,
   computeRiskRag,
   projectCurrencySchema,
+  resolveTaskCatalogRate,
   systemItCostModeSchema,
+  taskCompletedAt,
+  theoreticalUsageDate,
+  unpricedModelKey,
   usageHasTokenBreakdown,
   type AiCostMode,
+  type AiModelPrice,
   type ProjectCurrency,
   type ProjectRagStatus,
   type RiskRagReason,
   type SystemItCostMode,
+  type UnpricedModel,
 } from '@project-knowledge-hub/domain';
 
 export {
@@ -34,7 +40,8 @@ export {
   type ProjectRagStatus,
   type RiskRagReason,
 };
-import { requireProjectContext } from './project-delivery.js';
+import { loadCompletedAtByTask, requireProjectContext } from './project-delivery.js';
+import { listAiModelPrices } from './ai-usage-pricing.js';
 import { AI_ASSISTANT_SYSTEM_TYPE } from './project-stakeholders.js';
 import { loadProjectPaidAi } from './ai-billing.js';
 import type { AiPaidPeriod, ProjectPaidAi, PublicAiBillingEntry } from './ai-billing.js';
@@ -320,6 +327,104 @@ export function tokenCostForUsages(
   );
 }
 
+export type CatalogPricedUsage = {
+  usage: AiUsageForCost;
+  model: string | null;
+  onDate: string;
+  tokens: number;
+  rates: AiTokenRates | null;
+  /** One-row cost. Zero when the model is unpriced. */
+  rowAmount: number;
+  currency: string | null;
+};
+
+function catalogRateKey(rates: AiTokenRates): string {
+  return [
+    rates.currency ?? '',
+    rates.blendedPer1k ?? '',
+    rates.inputPer1k ?? '',
+    rates.outputPer1k ?? '',
+    rates.cachePer1k ?? '',
+    rates.cacheWritePer1k ?? '',
+  ].join('|');
+}
+
+/**
+ * Price each task from the catalog. Rows that share a rate are still summed
+ * before rounding, matching tokenCostForUsages on a system-rate group.
+ */
+export function priceTaskUsagesFromCatalog(
+  rows: readonly {
+    usage: AiUsageForCost;
+    model: string | null;
+    onDate: string;
+    tokens: number;
+  }[],
+  prices: readonly AiModelPrice[],
+): {
+  rows: CatalogPricedUsage[];
+  groupedCost: number;
+  unpriced: UnpricedModel[];
+} {
+  const unpriced = new Map<string, UnpricedModel>();
+  const priced: CatalogPricedUsage[] = rows.map((row) => {
+    const resolved = resolveTaskCatalogRate(row.model, row.onDate, prices);
+    if (!resolved) {
+      const key = unpricedModelKey(row.model);
+      const current = unpriced.get(key) ?? { model: key, rowCount: 0, tokensTotal: 0 };
+      current.rowCount += 1;
+      current.tokensTotal += row.tokens;
+      unpriced.set(key, current);
+      return {
+        ...row,
+        rates: null,
+        rowAmount: 0,
+        currency: null,
+      };
+    }
+    const rates: AiTokenRates = {
+      blendedPer1k: resolved.blendedPer1k,
+      inputPer1k: resolved.inputPer1k,
+      outputPer1k: resolved.outputPer1k,
+      cachePer1k: resolved.cachePer1k,
+      cacheWritePer1k: resolved.cacheWritePer1k,
+      currency: resolved.currency,
+    };
+    return {
+      ...row,
+      rates,
+      rowAmount: tokenCostForUsages([row.usage], rates),
+      currency: resolved.currency,
+    };
+  });
+  return {
+    rows: priced,
+    groupedCost: groupedCatalogCost(priced),
+    unpriced: [...unpriced.values()].sort((left, right) =>
+      left.model.localeCompare(right.model),
+    ),
+  };
+}
+
+/** Same rounding as one tokenCostForUsages call per distinct catalog rate. */
+export function groupedCatalogCost(
+  rows: readonly Pick<CatalogPricedUsage, 'usage' | 'rates'>[],
+): number {
+  const groups = new Map<string, { rates: AiTokenRates; usages: AiUsageForCost[] }>();
+  for (const row of rows) {
+    if (!row.rates) continue;
+    const key = catalogRateKey(row.rates);
+    const group = groups.get(key) ?? { rates: row.rates, usages: [] };
+    group.usages.push(row.usage);
+    groups.set(key, group);
+  }
+  let total = 0;
+  for (const group of groups.values()) {
+    total += tokenCostForUsages(group.usages, group.rates);
+  }
+  return roundMoney(total);
+}
+
 export function usageTokenTotal(usage: AiUsageForCost): number {
   if (usageHasTokenBreakdown(usage)) {
     if (usage.tokensUsed != null) return usage.tokensUsed;
@@ -345,6 +450,8 @@ export function billAiAssistantUsage(input: {
   startDate: string | null;
   endDate: string | null;
   today?: string;
+  /** Catalog token cost. When set, api/mixed uses it instead of `rates`. */
+  tokenCostOverride?: number;
 }): {
   flatAccruedCost: number;
   tokenCost: number;
@@ -368,7 +475,10 @@ export function billAiAssistantUsage(input: {
     );
   }
   if (input.costMode === 'api' || input.costMode === 'mixed') {
-    tokenCost = tokenCostForUsages(input.usages, input.rates);
+    tokenCost =
+      input.tokenCostOverride != null
+        ? roundMoney(input.tokenCostOverride)
+        : tokenCostForUsages(input.usages, input.rates);
   }
   if (input.costMode === 'note_only') {
     noteOnlyTokens = tokens;
@@ -436,20 +546,30 @@ export async function computeAiBudgetCosts(
 
   const taskRows = await database.db
     .select({
+      id: projectTasks.id,
       tokensUsed: projectTasks.tokensUsed,
       tokensInput: projectTasks.tokensInput,
       tokensOutput: projectTasks.tokensOutput,
       tokensCache: projectTasks.tokensCache,
       tokensCacheWrite: projectTasks.tokensCacheWrite,
       aiSystemId: projectTasks.aiSystemId,
+      aiModelId: projectTasks.aiModelId,
       status: projectTasks.status,
+      billingPeriod: projectTasks.billingPeriod,
+      usageOccurredAt: projectTasks.usageOccurredAt,
+      updatedAt: projectTasks.updatedAt,
     })
     .from(projectTasks)
     .where(
       and(eq(projectTasks.projectId, projectId), isNull(projectTasks.archivedAt)),
     );
 
-  const usagesBySystem = new Map<string, AiUsageForCost[]>();
+  const completedAt = await loadCompletedAtByTask(
+    database,
+    taskRows.map((row) => row.id),
+  );
+  const catalogPrices = await listAiModelPrices(database, project.workspaceId);
+  const usagesBySystem = new Map<string, CatalogPricedUsage[]>();
   let orphanTokens = 0;
   for (const task of taskRows) {
     if (task.status === 'cancelled') continue;
@@ -462,9 +582,31 @@ export async function computeAiBudgetCosts(
     };
     const tokens = usageTokenTotal(usage);
     if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
+    const period =
+      task.billingPeriod && /^\d{4}-(0[1-9]|1[0-2])$/.test(task.billingPeriod)
+        ? task.billingPeriod
+        : null;
+    const priced = priceTaskUsagesFromCatalog(
+      [
+        {
+          usage,
+          model: task.aiModelId,
+          onDate: theoreticalUsageDate({
+            usageOccurredAt: task.usageOccurredAt,
+            completedAt: taskCompletedAt(task.status, completedAt.get(task.id)),
+            updatedAt: task.updatedAt,
+            period,
+            fallback: today,
+          }),
+          tokens,
+        },
+      ],
+      catalogPrices,
+    ).rows[0];
+    if (!priced) continue;
     if (task.aiSystemId) {
       const list = usagesBySystem.get(task.aiSystemId) ?? [];
-      list.push(usage);
+      list.push(priced);
       usagesBySystem.set(task.aiSystemId, list);
     } else if (tokens > 0) {
       orphanTokens += tokens;
@@ -482,17 +624,19 @@ export async function computeAiBudgetCosts(
       : null;
     const costMode = modeParsed?.success ? modeParsed.data : null;
     const allocation = parseNumeric(row.aiBudgetAllocation);
+    const systemUsages = usagesBySystem.get(row.id) ?? [];
     const billed = billAiAssistantUsage({
       costMode,
       flatMonthlyFee: parseNumeric(row.aiFlatMonthlyFee) ?? 0,
       rates: {
-        blendedPer1k: parseNumeric(row.aiTokenRatePer1k),
-        inputPer1k: parseNumeric(row.aiTokenRateInputPer1k),
-        outputPer1k: parseNumeric(row.aiTokenRateOutputPer1k),
-        cachePer1k: parseNumeric(row.aiTokenRateCachePer1k),
-        cacheWritePer1k: parseNumeric(row.aiTokenRateCacheWritePer1k),
+        blendedPer1k: null,
+        inputPer1k: null,
+        outputPer1k: null,
+        cachePer1k: null,
+        cacheWritePer1k: null,
       },
-      usages: usagesBySystem.get(row.id) ?? [],
+      usages: systemUsages.map((item) => item.usage),
+      tokenCostOverride: groupedCatalogCost(systemUsages),
       startDate: project.startDate,
       endDate: project.endDate,
       today,
