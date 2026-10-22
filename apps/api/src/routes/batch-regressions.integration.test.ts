@@ -11,6 +11,7 @@ import {
   workspaces,
 } from '@project-knowledge-hub/database';
 import { DEFAULT_MCP_SCOPES } from '@project-knowledge-hub/mcp';
+import { allocateGlobalIntegrationKeyPrefix } from '../integration-test/unique-key-prefix.js';
 import { buildApp } from '../app.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -166,13 +167,21 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
       return (response.json() as { project: { id: string } }).project.id;
     }
 
-    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const n1 = parseInt(suffix.slice(0, 2), 16) % 26;
-    const n2 = parseInt(suffix.slice(2, 4), 16) % 26;
-    const tail = `${alphabet[n1]}${alphabet[n2]}`;
-    projectA = await createProject(workspaceA, 'Project Alpha', `A${tail}`);
-    projectB = await createProject(workspaceB, 'Project Beta', `B${tail}`);
-    projectC = await createProject(workspaceA, 'Project Gamma', `C${tail}`);
+    projectA = await createProject(
+      workspaceA,
+      'Project Alpha',
+      await allocateGlobalIntegrationKeyPrefix(database),
+    );
+    projectB = await createProject(
+      workspaceB,
+      'Project Beta',
+      await allocateGlobalIntegrationKeyPrefix(database),
+    );
+    projectC = await createProject(
+      workspaceA,
+      'Project Gamma',
+      await allocateGlobalIntegrationKeyPrefix(database),
+    );
 
     const scopes = [...DEFAULT_MCP_SCOPES, 'knowledge:write', 'pm:read', 'pm:write'];
     const narrow = await app.inject({

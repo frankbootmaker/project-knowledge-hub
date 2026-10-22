@@ -15,6 +15,7 @@ import {
   workspaces,
   type Database,
 } from '@project-knowledge-hub/database';
+import { allocateGlobalIntegrationKeyPrefix } from '../integration-test/unique-key-prefix.js';
 import { buildApp } from '../app.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -58,15 +59,6 @@ describe.skipIf(!hasIntegrationEnv)('Knowledge record relations', () => {
   let readerCookie = '';
   let workspaceId = '';
   const password = 'test-password-123';
-
-  function nextPrefix(): string {
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-    const bytes = randomUUID().replace(/-/g, '');
-    const a = alphabet[Number.parseInt(bytes.slice(0, 2), 16) % alphabet.length] ?? 'A';
-    const b = alphabet[Number.parseInt(bytes.slice(2, 4), 16) % alphabet.length] ?? 'B';
-    const digit = Number.parseInt(bytes.slice(4, 6), 16) % 10;
-    return `${a}${b}${digit}`;
-  }
 
   function headers(cookie: string) {
     return { cookie, origin: ORIGIN };
@@ -160,14 +152,21 @@ describe.skipIf(!hasIntegrationEnv)('Knowledge record relations', () => {
   });
 
   async function createProject(name: string) {
-    const response = await app!.inject({
-      method: 'POST',
-      url: '/api/v1/projects',
-      headers: headers(adminCookie),
-      payload: { workspaceId, name, keyPrefix: nextPrefix() },
-    });
-    expect(response.statusCode).toBe(200);
-    return (response.json() as { project: { id: string; keyPrefix: string | null } }).project;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const keyPrefix = await allocateGlobalIntegrationKeyPrefix(database!);
+      const response = await app!.inject({
+        method: 'POST',
+        url: '/api/v1/projects',
+        headers: headers(adminCookie),
+        payload: { workspaceId, name, keyPrefix },
+      });
+      if (response.statusCode === 409) {
+        continue;
+      }
+      expect(response.statusCode).toBe(200);
+      return (response.json() as { project: { id: string; keyPrefix: string | null } }).project;
+    }
+    throw new Error('createProject failed after keyPrefix retries');
   }
 
   async function createRecord(input: {

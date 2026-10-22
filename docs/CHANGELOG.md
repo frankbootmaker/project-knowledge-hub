@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Knowledge record relations integration test (PRO-B-21):** API integration helpers now allocate collision-proof project `keyPrefix` values (per-process counter, Vitest worker id, and process salt) so `createProject` setup no longer hits HTTP 409 from duplicate prefixes across tests or parallel workers.
+
 * **CSV import buttons (PRO-B-28):** Preview and Import are enabled as soon as the first CSV is read, including a file that was imported before. The file input is cleared after reading, so choosing the same file again works.
 
 * **Archived and cancelled parents (PRO-B-29):** Linking or updating items no longer turns an archived cancelled milestone into `in_progress`. Recompute skips archived stories, epics, and milestones and never overwrites a cancelled status. `set_project_milestone_item_links`, task story/milestone/sprint assignment, and moving a story onto an epic reject an archived parent with `Milestone PNZ-M-12 is archived; unarchive it first` (409). The delivery dialogs show the same rule and leave an archived milestone's links unchanged. After unarchive, linking works again. A cancelled parent stays cancelled until an explicit status change.
