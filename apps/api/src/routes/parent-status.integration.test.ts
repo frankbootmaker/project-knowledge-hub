@@ -9,7 +9,9 @@ import {
   organizations,
   users,
   workspaces,
+  type Database,
 } from '@project-knowledge-hub/database';
+import { allocateGlobalIntegrationKeyPrefix } from '../integration-test/unique-key-prefix.js';
 import { buildApp } from '../app.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -43,6 +45,7 @@ type ScheduleRow = {
 describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
   let app: FastifyInstance | undefined;
   let redis: Redis | undefined;
+  let database: Database | undefined;
   let closeDatabase: (() => Promise<void>) | undefined;
   let adminCookie = '';
   let workspaceId = '';
@@ -51,8 +54,8 @@ describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
 
   beforeAll(async () => {
     const env = testEnv();
-    const database = createDatabase(env.DATABASE_URL);
-    closeDatabase = () => database.close();
+    database = createDatabase(env.DATABASE_URL);
+    closeDatabase = () => database!.close();
     redis = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: 1,
       lazyConnect: true,
@@ -768,7 +771,7 @@ describe.skipIf(!hasIntegrationEnv)('parent status from children', () => {
       payload: {
         workspaceId,
         name: `Frozen ${randomUUID()}`,
-        keyPrefix: `${randomUUID().replace(/[^a-f]/gi, '').toUpperCase().slice(0, 2) || 'FZ'}1`,
+        keyPrefix: await allocateGlobalIntegrationKeyPrefix(database!),
       },
     });
     expect(createdProject.statusCode).toBe(200);

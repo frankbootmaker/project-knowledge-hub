@@ -14,6 +14,7 @@ import {
   type Database,
 } from '@project-knowledge-hub/database';
 import { DEFAULT_MCP_SCOPES } from '@project-knowledge-hub/mcp';
+import { allocateGlobalIntegrationKeyPrefix } from '../integration-test/unique-key-prefix.js';
 import { buildApp } from '../app.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -30,11 +31,6 @@ function testEnv() {
       process.env.SESSION_SECRET ?? 'test-session-secret-at-least-32-chars',
     WEB_URL: 'http://localhost:3100',
   });
-}
-
-function prefixFrom(seed: string): string {
-  const letters = seed.replace(/[^a-f]/gi, '').toUpperCase();
-  return `${letters[0] ?? 'Q'}${letters[1] ?? 'W'}1`;
 }
 
 type ToolBody = {
@@ -75,7 +71,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP create_project and update_project (PRO-
   let readOnlyToken = '';
   let callId = 1;
   const origin = 'http://localhost:3100';
-  const keyPrefix = prefixFrom(randomUUID());
+  let keyPrefix = '';
 
   beforeAll(async () => {
     const env = testEnv();
@@ -182,6 +178,8 @@ describe.skipIf(!hasIntegrationEnv)('MCP create_project and update_project (PRO-
       readerUserId,
     );
     readOnlyToken = await issue('Project read only', [...DEFAULT_MCP_SCOPES], adminUserId);
+
+    keyPrefix = await allocateGlobalIntegrationKeyPrefix(database);
 
     const existing = await app.inject({
       method: 'POST',

@@ -1,3 +1,4 @@
+import { AppError } from './index.js';
 import {
   assertAiBillingPeriod,
   currentAiBillingPeriod,
@@ -110,6 +111,34 @@ function monthBound(value: string): string | null {
   return null;
 }
 
+/**
+ * Reject a non-empty from/to that is not a real YYYY-MM or YYYY-MM-DD.
+ * Empty stays unset so the caller can apply the default window.
+ * "oct", "2026-13", and "2026-02-30" are errors, not a silent 12-month range.
+ */
+export function assertAiCostViewBound(
+  value: string | null | undefined,
+  field: 'from' | 'to',
+): void {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed) return;
+  if (isIsoMonth(trimmed) || isIsoDay(trimmed)) return;
+  throw new AppError({
+    code: 'VALIDATION_ERROR',
+    message: `${field} must be a real calendar date (YYYY-MM or YYYY-MM-DD)`,
+    statusCode: 400,
+    details: { field, value: trimmed },
+  });
+}
+
+export function assertAiCostViewBounds(input: {
+  from?: string | null;
+  to?: string | null;
+}): void {
+  assertAiCostViewBound(input.from, 'from');
+  assertAiCostViewBound(input.to, 'to');
+}
+
 function withDays(
   window: { from: string; to: string; range: AiCostViewRange },
   fromDay?: string | null,
@@ -141,6 +170,7 @@ export function resolveAiCostViewWindow(
 ): AiCostResolvedWindow {
   const fromRaw = input.from?.trim() ?? '';
   const toRaw = input.to?.trim() ?? '';
+  assertAiCostViewBounds({ from: fromRaw, to: toRaw });
   const fromMonth = monthBound(fromRaw);
   const toMonth = monthBound(toRaw);
   if (fromMonth || toMonth) {

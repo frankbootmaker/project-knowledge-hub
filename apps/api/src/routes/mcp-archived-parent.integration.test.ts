@@ -11,6 +11,7 @@ import {
   workspaces,
 } from '@project-knowledge-hub/database';
 import { DEFAULT_MCP_SCOPES } from '@project-knowledge-hub/mcp';
+import { allocateGlobalIntegrationKeyPrefix } from '../integration-test/unique-key-prefix.js';
 import { buildApp } from '../app.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -27,11 +28,6 @@ function testEnv() {
       process.env.SESSION_SECRET ?? 'test-session-secret-at-least-32-chars',
     WEB_URL: process.env.WEB_URL ?? 'http://localhost:3100',
   });
-}
-
-function keyPrefix(): string {
-  const letters = randomUUID().replace(/[^a-f]/gi, '').toUpperCase();
-  return `${letters[0] ?? 'Q'}${letters[1] ?? 'W'}1`;
 }
 
 async function mcpCall(
@@ -151,7 +147,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP archived and cancelled parents (PRO-B-2
       payload: {
         workspaceId: workspace?.id,
         name: `Frozen ${suffix}`,
-        keyPrefix: keyPrefix(),
+        keyPrefix: await allocateGlobalIntegrationKeyPrefix(database),
       },
     });
     expect(project.statusCode).toBe(200);

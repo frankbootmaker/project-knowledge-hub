@@ -11,6 +11,7 @@ import {
   workspaces,
 } from '@project-knowledge-hub/database';
 import { DEFAULT_MCP_SCOPES } from '@project-knowledge-hub/mcp';
+import { allocateGlobalIntegrationKeyPrefix } from '../integration-test/unique-key-prefix.js';
 import { buildApp } from '../app.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -166,13 +167,21 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
       return (response.json() as { project: { id: string } }).project.id;
     }
 
-    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const n1 = parseInt(suffix.slice(0, 2), 16) % 26;
-    const n2 = parseInt(suffix.slice(2, 4), 16) % 26;
-    const tail = `${alphabet[n1]}${alphabet[n2]}`;
-    projectA = await createProject(workspaceA, 'Project Alpha', `A${tail}`);
-    projectB = await createProject(workspaceB, 'Project Beta', `B${tail}`);
-    projectC = await createProject(workspaceA, 'Project Gamma', `C${tail}`);
+    projectA = await createProject(
+      workspaceA,
+      'Project Alpha',
+      await allocateGlobalIntegrationKeyPrefix(database),
+    );
+    projectB = await createProject(
+      workspaceB,
+      'Project Beta',
+      await allocateGlobalIntegrationKeyPrefix(database),
+    );
+    projectC = await createProject(
+      workspaceA,
+      'Project Gamma',
+      await allocateGlobalIntegrationKeyPrefix(database),
+    );
 
     const scopes = [...DEFAULT_MCP_SCOPES, 'knowledge:write', 'pm:read', 'pm:write'];
     const narrow = await app.inject({
@@ -406,6 +415,124 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     expect(siblingUpdate.text).toContain('must belong to this project');
   });
 
+  it('sets completedAt when MCP creates a done task or bug (PRO-B-34)', async () => {
+    const before = Date.now();
+    const task = await call(wideToken, 'create_project_task', {
+      projectId: projectA,
+      title: 'Done on create',
+      status: 'done',
+    });
+    expect(task.isError, task.text).toBe(false);
+    const created = task.data.task as {
+      status: string;
+      completedAt: string | null;
+      completionPercent: number;
+    };
+    expect(created.status).toBe('done');
+    expect(created.completionPercent).toBe(100);
+    expect(created.completedAt).toBeTruthy();
+    expect(Date.parse(created.completedAt ?? '')).toBeGreaterThanOrEqual(before - 1000);
+
+    const bug = await call(wideToken, 'create_project_task', {
+      projectId: projectA,
+      title: 'Bug done on create',
+      itemType: 'bug',
+      status: 'done',
+      severity: 'low',
+    });
+    expect(bug.isError, bug.text).toBe(false);
+    const createdBug = bug.data.task as { status: string; completedAt: string | null };
+    expect(createdBug.status).toBe('done');
+    expect(createdBug.completedAt).toBeTruthy();
+
+    const reopened = await call(wideToken, 'update_project_task', {
+      taskId: (task.data.task as { id: string }).id,
+      status: 'todo',
+    });
+    expect(reopened.isError, reopened.text).toBe(false);
+    const open = reopened.data.task as {
+      status: string;
+      completedAt: string | null;
+      completionPercent: number;
+    };
+    expect(open.status).toBe('todo');
+    expect(open.completedAt).toBeNull();
+    expect(open.completionPercent).toBe(0);
+  });
+
+  it('returns language and translation siblings on record read (PRO-B-33)', async () => {
+    const source = await call(validationToken, 'create_knowledge_record', {
+      workspaceId: workspaceA,
+      projectId: projectA,
+      title: 'Translation source',
+      recordType: 'note',
+      contentMarkdown: '# Source\n',
+      language: 'en',
+    });
+    expect(source.isError, source.text).toBe(false);
+    const sourceId = (source.data.knowledgeRecord as { id: string }).id;
+
+    const translated = await call(validationToken, 'create_record_translation', {
+      recordId: sourceId,
+      language: 'hu',
+      title: 'Fordítás',
+      contentMarkdown: '# Fordítás\n',
+    });
+    expect(translated.isError, translated.text).toBe(false);
+    const created = translated.data.knowledgeRecord as {
+      id: string;
+      language: string;
+      translationGroupId: string;
+    };
+    expect(created.language).toBe('hu');
+    expect(created.translationGroupId).toBeTruthy();
+
+    const read = await call(validationToken, 'get_knowledge_record', {
+      recordId: created.id,
+    });
+    expect(read.isError, read.text).toBe(false);
+    const record = read.data.knowledgeRecord as {
+      language: string;
+      translationGroupId: string;
+      translations: Array<{ id: string; key: string | null; language: string | null }>;
+    };
+    expect(record.language).toBe('hu');
+    expect(record.translationGroupId).toBe(created.translationGroupId);
+    expect(record.translations.map((item) => item.language).sort()).toEqual(['en', 'hu']);
+    expect(record.translations.every((item) => item.id && item.key)).toBe(true);
+
+    const sourceRead = await call(validationToken, 'get_knowledge_record', {
+      recordId: sourceId,
+    });
+    const sourceRecord = sourceRead.data.knowledgeRecord as {
+      language: string | null;
+      translationGroupId: string;
+    };
+    expect(sourceRecord.language).toBe('en');
+    expect(sourceRecord.translationGroupId).toBe(created.translationGroupId);
+  });
+
+  it('rejects an invalid theoretical-cost window (PRO-B-36)', async () => {
+    const bad = await call(wideToken, 'get_ai_usage_theoretical_cost', {
+      workspaceId: workspaceA,
+      from: 'oct',
+    });
+    expect(bad.isError).toBe(true);
+    expect(bad.text).toContain('from');
+    expect(bad.text).not.toMatch(/"from": "2025-/);
+
+    const impossible = await call(wideToken, 'get_ai_usage_theoretical_cost', {
+      workspaceId: workspaceA,
+      to: '2026-02-30',
+    });
+    expect(impossible.isError).toBe(true);
+    expect(impossible.text).toContain('to');
+
+    const month = await call(wideToken, 'get_platform_ai_cost', { from: '2026-13' });
+    expect(month.isError).toBe(true);
+    expect(month.text).toContain('from');
+  });
+
   it('PRO-T-51 keeps committed points after unfinished tasks move', async () => {
     const sprint = await call(wideToken, 'create_project_sprint', {
       projectId: projectA,
@@ -452,7 +579,11 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     };
     expect(series.committedPoints).toBe(13);
     expect(series.points.length).toBeGreaterThan(0);
-    expect(series.points[0]?.remaining).toBe(8);
+    // Created as done stamps completedAt at now (PRO-B-34). This sprint has
+    // already ended, so that completion is outside the series and the 5
+    // points stay in remaining. A done row with no activity is still burned
+    // from the sprint start.
+    expect(series.points[0]?.remaining).toBe(13);
 
     const rewritten = await call(wideToken, 'update_project_task', {
       taskId: doneId,

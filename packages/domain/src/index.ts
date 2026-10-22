@@ -1531,6 +1531,8 @@ export {
   fillPlatformAiCostMonths,
   formatAiBillingMonthLabel,
   periodsCoveredByEntry,
+  assertAiCostViewBound,
+  assertAiCostViewBounds,
   resolveAiCostViewWindow,
   type AiCostChartMonth,
   type AiCostChartSourcePoint,

@@ -48,8 +48,9 @@ describe('inline table selects', () => {
 
   it('keeps a 7.5rem floor and chevron padding on data-table selects', () => {
     expect(css).toContain('.kh-ops-data-table td:has(> select.kh-input)');
+    expect(css).toContain('.kh-ops-data-table td:has(> .kh-select)');
     const rule = css.match(
-      /\.kh-ops-inline-select,\s*\.kh-ops-data-table td select\.kh-input \{([^}]*)\}/,
+      /\.kh-ops-inline-select,\s*\.kh-ops-data-table td select\.kh-input,\s*\.kh-ops-data-table td > \.kh-select > \.kh-select-trigger \{([^}]*)\}/,
     );
     expect(rule).not.toBeNull();
     const body = rule?.[1] ?? '';
