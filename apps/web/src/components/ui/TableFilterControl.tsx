@@ -56,6 +56,7 @@ export function AnchoredPopover({
     const node = panel;
     function place() {
       const rect = anchor.getBoundingClientRect();
+      node.style.setProperty('--kh-pop-anchor-width', `${rect.width}px`);
       const pop = node.getBoundingClientRect();
       const margin = 8;
       let left = rect.right - pop.width;

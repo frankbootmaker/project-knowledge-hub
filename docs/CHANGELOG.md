@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Select menus (PRO-B-35):** Dropdowns use the shared `Select` listbox, so Firefox shows the same 1px ink frame around the selected option as Edge. The native popup ignored author CSS. Arrows, Home, End, type-ahead, Enter, Space, and Escape work, and focus returns to the trigger. Long lists scroll inside the viewport, including over a dialog. Forms still submit name and value, including required and disabled. The alert test-type picker uses the same control.
+
 * **AI cost date window (PRO-B-36):** `from` and `to` on `get_ai_usage_theoretical_cost`, `GET /api/v1/workspaces/:workspaceId/ai-cost`, and `GET /api/v1/admin/ai-cost` must be a real `YYYY-MM` or `YYYY-MM-DD`. Values such as `oct`, `2026-13`, and `2026-02-30` return 400 naming the field. They no longer fall back to the last 12 months. `get_platform_ai_cost` still accepts `YYYY-MM` only, and an invalid `from` or `to` names that field instead of a generic period error.
 
 * **Done on create (PRO-B-34):** Creating a task or bug as `done` (including `completionPercent` 100) sets `completedAt` to now. Updating into `done` still sets it. Reopening to `todo`, `in_progress`, or `blocked` clears `completedAt` and resets `completionPercent` to 0, unless that call sends an explicit percent. Migration `0078_backfill_done_completed_at` inserts a `status_changed` → `done` activity at `updated_at` for done tasks and bugs that had none.

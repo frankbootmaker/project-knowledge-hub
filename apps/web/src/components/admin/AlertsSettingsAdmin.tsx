@@ -1,8 +1,7 @@
 'use client';
 
-import { useCallback, useId, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { AnchoredPopover } from '../ui/TableFilterControl';
 import {
   Badge,
   Button,
@@ -45,62 +44,20 @@ function AlertTestTypePicker({
   options: Array<{ value: OpsAlertType; label: string }>;
   onChange: (value: OpsAlertType) => void;
 }) {
-  const panelId = useId();
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
-  const close = useCallback((restoreFocus: boolean) => {
-    setOpen(false);
-    if (restoreFocus) triggerRef.current?.focus();
-  }, []);
-  const current = options.find((option) => option.value === value)?.label ?? value;
-
   return (
-    <>
-      <Button
-        ref={triggerRef}
-        type="button"
-        variant="secondary"
-        className="kh-ops-alert-type-trigger"
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
-        onClick={() => setOpen((currentOpen) => !currentOpen)}
-      >
-        {current}
-      </Button>
-      {open && triggerRef.current ? (
-        <AnchoredPopover
-          id={panelId}
-          anchor={triggerRef.current}
-          label={label}
-          className="kh-ops-alert-type-menu"
-          initialFocus="[aria-selected='true']"
-          onClose={close}
-        >
-          <div role="listbox" aria-label={label}>
-            {options.map((option) => {
-              const selected = option.value === value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  className="kh-ops-choice"
-                  aria-selected={selected}
-                  onClick={() => {
-                    onChange(option.value);
-                    close(true);
-                  }}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
-        </AnchoredPopover>
-      ) : null}
-    </>
+    <Select
+      value={value}
+      disabled={disabled}
+      aria-label={label}
+      variant="button"
+      onChange={(event) => onChange(event.target.value as OpsAlertType)}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </Select>
   );
 }
 

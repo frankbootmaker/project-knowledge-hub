@@ -111,7 +111,7 @@ export function AuthModal({
     const preferred =
       panel?.querySelector<HTMLElement>('[data-modal-initial-focus]') ??
       panel?.querySelector<HTMLElement>(
-        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+        'a[href], button:not([disabled]), textarea, input:not([tabindex="-1"]), select:not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])',
       );
     preferred?.focus();
 
@@ -128,7 +128,7 @@ export function AuthModal({
         return;
       }
       const focusables = panel.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+        'a[href], button:not([disabled]), textarea, input:not([tabindex="-1"]), select:not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])',
       );
       if (!focusables.length) {
         return;

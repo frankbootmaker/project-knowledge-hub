@@ -109,6 +109,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | Recipe | Role |
 |--------|------|
 | `.kh-input` / `.kh-label` | Form controls. Values and labels use the rail menu type (IBM Plex Sans, 13px, regular), including task dialogs and Profile |
+| `.kh-select` / `.kh-select-trigger` / `.kh-ops-select-menu` | Shared dropdown. The trigger uses the input face, or a secondary button (`.kh-select-button`) on an action row. The menu is a portaled listbox: the selected row is one 1px `--kh-ink` border with no inner line, other rows are plain, and hover or keyboard highlight only tints `--kh-neutral-soft`. Long lists scroll. The panel stays inside the viewport and above dialogs. Trigger and rows use the UI sans |
 | `.kh-function-header` / `-controls` / `-actions` | List toolbar (search/filters + primary actions) |
 | `.kh-panel` / `.kh-panel-solid` / `.kh-panel-inset` | Surfaces |
 | `.kh-workspace-tile` + `.kh-workspace-color-*` | Workspace accent tiles (3px inset stripe, not a wash); palette keys from domain |
@@ -131,7 +132,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `.kh-ops-toolbar` | List/admin search+filter chrome (also on `FunctionHeader`) |
 | `.kh-ops-data-table` / `.kh-ops-table-wrap` / `.kh-ops-data-item` / `.kh-ops-stack` | Dense tables and catalogue rows. The wrap scrolls horizontally (`overflow-x: auto`) and tables keep `min-width: 42rem`. `DataTable` adds `.kh-ops-table-wrap--sticky` (scrollport `max-height: min(70vh, 48rem)`, sticky header) and `.kh-ops-data-table--fluid` (`min-width: 0`) |
 | `.kh-ops-cell-text` / `.kh-ops-cell-data` / `.kh-ops-cell-status` / `.kh-ops-cell-number` / `.kh-ops-cell-date` / `.kh-ops-cell-actions` | Column kinds on `DataTable`. Headers, body cells, owners, dates, status, and numbers use the rail menu type (IBM Plex Sans, 13px, regular). Numbers keep `tabular-nums`. Text cells wrap (`overflow-wrap: anywhere`). Text headers stay one line (`nowrap`, no mid-word break) and the column is at least as wide as the label. `.kh-ops-cell-wrap` headers break on spaces only. Data, status, number, date, and actions stay one line |
-| `.kh-ops-inline-select` | Native select in a fluid table cell or list toolbar. `min-width: 7.5rem`, `field-sizing: content` (grows for a longer current label), `padding-inline-end: 1.75rem` so the label stays clear of the chevron. Also applied to any `select.kh-input` inside a `DataTable` cell |
+| `.kh-ops-inline-select` | Shared `Select` in a fluid table cell or list toolbar. `min-width: 7.5rem`, grows with the current label, `padding-inline-end: 1.75rem` so the label stays clear of the chevron. The same floor applies to a `Select` trigger inside a `DataTable` cell (`.kh-select`) and to a native `select.kh-input` |
 | `.kh-ops-sort-btn` / `.kh-ops-filter-btn` / `.kh-ops-filter-dot` / `.kh-ops-table-filter` | Sortable header (arrow + `aria-sort`) and column-filter popover. `TableFilterControl` owns the trigger, body, and portaled popover (`--kh-z-popover`). Delivery list, tree, and Gantt put that trigger on the search toolbar. Other tables keep it in the header |
 | `.kh-ops-delivery-modes` / `.kh-ops-board` / `.kh-ops-lane` / `.kh-ops-task-card` | Delivery view strip, kanban lanes, and task cards. Lane counts use the rail menu type. A bug card shows the kind word in that type and the key on `.kh-ops-key-badge` |
 | `.kh-ops-delivery-list` / `.kh-ops-delivery-tree-*` / `.kh-ops-tree-*` | Delivery list density (no fixed 1040px min-width) and work-breakdown tree. Each tree row and the header share `.kh-ops-tree-meta` tracks (`--kh-tree-meta`: status, %, target, owner, sprint, hours, points, actions) so values line up at every depth. Indent is one 30px toggle per level, and the header label is padded the same amount with a 16px gap before the depth controls. The header label does not shrink. Empty notes use `.kh-ops-tree-note`. Matching ancestors that fail the filter stay visible at reduced opacity (`[data-filter-dimmed='true']`). Task hours and points are not rolled up. Tree type matches the delivery list and the rail menu (IBM Plex Sans, 13px, regular): the header uses the `.kh-ops-data-table th` label, titles use `.kh-ops-primary-cell` and wrap instead of ellipsis, keys use `.kh-ops-key-badge`, kind words use `.kh-ops-type-chip`, and status, owner, sprint, %, target, hours, and points use the menu-type cell. The header label sits in `.kh-ops-delivery-tree-label` with four depth controls (`.kh-ops-tree-depth`): expand one level, collapse one level, expand all, collapse all. Each control shows `.kh-ops-tree-tip-label` on hover and keyboard focus, using the translated button label. A control is disabled when that action would not change the rows still in the filter. One-level actions move the shallowest collapsed or deepest open visible depth. Expand all and collapse all also include rows hidden under a collapsed parent. The row toggle (`.kh-ops-tree-toggle`, also on Gantt) uses the UI sans |
@@ -197,7 +198,7 @@ Breakpoints stay Tailwind defaults unless a product need forces a custom set.
 | `MobileNav` | Primary nav below `sm` (sheet + backdrop; Esc / route change closes) |
 | `Modal` | Focused create/edit flows; Esc + backdrop close; optional `tabs` and `footer`; `size` `md`/`lg`/`xl`/`full`. Full-screen sheet below `sm`, centered card from `sm`, via `.kh-modal*` (13px/11px header, 3px radii from `sm`). Pass tab bars as `tabs` so they stay visible. Delivery, RAID, and change item dialogs share `DELIVERY_ITEM_MODAL_SIZE` (`xl`) |
 | `Panel` | `default` / `solid` / `inset` surfaces |
-| `Field`, `Input`, `PasswordInput`, `PasswordStrengthHint`, `Select`, `Textarea`, `ErrorText` | Forms (`PasswordInput` show/hide; strength meter for new passwords) |
+| `Field`, `Input`, `PasswordInput`, `PasswordStrengthHint`, `Select`, `Textarea`, `ErrorText` | Forms. `Select` opens `.kh-ops-select-menu` (listbox) instead of the native popup, and still submits `name` / `value` / `required` / `disabled`. `variant="button"` matches a secondary button. `PasswordInput` show/hide; strength meter for new passwords |
 | `FilePicker` | File choose control — secondary **Browse** / **Tallózás** button + filename (hides native file chrome) |
 | `Badge` | Compact status chips (e.g. health “ok”) |
 | `Switch` | On/off toggles |
@@ -248,6 +249,10 @@ from client components. Tones: `success` (default), `danger`, `info`.
 ## Changelog
 
 Record durable UI / design-system changes here (newest first).
+
+### 2026-10-22
+
+* **Select listbox (PRO-B-35)** — `Select` opens a custom listbox instead of the native popup. Firefox was ignoring author CSS, so the selected row had no frame; Edge showed one. The selected row is a single 1px ink border with no inner line. Other rows are plain. Hover and the keyboard highlight only tint the row. Arrows, Home, End, type-ahead, Enter, Space, and Escape work, and focus returns to the trigger. The menu scrolls and stays in the viewport, including above a dialog. A hidden native select keeps the form name, value, required, and disabled. The alert test-type control uses the same listbox on a secondary button.
 
 ### 2026-10-21
 
