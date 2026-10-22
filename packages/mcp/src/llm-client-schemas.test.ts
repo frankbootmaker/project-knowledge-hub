@@ -137,6 +137,8 @@ describe('llm-client-schemas', () => {
         expect(encoded).toContain('deliveryLinks');
         expect(encoded).toContain('raidLinks');
         expect(encoded).toContain('changeItems');
+        expect(encoded).toContain('translationGroupId');
+        expect(encoded).toContain('translations');
       } else {
         const toolName = path.split('/').pop() ?? '';
         const declared = findLlmTool(toolName)?.output;

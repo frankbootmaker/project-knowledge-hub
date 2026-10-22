@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { roundAiMoney } from '@project-knowledge-hub/domain';
+import { AppError, roundAiMoney } from '@project-knowledge-hub/domain';
 import { presentWorkspaceAiCost } from './ai-cost-window.js';
 import type { WorkspaceAiCostOverview } from './ai-billing.js';
 
@@ -131,5 +131,15 @@ describe('presentWorkspaceAiCost grains', () => {
     );
     expect(presented.grain).toBe('week');
     expect(presented.grainAdjusted).toBe(true);
+  });
+
+  it('rejects an impossible from or to before using the default window (PRO-B-36)', () => {
+    expect(() => presentWorkspaceAiCost(overview(), { from: 'oct' }, NOW)).toThrow(AppError);
+    expect(() => presentWorkspaceAiCost(overview(), { to: '2026-02-30' }, NOW)).toThrow(
+      /to must be a real calendar date/,
+    );
+    expect(() => presentWorkspaceAiCost(overview(), { from: '2026-13' }, NOW)).toThrow(
+      /from must be a real calendar date/,
+    );
   });
 });

@@ -213,6 +213,100 @@ describe.skipIf(!hasIntegrationEnv)('task completedAt', () => {
     expect(task.completedAt).toBeNull();
   });
 
+  it('sets completedAt when a task or bug is created as done (PRO-B-34)', async () => {
+    const projectId = await createProject();
+    const before = Date.now();
+    const created = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/tasks`,
+      headers: { cookie: adminCookie, origin },
+      payload: { title: 'Shipped on create', status: 'done', itemType: 'task' },
+    });
+    expect(created.statusCode).toBe(200);
+    const task = (created.json() as { task: TaskPayload & { completionPercent: number } }).task;
+    expect(task.status).toBe('done');
+    expect(task.completionPercent).toBe(100);
+    expect(task.completedAt).toBeTruthy();
+    const completedMs = Date.parse(task.completedAt ?? '');
+    expect(completedMs).toBeGreaterThanOrEqual(before - 1000);
+    expect(completedMs).toBeLessThanOrEqual(Date.now() + 1000);
+
+    const bug = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/tasks`,
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        title: 'Fixed on create',
+        status: 'done',
+        itemType: 'bug',
+        severity: 'low',
+      },
+    });
+    expect(bug.statusCode).toBe(200);
+    const bugBody = (bug.json() as { task: TaskPayload }).task;
+    expect(bugBody.status).toBe('done');
+    expect(bugBody.completedAt).toBeTruthy();
+
+    const byPercent = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/tasks`,
+      headers: { cookie: adminCookie, origin },
+      payload: { title: 'UI create at 100', completionPercent: 100 },
+    });
+    expect(byPercent.statusCode).toBe(200);
+    const percentTask = (byPercent.json() as { task: TaskPayload }).task;
+    expect(percentTask.status).toBe('done');
+    expect(percentTask.completedAt).toBeTruthy();
+  });
+
+  it('sets completedAt on update into done and clears it on reopen (PRO-B-34)', async () => {
+    const projectId = await createProject();
+    const taskId = await createTask(projectId, 'Finish later');
+    const done = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-tasks/${taskId}`,
+      headers: { cookie: adminCookie, origin },
+      payload: { status: 'done' },
+    });
+    expect(done.statusCode).toBe(200);
+    const finished = (done.json() as { task: TaskPayload & { completionPercent: number } }).task;
+    expect(finished.status).toBe('done');
+    expect(finished.completedAt).toBeTruthy();
+    expect(finished.completionPercent).toBe(100);
+
+    const reopened = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-tasks/${taskId}`,
+      headers: { cookie: adminCookie, origin },
+      payload: { status: 'in_progress' },
+    });
+    expect(reopened.statusCode).toBe(200);
+    const open = (reopened.json() as { task: TaskPayload & { completionPercent: number } }).task;
+    expect(open.status).toBe('in_progress');
+    expect(open.completedAt).toBeNull();
+    expect(open.completionPercent).toBe(0);
+
+    const again = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-tasks/${taskId}`,
+      headers: { cookie: adminCookie, origin },
+      payload: { status: 'done' },
+    });
+    const redone = (again.json() as { task: TaskPayload }).task;
+    expect(redone.completedAt).toBeTruthy();
+
+    const kept = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-tasks/${taskId}`,
+      headers: { cookie: adminCookie, origin },
+      payload: { status: 'todo', completionPercent: 50 },
+    });
+    const partial = (kept.json() as { task: TaskPayload & { completionPercent: number } }).task;
+    expect(partial.status).toBe('todo');
+    expect(partial.completedAt).toBeNull();
+    expect(partial.completionPercent).toBe(50);
+  });
+
   it('clears completedAt after the task leaves done (PRO-B-25)', async () => {
     const projectId = await createProject();
     const taskId = await createTask(projectId, 'Reopened readout');

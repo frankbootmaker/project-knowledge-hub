@@ -1033,6 +1033,66 @@ export type TranslationSibling = {
   lifecycleStatus: string;
 };
 
+/** Compact sibling used on the record read. key is the human document key. */
+export type TranslationSiblingLink = {
+  id: string;
+  key: string | null;
+  language: string | null;
+  slug: string;
+};
+
+/**
+ * Translation family for a record read. Includes this record.
+ * Archived siblings are omitted. key is null when there is no document key.
+ */
+export async function listTranslationSiblingLinks(
+  database: Database,
+  recordId: string,
+): Promise<TranslationSiblingLink[]> {
+  const [record] = await database.db
+    .select()
+    .from(knowledgeRecords)
+    .where(eq(knowledgeRecords.id, recordId))
+    .limit(1);
+  if (!record) return [];
+
+  const rows = record.translationGroupId
+    ? await database.db
+        .select()
+        .from(knowledgeRecords)
+        .where(
+          and(
+            eq(knowledgeRecords.translationGroupId, record.translationGroupId),
+            isNull(knowledgeRecords.archivedAt),
+          ),
+        )
+    : [record];
+  const prefixes = await loadProjectKeyPrefixMap(
+    database,
+    rows.map((row) => row.projectId),
+  );
+  return rows
+    .map((row) => {
+      const prefix = row.projectId ? prefixes.get(row.projectId) ?? null : null;
+      const keys = toDocumentKeyFields(
+        prefix,
+        row.documentKeyType,
+        row.documentNumber,
+      );
+      return {
+        id: row.id,
+        key: keys.humanKey,
+        language: row.language,
+        slug: row.slug,
+      };
+    })
+    .sort(
+      (a, b) =>
+        (a.language ?? '').localeCompare(b.language ?? '')
+        || a.id.localeCompare(b.id),
+    );
+}
+
 export function translationSlug(sourceSlug: string, language: string): string {
   const lang = slugify(language) || 'xx';
   const suffix = `-${lang}`;
