@@ -1849,27 +1849,18 @@ export function createKnowledgeHubMcpServer(
           .any()
           .optional()
           .describe('Counts and summaries on every page unless includeRecordRelations is false.'),
-        language: z
-          .string()
-          .nullable()
-          .optional()
-          .describe('Content language, for example en or hu.'),
-        translationGroupId: z
-          .string()
-          .nullable()
-          .optional()
-          .describe('Shared id of the translation family. Null when the record has no siblings yet.'),
+        language: z.string().nullable().optional(),
+        translationGroupId: z.string().nullable().optional(),
         translations: z
           .array(
             z.object({
               id: z.string(),
-              key: z.string().nullable().describe('Human document key, or null.'),
+              key: z.string().nullable(),
               language: z.string().nullable(),
               slug: z.string(),
             }),
           )
-          .optional()
-          .describe('Translation family, including this record. Archived siblings are omitted.'),
+          .optional(),
       })
       .passthrough(),
   };
@@ -1878,7 +1869,7 @@ export function createKnowledgeHubMcpServer(
     'get_knowledge_record',
     {
       description:
-        'Get a knowledge record with markdown. Returns language, translationGroupId, and translations (id, key, language, slug) for the translation family, including this record. key is the human document key. Tags, media, and linkedItems (deliveryLinks: epic, user story, milestone, task including bugs, sprint; raidLinks; changeItems; each id, humanKey, title, type, kind; archived omitted) are on the first page only. Pages are 50000 characters. contentLength and contentSha256 cover the full body. contentTruncated and nextOffset (null at the end) page it. returnedChars, chunkIndex (0, then ceil(contentOffset/contentLimit)), and totalChunks describe the page (approximate if short). contentOffset or contentLimit returns raw slices to concatenate; otherwise the first page still appends …[truncated] when more remains. boundary paragraph or line snaps to a break in the second half (default is a hard cut). inCodeFence is true inside a fence. expectSha256 yields 409 if the body changed. Follow nextOffset until null before rewriting. Images: ![alt](/api/v1/media/{id}), never data: URIs. Read pixels with call_hub_tool get_workspace_media. recordId is a UUID or document key (HL1-VIS-2). recordRelations (counts, up to 20 summaries) is on every page unless includeRecordRelations is false.',
+        'Get a knowledge record with markdown. Returns language, translationGroupId, and translations (id, key, language, slug). key is the human document key. Tags, media, and linkedItems (deliveryLinks: epic, user story, milestone, task including bugs, sprint; raidLinks; changeItems; each id, humanKey, title, type, kind; archived omitted) are on the first page only. Pages are 50000 characters. contentLength and contentSha256 cover the full body. contentTruncated and nextOffset (null at the end) page it. contentOffset or contentLimit returns raw slices to concatenate; otherwise the first page still appends …[truncated] when more remains. boundary paragraph or line snaps to a break in the second half (default is a hard cut). inCodeFence is true inside a fence. expectSha256 yields 409 if the body changed. Follow nextOffset until null before rewriting. Images: ![alt](/api/v1/media/{id}), never data: URIs. Read pixels with call_hub_tool get_workspace_media. recordId is a UUID or document key (HL1-VIS-2). recordRelations (counts, up to 20 summaries) is on every page unless includeRecordRelations is false.',
       inputSchema: {
         recordId: z.string().min(1).max(80),
         contentOffset: z.number().int().min(0).optional(),
