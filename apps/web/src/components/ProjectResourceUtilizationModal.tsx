@@ -1,8 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import {
+  capacityStack,
+  formatHours,
+  formatStackPct,
+  type UtilizationBand,
+} from '../lib/utilization-bar';
 import { Badge, ErrorText } from './ui';
+import { UtilizationStackBar } from './UtilizationStackBar';
 
 type UtilizationView = 'planned' | 'burn' | 'combined';
 type UtilizationStatus = 'under' | 'on_track' | 'over' | 'unknown';
@@ -37,9 +44,7 @@ type UtilizationPayload = {
 
 const VIEWS: UtilizationView[] = ['planned', 'burn', 'combined'];
 
-function statusTone(
-  status: UtilizationStatus,
-): 'brand' | 'success' | 'danger' | 'neutral' {
+function statusTone(status: UtilizationStatus): 'brand' | 'success' | 'danger' | 'neutral' {
   if (status === 'under') return 'brand';
   if (status === 'on_track') return 'success';
   if (status === 'over') return 'danger';
@@ -50,11 +55,6 @@ function ragTone(rag: ResourceRag): 'success' | 'warn' | 'danger' {
   if (rag === 'red') return 'danger';
   if (rag === 'amber') return 'warn';
   return 'success';
-}
-
-function formatHours(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '—';
-  return `${value.toFixed(1)}h`;
 }
 
 function formatPct(value: number | null | undefined): string {
@@ -74,71 +74,104 @@ function pctForView(row: PersonRow, view: UtilizationView): number | null {
   return row.plannedPct;
 }
 
-function CapacityRows({
-  people,
-  view,
+function bandTone(band: UtilizationBand): 'brand' | 'success' | 'danger' | 'neutral' {
+  return statusTone(band);
+}
+
+function CapacityLegend() {
+  const t = useTranslations('utilization');
+  return (
+    <div className="kh-ops-capacity-legend-wrap">
+      <ul className="kh-ops-capacity-legend" aria-label={t('legendLabel')}>
+        <li>
+          <i className="kh-ops-capacity-burn kh-ops-capacity-swatch" aria-hidden="true" />
+          {t('burned')}
+        </li>
+        <li>
+          <i className="kh-ops-capacity-planned kh-ops-capacity-swatch" aria-hidden="true" />
+          {t('plannedDemand')}
+        </li>
+        <li>
+          <i className="kh-ops-capacity-overflow kh-ops-capacity-swatch" aria-hidden="true" />
+          {t('overCapacity')}
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+function CapacityPersonRow({
+  name,
+  burnHours,
+  plannedHours,
+  capacityHours,
+  detail,
+  total = false,
 }: {
-  people: PersonRow[];
-  view: UtilizationView;
+  name: string;
+  burnHours: number;
+  plannedHours: number;
+  capacityHours: number | null;
+  detail: string;
+  total?: boolean;
 }) {
   const t = useTranslations('utilization');
-  const max = useMemo(() => {
-    let peak = 1;
-    for (const row of people) {
-      peak = Math.max(
-        peak,
-        row.capacityHours ?? 0,
-        row.plannedHours,
-        row.burnHours,
-        demandForView(row, view),
-      );
-    }
-    return peak;
-  }, [people, view]);
+  const stack = capacityStack({ burnHours, plannedHours, capacityHours });
+  return (
+    <div className={total ? 'kh-ops-capacity-row is-total' : 'kh-ops-capacity-row'}>
+      <div className="kh-ops-capacity-name">
+        <strong>{name}</strong>
+        <small>{detail}</small>
+      </div>
+      <UtilizationStackBar
+        name={name}
+        burnHours={burnHours}
+        plannedHours={plannedHours}
+        capacityHours={capacityHours}
+      />
+      <span className="kh-ops-capacity-hours">
+        <span>{formatHours(stack.totalHours)}</span>
+        <small>{formatStackPct(stack.totalPct)}</small>
+      </span>
+      <Badge tone={bandTone(stack.band)}>{t(`status.${stack.band}`)}</Badge>
+    </div>
+  );
+}
 
+function CapacityRows({
+  people,
+  totals,
+}: {
+  people: PersonRow[];
+  totals: UtilizationPayload['totals'];
+}) {
+  const t = useTranslations('utilization');
   if (people.length === 0) return null;
+  const totalCapacity = totals.capacityHours > 0 ? totals.capacityHours : null;
 
   return (
     <div className="kh-ops-panel">
-      {people.map((row) => {
-        const plannedPct = Math.min(100, (row.plannedHours / max) * 100);
-        const burnPct = Math.min(100, (row.burnHours / max) * 100);
-        const singleDemand = demandForView(row, view);
-        const singlePct = Math.min(100, (singleDemand / max) * 100);
-        const plannedWidth = view === 'burn' ? 0 : view === 'combined' ? plannedPct : singlePct;
-        const burnWidth = view === 'planned' ? 0 : view === 'combined' ? burnPct : singlePct;
-        return (
-          <div key={row.userId} className="kh-ops-capacity-row">
-            <div className="kh-ops-capacity-name">
-              <strong>{row.displayName}</strong>
-              <small>
-                {formatHours(row.capacityHours)}
-                {row.engagementType
-                  ? ` · ${t(`engagement.${row.engagementType}`)}`
-                  : ''}
-              </small>
-            </div>
-            <div
-              className="kh-ops-capacity-track"
-              style={
-                {
-                  '--planned': `${plannedWidth}%`,
-                  '--burn': `${burnWidth}%`,
-                } as CSSProperties
-              }
-            >
-              <i />
-              <b />
-            </div>
-            <span className="kh-ops-capacity-hours">
-              {formatHours(demandForView(row, view))}
-            </span>
-            <Badge tone={statusTone(row.status)}>
-              {t(`status.${row.status}`)}
-            </Badge>
-          </div>
-        );
-      })}
+      <CapacityLegend />
+      <CapacityPersonRow
+        name={t('total')}
+        burnHours={totals.burnHours}
+        plannedHours={totals.plannedHours}
+        capacityHours={totalCapacity}
+        detail={formatHours(totalCapacity)}
+        total
+      />
+      {people.map((row) => (
+        <CapacityPersonRow
+          key={row.userId}
+          name={row.displayName}
+          burnHours={row.burnHours}
+          plannedHours={row.plannedHours}
+          capacityHours={row.capacityHours}
+          detail={`${formatHours(row.capacityHours)}${
+            row.engagementType ? ` · ${t(`engagement.${row.engagementType}`)}` : ''
+          }`}
+        />
+      ))}
     </div>
   );
 }
@@ -190,11 +223,7 @@ export function ProjectResourceUtilizationView({
   return (
     <div className="grid gap-3">
       <div className="kh-ops-toolbar">
-        <div
-          className="kh-ops-delivery-modes mb-0"
-          role="group"
-          aria-label={t('viewLabel')}
-        >
+        <div className="kh-ops-delivery-modes mb-0" role="group" aria-label={t('viewLabel')}>
           {VIEWS.map((mode) => (
             <button
               key={mode}
@@ -214,9 +243,7 @@ export function ProjectResourceUtilizationView({
       </div>
 
       {error ? <ErrorText>{error}</ErrorText> : null}
-      {loading && !data ? (
-        <p className="m-0 text-sm text-ink-muted">{tCommon('loading')}</p>
-      ) : null}
+      {loading && !data ? <p className="m-0 text-sm text-ink-muted">{tCommon('loading')}</p> : null}
 
       {data && data.resourceRag !== 'green' ? (
         <p className="m-0 rounded-[3px] border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-ink">
@@ -227,23 +254,20 @@ export function ProjectResourceUtilizationView({
       {data ? (
         <>
           <div className="kh-ops-stats">
-            <article className="kh-ops-stat">
+            <article className="kh-ops-stat" title={t('capacityHint')}>
               <div className="kh-ops-stat-label">{t('capacity')}</div>
-              <div className="kh-ops-stat-value">
-                {formatHours(data.totals.capacityHours)}
-              </div>
+              <div className="kh-ops-stat-value">{formatHours(data.totals.capacityHours)}</div>
+              <p className="kh-ops-stat-note">{t('capacityHint')}</p>
             </article>
-            <article className="kh-ops-stat">
+            <article className="kh-ops-stat" title={t('plannedDemandHint')}>
               <div className="kh-ops-stat-label">{t('plannedDemand')}</div>
-              <div className="kh-ops-stat-value">
-                {formatHours(data.totals.plannedHours)}
-              </div>
+              <div className="kh-ops-stat-value">{formatHours(data.totals.plannedHours)}</div>
+              <p className="kh-ops-stat-note">{t('plannedDemandHint')}</p>
             </article>
-            <article className="kh-ops-stat">
+            <article className="kh-ops-stat" title={t('burnDemandHint')}>
               <div className="kh-ops-stat-label">{t('burnDemand')}</div>
-              <div className="kh-ops-stat-value">
-                {formatHours(data.totals.burnHours)}
-              </div>
+              <div className="kh-ops-stat-value">{formatHours(data.totals.burnHours)}</div>
+              <p className="kh-ops-stat-note">{t('burnDemandHint')}</p>
             </article>
           </div>
 
@@ -254,7 +278,7 @@ export function ProjectResourceUtilizationView({
               <p>{t('empty')}</p>
             </div>
           ) : (
-            <CapacityRows people={data.people} view={view} />
+            <CapacityRows people={data.people} totals={data.totals} />
           )}
 
           {data.people.length > 0 ? (
@@ -288,9 +312,7 @@ export function ProjectResourceUtilizationView({
                         <td>{formatHours(demandForView(row, view))}</td>
                         <td>{formatPct(pctForView(row, view))}</td>
                         <td>
-                          <Badge tone={statusTone(row.status)}>
-                            {t(`status.${row.status}`)}
-                          </Badge>
+                          <Badge tone={statusTone(row.status)}>{t(`status.${row.status}`)}</Badge>
                         </td>
                       </tr>
                     ))}
