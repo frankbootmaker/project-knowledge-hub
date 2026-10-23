@@ -15,7 +15,7 @@ import {
   addCalendarDays,
   derivedParentDates,
   diffCalendarDays,
-  diffWorkingDays,
+  exclusiveWorkingDays,
   isUuid,
   isWorkingDay,
   scheduledEffortHours,
@@ -709,7 +709,7 @@ export function ganttDurationWorkingDays(
   if (!start && !end) return null;
   if (!start || !end || !YMD.test(start) || !YMD.test(end)) return 0;
   if (end < start) return null;
-  return diffWorkingDays(start, end, calendar);
+  return exclusiveWorkingDays(start, end, calendar);
 }
 
 export function ganttDurationDetail(

@@ -30,7 +30,7 @@ function zodValidationMessage(toolName: string): string {
 }
 
 describe('classifyMcpToolError', () => {
-  test('maps status and code onto the four audit types', () => {
+  test('maps status and code onto the audit types', () => {
     expect(classifyMcpToolError({ code: -32602, message: 'Invalid params' })).toBe('validation');
     expect(
       classifyMcpToolError(new AppError({
@@ -61,6 +61,27 @@ describe('classifyMcpToolError', () => {
       })),
     ).toBe('forbidden');
     expect(classifyMcpToolError(new Error(POSTGRES))).toBe('internal');
+    expect(
+      classifyMcpToolError(new AppError({
+        code: 'CONTENT_CHANGED',
+        message: 'Record content changed since contentSha256 was captured',
+        statusCode: 409,
+      })),
+    ).toBe('conflict');
+    expect(
+      classifyMcpToolError(new AppError({
+        code: 'DUPLICATE_ENTRY',
+        message: 'Another task already uses this cloud agent id',
+        statusCode: 409,
+      })),
+    ).toBe('conflict');
+    expect(
+      classifyMcpToolError(new AppError({
+        code: 'INTERNAL_ERROR',
+        message: 'Internal error (ref: abc)',
+        statusCode: 500,
+      })),
+    ).toBe('internal');
   });
 });
 

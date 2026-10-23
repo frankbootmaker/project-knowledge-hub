@@ -28,6 +28,11 @@ export type ProjectScheduleFacts = {
   baselineFinishDate: string | null;
   /** Inclusive working days from the project start through the baseline finish. */
   durationWorkingDays: number | null;
+  /**
+   * Inclusive working days from the project start through the forecast finish.
+   * Null when the start or the forecast finish is missing.
+   */
+  forecastDurationWorkingDays: number | null;
 };
 
 type CalendarProject = {
@@ -81,6 +86,48 @@ export async function loadProjectCalendar(
       .map((row) => row.day)
       .filter((day): day is string => typeof day === 'string'),
   });
+}
+
+/** Working calendar for each project, used when task rows need an inclusive duration. */
+export async function loadProjectCalendars(
+  database: Database,
+  projectIds: readonly string[],
+): Promise<Map<string, ProjectWorkingCalendar>> {
+  const ids = [...new Set(projectIds)];
+  const map = new Map<string, ProjectWorkingCalendar>();
+  if (ids.length === 0) return map;
+  const [rows, holidays] = await Promise.all([
+    database.db
+      .select({
+        id: projects.id,
+        hoursPerWorkday: projects.hoursPerWorkday,
+        workdaysPerWeek: projects.workdaysPerWeek,
+      })
+      .from(projects)
+      .where(inArray(projects.id, ids)),
+    database.db
+      .select({
+        projectId: projectNonWorkingDays.projectId,
+        day: projectNonWorkingDays.day,
+      })
+      .from(projectNonWorkingDays)
+      .where(inArray(projectNonWorkingDays.projectId, ids)),
+  ]);
+  const daysByProject = new Map<string, string[]>();
+  for (const row of holidays) {
+    if (!row.projectId || typeof row.day !== 'string') continue;
+    const list = daysByProject.get(row.projectId) ?? [];
+    list.push(row.day);
+    daysByProject.set(row.projectId, list);
+  }
+  for (const row of rows) {
+    map.set(row.id, coerceProjectCalendar({
+      hoursPerWorkday: row.hoursPerWorkday,
+      workdaysPerWeek: row.workdaysPerWeek,
+      nonWorkingDays: daysByProject.get(row.id) ?? [],
+    }));
+  }
+  return map;
 }
 
 export async function replaceProjectNonWorkingDays(
@@ -225,6 +272,10 @@ export async function loadProjectScheduleFacts(
       baselineFinishDate,
       durationWorkingDays: planDurationWorkingDays(
         { start: project.startDate ?? null, finish: baselineFinishDate },
+        calendar,
+      ),
+      forecastDurationWorkingDays: planDurationWorkingDays(
+        { start: project.startDate ?? null, finish: window.finish },
         calendar,
       ),
     });

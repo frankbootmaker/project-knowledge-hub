@@ -41,6 +41,7 @@ export {
   type RiskRagReason,
 };
 import { loadCompletedAtByTask, requireProjectContext } from './project-delivery.js';
+import { loadProjectScheduleFacts } from './project-calendar.js';
 import { listAiModelPrices } from './ai-usage-pricing.js';
 import { AI_ASSISTANT_SYSTEM_TYPE } from './project-stakeholders.js';
 import { loadProjectPaidAi } from './ai-billing.js';
@@ -160,6 +161,14 @@ export type ProjectBudgetSummary = {
   riskReasons: RiskRagReason[];
   startDate: string | null;
   endDate: string | null;
+  /** Approved baseline finish. Same as endDate. Null when no baseline finish is stored. */
+  baselineFinishDate: string | null;
+  /** Latest delivery finish. Not the approved baseline. */
+  forecastFinishDate: string | null;
+  /** Inclusive working days from start through the baseline finish. Null without that window. */
+  durationWorkingDays: number | null;
+  /** Inclusive working days from start through the forecast finish. Label as forecast. */
+  forecastDurationWorkingDays: number | null;
   burndown: CostSnapshotPoint[];
   epics: EpicBudgetRollup[];
 };
@@ -1132,6 +1141,8 @@ export async function getProjectBudgetSummary(
     .orderBy(asc(projectCostSnapshots.capturedOn));
 
   const risk = assessRiskRag(raidRows);
+  const schedule = await loadProjectScheduleFacts(database, [project]);
+  const facts = schedule.get(project.id);
 
   return {
     ...merged,
@@ -1156,6 +1167,10 @@ export async function getProjectBudgetSummary(
     riskReasons: risk.reasons,
     startDate: project.startDate,
     endDate: project.endDate,
+    baselineFinishDate: facts?.baselineFinishDate ?? project.endDate ?? null,
+    forecastFinishDate: facts?.forecastFinishDate ?? null,
+    durationWorkingDays: facts?.durationWorkingDays ?? null,
+    forecastDurationWorkingDays: facts?.forecastDurationWorkingDays ?? null,
     burndown: snapshotRows.map((row) => ({
       capturedOn: row.capturedOn,
       bac: parseNumeric(row.bac) ?? 0,

@@ -30,16 +30,19 @@ const rows = [
   row('2', 'internal', 'ci-client', 'CI tester'),
   row('3', 'forbidden', 'chatgpt-grant', 'https://chatgpt.com/oauth/client'),
   row('4', 'not_found', null, null),
+  row('5', 'conflict', 'ci-client', 'CI tester'),
 ];
 
 describe('filterAuditErrors', () => {
   it('returns every row when both filters are open', () => {
-    expect(filterAuditErrors(rows, { errorType: 'all', clientKey: 'all' })).toHaveLength(4);
+    expect(filterAuditErrors(rows, { errorType: 'all', clientKey: 'all' })).toHaveLength(5);
   });
 
   it('filters by error type so validation noise can be hidden', () => {
     const shown = filterAuditErrors(rows, { errorType: 'internal', clientKey: 'all' });
     expect(shown.map((item) => item.id)).toEqual(['2']);
+    expect(filterAuditErrors(rows, { errorType: 'conflict', clientKey: 'all' }).map((item) => item.id))
+      .toEqual(['5']);
   });
 
   it('filters by client so a test client can be hidden', () => {

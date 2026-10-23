@@ -116,6 +116,7 @@ export function MonitoringDashboard({
     if (errorType === 'validation') return t('monitoringAuditErrorValidation');
     if (errorType === 'not_found') return t('monitoringAuditErrorNotFound');
     if (errorType === 'forbidden') return t('monitoringAuditErrorForbidden');
+    if (errorType === 'conflict') return t('monitoringAuditErrorConflict');
     if (errorType === 'internal') return t('monitoringAuditErrorInternal');
     return t('monitoringAuditErrorUnclassified');
   }
@@ -566,6 +567,7 @@ export function MonitoringDashboard({
                   <option value="validation">{t('monitoringAuditErrorValidation')}</option>
                   <option value="not_found">{t('monitoringAuditErrorNotFound')}</option>
                   <option value="forbidden">{t('monitoringAuditErrorForbidden')}</option>
+                  <option value="conflict">{t('monitoringAuditErrorConflict')}</option>
                   <option value="internal">{t('monitoringAuditErrorInternal')}</option>
                 </Select>
                 <Select

@@ -1,6 +1,6 @@
 /** Shared admin monitoring API payload (health + backups). */
 
-export type MonitoringAuditErrorType = 'validation' | 'not_found' | 'forbidden' | 'internal';
+export type MonitoringAuditErrorType = 'validation' | 'not_found' | 'forbidden' | 'conflict' | 'internal';
 
 export type MonitoringAuditError = {
   id: string;

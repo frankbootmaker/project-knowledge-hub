@@ -140,6 +140,7 @@ function scheduleFields(
     forecastFinishDate: facts?.forecastFinishDate ?? facts?.finishDate ?? null,
     baselineFinishDate: facts?.baselineFinishDate ?? project.endDate ?? null,
     durationWorkingDays: facts?.durationWorkingDays ?? null,
+    forecastDurationWorkingDays: facts?.forecastDurationWorkingDays ?? null,
   };
 }
 
