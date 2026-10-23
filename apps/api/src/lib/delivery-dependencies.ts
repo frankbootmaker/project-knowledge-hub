@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, or } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   preservedBaselineFinish,
@@ -29,6 +29,7 @@ import {
   type ScheduleLink,
   type ScheduleNode,
 } from '@project-knowledge-hub/domain';
+import { sqlProjectOwnsKeyPrefix } from './project-key-prefix-history.js';
 import {
   recomputeDeliveryParentStatuses,
   rollupLockedParentKeys,
@@ -266,7 +267,7 @@ async function loadByKey(
   issueKeyType: string,
   issueNumber: number,
 ): Promise<LoadedItem[]> {
-  const prefixMatch = sql`upper(${projects.keyPrefix}) = ${prefix}`;
+  const prefixMatch = sqlProjectOwnsKeyPrefix(prefix);
   if (entityType === 'task') {
     const rows = await database.db
       .select({ id: projectTasks.id })

@@ -253,6 +253,10 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-23
 
+* **Project URL slug (PRO-T-128)** — Manage → Edit adds a URL slug `Field` and `Input` (`.kh-input`, IBM Plex Sans). The hint, confirm copy, and former-URL list use `.kh-ops-menu-type`. The details slug is the same sans, not monospace. Confirm and Release are `Button`s. Copy is in English, German, and Hungarian.
+
+* **Key prefix change (PRO-T-127)** — The baseline edit dialog asks for confirmation before a prefix change. The warning, the list of knowledge records that mention the old keys, and the retired-prefix list use `.kh-ops-menu-type` (IBM Plex Sans, 13px, regular). Record titles are `kh-text-link`. The prefix value stays `.kh-ops-key-badge`. Release is a secondary `Button` for workspace admins. Copy is in English, German, and Hungarian.
+
 * **Bug form grid (PRO-B-44)** — Bug create and task-manage dialogs pair **Build or version** (`foundInNote`) with the **Regression** `Switch` on one `.kh-ops-form-grid` row (switch cell uses flex end alignment; `Switch` `labelLayout="inline"` keeps the label beside the control). **Resolution** and **Affected system** share the next pair row on edit; create keeps **Affected system** on its own row after expected/actual behavior. Below `@container kh-modal-xl` 760px the grid stacks to one column. Copy is in English, German, and Hungarian (`hu` import strings use *forrás* instead of *nyers* where it means source paste). Description markdown chips read **Markdown** / **Preview** (`Előnézet`, `Vorschau`) in every locale.
 
 ### 2026-10-22

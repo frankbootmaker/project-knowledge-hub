@@ -16,6 +16,7 @@ Operators and agents need short, stable labels for delivery and RAID items (e.g.
 3. **Baseline** owns `key_prefix` (REST project PATCH and MCP `update_project_baseline`).
 4. **Risk ↔ issue** uses a **transfer** workflow: create a new RAID row with the target kind/key, copy fields and task links, set transfer FKs, archive the source. In-place `risk`↔`issue` kind edits are rejected.
 5. **MCP parity**: list/get expose `humanKey`; get/update accept UUID or human key; `transfer_project_raid_item` for transfers.
+6. **Prefix history (PRO-T-127).** Changing `key_prefix` inserts the previous value in `project_key_prefix_history`. API and MCP lookups match the current prefix or an unreleased historical prefix and resolve to that project. Display still uses the current prefix. A retired prefix stays reserved in the workspace until a workspace admin releases it. The same prefix in another workspace remains a PRO-T-3 ambiguity: without `projectId` or `workspaceIds`, a key that exists in more than one matching project returns `ISSUE_KEY_AMBIGUOUS`. A historical prefix in one workspace and a live prefix in another are both candidates. Human keys in `?task=`, `?raid=`, and `?change=` on the project page redirect to the entity id.
 
 ## Consequences
 

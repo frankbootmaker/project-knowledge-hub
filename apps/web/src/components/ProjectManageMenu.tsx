@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { slugify } from '@project-knowledge-hub/auth/slug';
 import { ArchiveEntityButton } from './ArchiveEntityButton';
 import { PurgeEntityButton } from './PurgeEntityButton';
 import {
@@ -110,6 +111,11 @@ export function ProjectManageMenu(props: {
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<Section>('menu');
   const [name, setName] = useState(props.project.name);
+  const [slug, setSlug] = useState(props.project.slug);
+  const [slugConfirm, setSlugConfirm] = useState(false);
+  const [formerSlugs, setFormerSlugs] = useState<
+    Array<{ slug: string; releasedAt: string | null }>
+  >([]);
   const [summary, setSummary] = useState(props.project.summary ?? '');
   const [description, setDescription] = useState(props.project.description ?? '');
   const [status, setStatus] = useState(props.project.status);
@@ -151,6 +157,8 @@ export function ProjectManageMenu(props: {
 
   useEffect(() => {
     setName(props.project.name);
+    setSlug(props.project.slug);
+    setSlugConfirm(false);
     setSummary(props.project.summary ?? '');
     setDescription(props.project.description ?? '');
     setStatus(props.project.status);
@@ -161,23 +169,93 @@ export function ProjectManageMenu(props: {
     setInitialPlanRecordId(props.project.initialPlanRecordId ?? '');
   }, [props.project]);
 
+  useEffect(() => {
+    if (!open || (section !== 'edit' && section !== 'details')) return;
+    let cancelled = false;
+    void fetch(`/api/v1/projects/${props.project.id}/slug-history`, {
+      credentials: 'include',
+    })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const payload = (await response.json()) as {
+          slugs?: Array<{ slug: string; releasedAt: string | null }>;
+        };
+        if (!cancelled) setFormerSlugs(payload.slugs ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, section, props.project.id, props.project.slug]);
+
   function close() {
     setOpen(false);
     setSection('menu');
+    setSlugConfirm(false);
     setError(null);
   }
 
   function sectionTitle(): string {
     if (section === 'menu') return t('manageTitle');
     if (section === 'details') return t('manageDetails');
-    if (section === 'edit') return t('manageEdit');
+    if (section === 'edit') {
+      return slugConfirm ? t('slugConfirmTitle') : t('manageEdit');
+    }
     if (section === 'reports') return t('manageReports');
     if (section === 'move' || section === 'move-review') return t('moveTitle');
     if (section === 'delete') return t('manageDelete');
     return archived ? t('manageRestore') : t('manageArchive');
   }
 
-  async function saveEdit() {
+  function nextSlugValue(): string {
+    return slugify(slug).slice(0, 64);
+  }
+
+  function requestSave() {
+    const next = nextSlugValue();
+    if (!next || next === 'new') {
+      setError(t('slugInvalid'));
+      return;
+    }
+    if (next !== props.project.slug) {
+      setSlug(next);
+      setSlugConfirm(true);
+      setError(null);
+      return;
+    }
+    void saveEdit(next);
+  }
+
+  async function releaseSlug(value: string) {
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/projects/${props.project.id}/slug-history/${encodeURIComponent(value)}/release`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { Origin: window.location.origin },
+        },
+      );
+      const payload = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? t('failedUpdate'));
+      }
+      setFormerSlugs((rows) =>
+        rows.map((row) =>
+          row.slug === value ? { ...row, releasedAt: new Date().toISOString() } : row,
+        ),
+      );
+      pushToast(t('slugReleased'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failedUpdate'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function saveEdit(slugToSave = nextSlugValue()) {
     setPending(true);
     setError(null);
     try {
@@ -190,6 +268,7 @@ export function ProjectManageMenu(props: {
         },
         body: JSON.stringify({
           name: name.trim(),
+          slug: slugToSave,
           summary: summary.trim() || null,
           description: description.trim() || null,
           status,
@@ -439,7 +518,7 @@ export function ProjectManageMenu(props: {
           <div className="grid gap-4">
             <dl className="m-0 grid gap-3">
               <ManageDetailRow label={t('detailsId')} value={props.project.id} mono />
-              <ManageDetailRow label={t('detailsSlug')} value={props.project.slug} mono />
+              <ManageDetailRow label={t('detailsSlug')} value={props.project.slug} />
               <ManageDetailRow label={tCommon('status')} value={props.project.status} />
               <ManageDetailRow
                 label={tCommon('tags')}
@@ -476,17 +555,78 @@ export function ProjectManageMenu(props: {
                 value={new Date(props.project.updatedAt).toLocaleString()}
               />
             </dl>
+            {formerSlugs.some((row) => !row.releasedAt) ? (
+              <FormerSlugList
+                title={t('formerSlugs')}
+                emptyLabel={t('formerSlugsEmpty')}
+                slugs={formerSlugs}
+                canRelease={false}
+                releaseLabel={t('releaseSlug')}
+                pending={pending}
+                onRelease={() => undefined}
+              />
+            ) : null}
             <Button type="button" variant="secondary" onClick={() => setSection('menu')}>
               {tCommon('back')}
             </Button>
           </div>
         ) : null}
 
-        {section === 'edit' ? (
+        {section === 'edit' && slugConfirm ? (
+          <div className="grid gap-4">
+            <p className="kh-ops-menu-type m-0">
+              {t('slugConfirmBody', {
+                previous: props.project.slug,
+                next: nextSlugValue(),
+              })}
+            </p>
+            {error ? <ErrorText>{error}</ErrorText> : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                disabled={pending}
+                onClick={() => void saveEdit()}
+              >
+                {pending ? tCommon('saving') : t('slugConfirmAction')}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending}
+                onClick={() => setSlugConfirm(false)}
+              >
+                {tCommon('cancel')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {section === 'edit' && !slugConfirm ? (
           <div className="grid gap-4">
             <Field label={tCommon('name')}>
               <Input value={name} onChange={(e) => setName(e.target.value)} required />
             </Field>
+            <Field label={t('slugLabel')}>
+              <Input
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                required
+                maxLength={64}
+                spellCheck={false}
+              />
+              <p className="kh-ops-menu-type mt-1 mb-0 text-ink-muted">{t('slugHint')}</p>
+            </Field>
+            {props.canPurge ? (
+              <FormerSlugList
+                title={t('formerSlugs')}
+                emptyLabel={t('formerSlugsEmpty')}
+                slugs={formerSlugs}
+                canRelease
+                releaseLabel={t('releaseSlug')}
+                pending={pending}
+                onRelease={(value) => void releaseSlug(value)}
+              />
+            ) : null}
             <Field label={tCommon('summary')}>
               <Input value={summary} onChange={(e) => setSummary(e.target.value)} />
             </Field>
@@ -555,7 +695,7 @@ export function ProjectManageMenu(props: {
             </Field>
             {error ? <ErrorText>{error}</ErrorText> : null}
             <div className="flex flex-wrap gap-2">
-              <Button type="button" disabled={pending} onClick={() => void saveEdit()}>
+              <Button type="button" disabled={pending} onClick={() => requestSave()}>
                 {pending ? tCommon('saving') : tCommon('save')}
               </Button>
               <Button
@@ -730,5 +870,44 @@ export function ProjectManageMenu(props: {
 
       {reportViewer}
     </>
+  );
+}
+
+function FormerSlugList(props: {
+  title: string;
+  emptyLabel: string;
+  slugs: Array<{ slug: string; releasedAt: string | null }>;
+  canRelease: boolean;
+  releaseLabel: string;
+  pending: boolean;
+  onRelease: (slug: string) => void;
+}) {
+  const reserved = props.slugs.filter((row) => !row.releasedAt);
+  return (
+    <div className="grid gap-2">
+      <p className="kh-ops-menu-type m-0">{props.title}</p>
+      {reserved.length === 0 ? (
+        <p className="kh-ops-menu-type m-0 text-ink-muted">{props.emptyLabel}</p>
+      ) : (
+        <ul className="m-0 grid list-none gap-2 p-0">
+          {reserved.map((row) => (
+            <li key={row.slug} className="flex items-center justify-between gap-2">
+              <span className="kh-ops-menu-type text-ink">{row.slug}</span>
+              {props.canRelease ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={props.pending}
+                  onClick={() => props.onRelease(row.slug)}
+                  className="kh-ops-menu-type shrink-0"
+                >
+                  {props.releaseLabel}
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

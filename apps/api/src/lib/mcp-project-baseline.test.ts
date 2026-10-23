@@ -115,6 +115,7 @@ function mockApp(initial: ProjectRow) {
     insert: vi.fn(() => ({
       values: vi.fn(async () => undefined),
     })),
+    transaction: vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run(db)),
   };
   const app = { database: { db } } as unknown as FastifyInstance;
   return {
