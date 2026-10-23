@@ -3383,7 +3383,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'get_platform_ai_cost',
     description:
-      'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts from the token-rate currency at usageOccurredAt, else completedAt, else updatedAt. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. from and to are YYYY-MM. An invalid from or to is rejected and names that field; it does not fall back to the last 12 months. Omit both for that default. System administrator only. Requires pm:read. Via call_hub_tool.',
+      'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts from the token-rate currency at usageOccurredAt, else completedAt, else updatedAt. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. Allowed: EUR, USD, GBP, CHF, HUF, PLN, CZK, RON, SEK, NOK, DKK, CAD, AUD, JPY. Lowercase is normalised (usd is USD). An unsupported code such as XXX is rejected and the error names reportingCurrency; it does not fall back to EUR. from and to are YYYY-MM. An invalid from or to is rejected and names that field; it does not fall back to the last 12 months. Omit both for that default. System administrator only. Requires pm:read. Via call_hub_tool.',
     scope: 'pm:read',
     write: false,
     body: {
@@ -3404,7 +3404,24 @@ const EXTRA_HUB_TOOLS: Array<{
           type: 'string',
           minLength: 3,
           maxLength: 3,
-          description: 'Currency of the cross-workspace total. Default EUR.',
+          enum: [
+            'EUR',
+            'USD',
+            'GBP',
+            'CHF',
+            'HUF',
+            'PLN',
+            'CZK',
+            'RON',
+            'SEK',
+            'NOK',
+            'DKK',
+            'CAD',
+            'AUD',
+            'JPY',
+          ],
+          description:
+            'Currency of the cross-workspace total. Default EUR. Lowercase is normalised (usd is USD). An unsupported code such as XXX is a validation error that names reportingCurrency and does not fall back to EUR.',
         },
       },
     },

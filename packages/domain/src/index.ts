@@ -1730,6 +1730,24 @@ export function parseProjectCurrency(value: string): ProjectCurrency {
   return parsed.data;
 }
 
+/** Platform AI cost rollup currency. Blank stays EUR. `usd` is USD. `XXX` is rejected. */
+export function parseReportingCurrency(value: string | null | undefined): ProjectCurrency {
+  const shown = (value ?? '').trim();
+  if (!shown) return 'EUR';
+  const parsed = projectCurrencySchema.safeParse(shown.toUpperCase());
+  if (!parsed.success) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message:
+        `Invalid reportingCurrency "${shown}". Allowed values: ` +
+        `${projectCurrencySchema.options.join(', ')}.`,
+      statusCode: 400,
+      details: { field: 'reportingCurrency' },
+    });
+  }
+  return parsed.data;
+}
+
 export class AppError extends Error {
   readonly code: string;
   readonly statusCode: number;

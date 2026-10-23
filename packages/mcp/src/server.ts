@@ -3708,11 +3708,19 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_platform_ai_cost',
-    'Platform AI cost summary across workspaces: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts on the usage date. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. from and to are YYYY-MM. An invalid from or to is rejected and names that field; it does not fall back to the last 12 months. Omit both for that default. System administrator only. Requires pm:read.',
+    'Platform AI cost summary across workspaces: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts on the usage date. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. Allowed codes: EUR, USD, GBP, CHF, HUF, PLN, CZK, RON, SEK, NOK, DKK, CAD, AUD, JPY. Lowercase is normalised (usd is USD). An unsupported code such as XXX is rejected and the error names reportingCurrency; it does not fall back to EUR. from and to are YYYY-MM. An invalid from or to is rejected and names that field; it does not fall back to the last 12 months. Omit both for that default. System administrator only. Requires pm:read.',
     {
       from: z.string().optional().describe('YYYY-MM. Invalid values are rejected.'),
       to: z.string().optional().describe('YYYY-MM. Invalid values are rejected.'),
-      reportingCurrency: z.string().min(3).max(3).optional(),
+      reportingCurrency: z
+        .string()
+        .trim()
+        .min(3)
+        .max(3)
+        .optional()
+        .describe(
+          'Reporting currency. Allowed: EUR, USD, GBP, CHF, HUF, PLN, CZK, RON, SEK, NOK, DKK, CAD, AUD, JPY. Lowercase is normalised (usd is USD). An unsupported code such as XXX is a validation error that names reportingCurrency. Default EUR.',
+        ),
     },
     async (args) =>
       wrap('get_platform_ai_cost', 'pm:read', () =>
