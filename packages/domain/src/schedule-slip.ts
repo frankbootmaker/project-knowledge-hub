@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import {
   coerceProjectCalendar,
-  diffWorkingDays,
+  exclusiveWorkingDays,
   type ProjectWorkingCalendar,
 } from './working-calendar.js';
 
@@ -142,7 +142,7 @@ function workingGap(
 ): number {
   if (!earlier || !later || !ISO_DATE.test(earlier) || !ISO_DATE.test(later)) return 0;
   if (later <= earlier) return 0;
-  return diffWorkingDays(earlier, later, calendar);
+  return exclusiveWorkingDays(earlier, later, calendar);
 }
 
 /**

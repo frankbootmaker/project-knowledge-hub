@@ -1405,6 +1405,7 @@ export {
   assertUsableCalendar,
   coerceProjectCalendar,
   diffWorkingDays,
+  exclusiveWorkingDays,
   hoursPerWorkdaySchema,
   inclusiveWorkingDays,
   isWorkingDay,
@@ -1419,6 +1420,12 @@ export {
   type PlanDateSpan,
   type ProjectWorkingCalendar,
 } from './working-calendar.js';
+
+export {
+  baselineApprovalNeedsConfirm,
+  previewBaselineApply,
+  type BaselineApplyPreview,
+} from './baseline-approval.js';
 
 export {
   DEFAULT_SCHEDULE_SLIP_ITEM_TYPES,

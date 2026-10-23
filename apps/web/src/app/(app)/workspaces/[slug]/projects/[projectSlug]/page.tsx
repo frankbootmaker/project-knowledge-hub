@@ -546,11 +546,9 @@ export default async function ProjectDetailPage({
         members={members}
         knowledgeRecords={knowledgeRecords}
         scheduleChanges={changeItems
-          .filter((item) => (
-            item.status === 'approved'
-            && !item.baselineAppliedAt
-            && (item.baselineEndAfter || item.baselineStartAfter)
-          ))
+          .filter((item) => item.baselineAppliedAt)
+          .slice()
+          .sort((a, b) => (b.baselineAppliedAt ?? '').localeCompare(a.baselineAppliedAt ?? ''))
           .map((item) => ({
             id: item.id,
             humanKey: item.humanKey ?? null,
@@ -657,6 +655,16 @@ export default async function ProjectDetailPage({
         projectId={project.id}
         canMutate={canMutate && !isArchived}
         initialChangeItems={changeItems}
+        projectBaseline={{
+          startDate: project.startDate,
+          endDate: project.endDate,
+          hoursPerWorkday: project.hoursPerWorkday,
+          workdaysPerWeek: project.workdaysPerWeek,
+          nonWorkingDays: project.nonWorkingDays,
+          currency: project.currency,
+          approvedBudget: project.approvedBudget,
+          initialBudget: project.initialBudget,
+        }}
         initialOpenChangeId={initialOpenChangeId}
         members={members}
         epics={epics.map((epic) => ({

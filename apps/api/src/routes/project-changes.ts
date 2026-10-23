@@ -22,6 +22,7 @@ import {
 } from '../lib/project-delivery.js';
 import {
   applyChangeToBaseline,
+  changeHasScheduleChange,
   createChangeItem,
   deleteChangeItem,
   getChangeItem,
@@ -72,6 +73,11 @@ const createSchema = z.object({
 
 const updateSchema = createSchema.partial().extend({
   archived: z.boolean().optional(),
+  /**
+   * When true and the saved status is approved, apply a schedule change
+   * with the same function as POST apply-baseline. Omit it to leave the baseline.
+   */
+  confirmBaseline: z.boolean().optional(),
 });
 
 export async function registerProjectChangeRoutes(
@@ -157,11 +163,23 @@ export async function registerProjectChangeRoutes(
     requireWorkspaceMaintainer(principal, project.workspaceId);
     assertProjectNotArchived(project);
 
+    const { confirmBaseline, ...fields } = body;
     const changeItem = await updateChangeItem(app.database, params.changeId, {
       workspaceId: project.workspaceId,
-      ...body,
+      ...fields,
       createdBy: principal.userId,
     });
+    const applied = confirmBaseline
+      && changeItem.status === 'approved'
+      && changeHasScheduleChange(changeItem)
+      ? await applyChangeToBaseline(app.database, params.changeId, {
+          actorType: 'user',
+          actorId: principal.userId,
+          actingUserId: principal.userId,
+          organizationId: await workspaceOrgId(app, project.workspaceId),
+          ipAddress: request.ip,
+        })
+      : null;
 
     await writeAuditEvent(app.database, {
       organizationId: await workspaceOrgId(app, project.workspaceId),
@@ -170,11 +188,11 @@ export async function registerProjectChangeRoutes(
       action: 'project.change_item_updated',
       entityType: 'project_change_item',
       entityId: changeItem.id,
-      metadata: { projectId: project.id, ...body },
+      metadata: { projectId: project.id, ...fields },
       ipAddress: request.ip,
     });
 
-    return { changeItem };
+    return { changeItem: applied?.changeItem ?? changeItem, applied: applied?.applied ?? false };
   });
 
   app.post(
@@ -191,25 +209,13 @@ export async function registerProjectChangeRoutes(
       requireWorkspaceMaintainer(principal, project.workspaceId);
       assertProjectNotArchived(project);
 
-      const result = await applyChangeToBaseline(app.database, params.changeId);
-      if (result.applied) {
-        await writeAuditEvent(app.database, {
-          organizationId: await workspaceOrgId(app, project.workspaceId),
-          actorType: 'user',
-          actorId: principal.userId,
-          action: 'project.change_baseline_applied',
-          entityType: 'project_change_item',
-          entityId: result.changeItem.id,
-          metadata: {
-            projectId: project.id,
-            baselineStartBefore: project.startDate,
-            baselineStartAfter: result.changeItem.baselineStartAfter,
-            baselineEndBefore: project.endDate,
-            baselineEndAfter: result.changeItem.baselineEndAfter,
-          },
-          ipAddress: request.ip,
-        });
-      }
+      const result = await applyChangeToBaseline(app.database, params.changeId, {
+        actorType: 'user',
+        actorId: principal.userId,
+        actingUserId: principal.userId,
+        organizationId: await workspaceOrgId(app, project.workspaceId),
+        ipAddress: request.ip,
+      });
 
       return result;
     },

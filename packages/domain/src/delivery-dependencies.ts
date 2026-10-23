@@ -4,7 +4,7 @@ import {
   addWorkingDays,
   DEFAULT_PROJECT_CALENDAR,
   diffCalendarDays,
-  diffWorkingDays,
+  exclusiveWorkingDays,
   type ProjectWorkingCalendar,
 } from './working-calendar.js';
 
@@ -164,7 +164,7 @@ export function resolveTaskScheduleDates(input: {
   }
 
   if (start && due) {
-    const span = diffWorkingDays(start, due, calendar);
+    const span = exclusiveWorkingDays(start, due, calendar);
     if (span < 0) throw invalidRange(start, due);
     return { startDate: start, dueDate: due, durationDays: span };
   }
@@ -213,10 +213,10 @@ export function successorDurationDays(
   if (node.entityType === 'milestone') return 0;
   if (node.entityType === 'task') {
     if (node.durationDays != null) return node.durationDays;
-    if (node.start && node.finish) return diffWorkingDays(node.start, node.finish, calendar);
+    if (node.start && node.finish) return exclusiveWorkingDays(node.start, node.finish, calendar);
     return null;
   }
-  if (node.start && node.finish) return diffWorkingDays(node.start, node.finish, calendar);
+  if (node.start && node.finish) return exclusiveWorkingDays(node.start, node.finish, calendar);
   if (!node.start && node.finish) return 0;
   return null;
 }
@@ -284,7 +284,7 @@ export function applyPredecessorSchedule(
     if (node.durationDays != null) {
       finish = addWorkingDays(start, node.durationDays, calendar);
     } else if (node.start && node.finish) {
-      const span = diffWorkingDays(node.start, node.finish, calendar);
+      const span = exclusiveWorkingDays(node.start, node.finish, calendar);
       finish = addWorkingDays(start, span, calendar);
       durationDays = span;
     } else if (node.finish && node.finish < start) {
@@ -294,7 +294,7 @@ export function applyPredecessorSchedule(
   } else if (node.start && node.finish) {
     finish = addWorkingDays(
       start,
-      diffWorkingDays(node.start, node.finish, calendar),
+      exclusiveWorkingDays(node.start, node.finish, calendar),
       calendar,
     );
   } else if (node.finish && !node.start) {

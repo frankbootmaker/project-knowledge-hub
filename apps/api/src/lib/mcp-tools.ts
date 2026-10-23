@@ -241,6 +241,7 @@ import {
 import { rescheduleProjectCalendar } from './delivery-dependencies.js';
 import {
   applyChangeToBaseline,
+  changeHasScheduleChange,
   createChangeItem,
   getChangeItem,
   listChangeItems,
@@ -1347,6 +1348,7 @@ function toMcpProject(
     forecastFinishDate: facts?.forecastFinishDate ?? facts?.finishDate ?? null,
     baselineFinishDate: facts?.baselineFinishDate ?? project.endDate ?? null,
     durationWorkingDays: facts?.durationWorkingDays ?? null,
+    forecastDurationWorkingDays: facts?.forecastDurationWorkingDays ?? null,
     charterRecordId: project.charterRecordId,
     charterRecord: project.charterRecordId
       ? (pinned.get(project.charterRecordId) ?? null)
@@ -5860,6 +5862,7 @@ export function createMcpToolHandlers(
       recordIds?: string[];
       sortOrder?: number;
       archived?: boolean;
+      confirmBaseline?: boolean;
       deliveryLinks?: Array<{ entityType: string; entityId: string }>;
     }) {
       const actingUserId = requireActingUserId(client);
@@ -5944,7 +5947,19 @@ export function createMcpToolHandlers(
         metadata: { projectId: project.id, via: 'mcp', actingUserId },
         ipAddress: ipAddress ?? null,
       });
-      return { changeItem };
+      const applied = input.confirmBaseline
+        && changeItem.status === 'approved'
+        && changeHasScheduleChange(changeItem)
+        ? await applyChangeToBaseline(app.database, changeId, {
+            actorType: 'api_client',
+            actorId: client.id,
+            actingUserId,
+            organizationId: client.organizationId,
+            ipAddress: ipAddress ?? null,
+            via: 'mcp',
+          })
+        : null;
+      return { changeItem: applied?.changeItem ?? changeItem, applied: applied?.applied ?? false };
     },
 
     async applyProjectChangeToBaseline(input: { changeId: string }) {
@@ -5958,30 +5973,17 @@ export function createMcpToolHandlers(
         workspaceIds,
       });
       const existing = await getChangeItem(app.database, changeId);
-      const project = await requirePmProject(app, client, existing.projectId, {
+      await requirePmProject(app, client, existing.projectId, {
         forWrite: true,
       });
-      const result = await applyChangeToBaseline(app.database, changeId);
-      if (result.applied) {
-        await writeAuditEvent(app.database, {
-          organizationId: client.organizationId,
-          actorType: 'api_client',
-          actorId: client.id,
-          action: 'project.change_baseline_applied',
-          entityType: 'project_change_item',
-          entityId: result.changeItem.id,
-          metadata: {
-            projectId: project.id,
-            via: 'mcp',
-            actingUserId,
-            baselineEndBefore: project.endDate,
-            baselineEndAfter: result.changeItem.baselineEndAfter,
-            baselineStartBefore: project.startDate,
-            baselineStartAfter: result.changeItem.baselineStartAfter,
-          },
-          ipAddress: ipAddress ?? null,
-        });
-      }
+      const result = await applyChangeToBaseline(app.database, changeId, {
+        actorType: 'api_client',
+        actorId: client.id,
+        actingUserId,
+        organizationId: client.organizationId,
+        ipAddress: ipAddress ?? null,
+        via: 'mcp',
+      });
       return result;
     },
 

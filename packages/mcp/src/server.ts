@@ -895,6 +895,7 @@ export type McpToolHandlers = {
     knowledgeRecordId?: string | null;
     sortOrder?: number;
     archived?: boolean;
+    confirmBaseline?: boolean;
     deliveryLinks?: Array<{ entityType: string; entityId: string }>;
   }) => Promise<unknown>;
   applyProjectChangeToBaseline: (input: {
@@ -1656,6 +1657,7 @@ export function createKnowledgeHubMcpServer(
       forecastFinishDate: nullableOutputText(),
       baselineFinishDate: nullableOutputText(),
       durationWorkingDays: z.number().int().nullable(),
+      forecastDurationWorkingDays: z.number().int().nullable().optional(),
       charterRecordId: nullableOutputText(),
       charterRecord: pinnedRecordOutput(),
       initialPlanRecordId: nullableOutputText(),
@@ -1710,7 +1712,7 @@ export function createKnowledgeHubMcpServer(
     'get_project',
     {
       description:
-        'Get a project by id or projectSlug. Returns status (lifecycle stage), health.overall (RAG; financial null if budget summary failed), baseline, calendar, finishDate, forecastFinishDate, baselineFinishDate, durationWorkingDays, charter/plan, keyPrefix, budgets, definitionOfDone, url, MCP provenance.',
+        'Get a project by id or slug. Returns status (lifecycle stage), health.overall, finishDate, forecastFinishDate, baselineFinishDate, durationWorkingDays, forecast duration, definitionOfDone, and url.',
       inputSchema: {
         projectId: z.string().uuid().optional(),
         projectSlug: z.string().min(1).max(80).optional(),
@@ -2438,6 +2440,30 @@ export function createKnowledgeHubMcpServer(
         .max(100)
         .nullable()
         .describe('Tasks have no planned target. Always null.')
+        .optional(),
+      dueDate: z
+        .string()
+        .nullable()
+        .describe('Forecast finish (YYYY-MM-DD). Not the approved baseline finish.')
+        .optional(),
+      baselineFinishDate: z
+        .string()
+        .nullable()
+        .describe('Approved task finish. Null until a baseline is stored.')
+        .optional(),
+      durationDays: z
+        .number()
+        .int()
+        .nullable()
+        .describe('Stored scheduling span. Due date is the start plus this many working days.')
+        .optional(),
+      durationWorkingDays: z
+        .number()
+        .int()
+        .nullable()
+        .describe(
+          'Inclusive working days from startDate through dueDate on the project calendar. One working day is 1. A weekend start does not count. Null when a date is missing.',
+        )
         .optional(),
       cloudAgentId: z
         .string()
@@ -4250,6 +4276,9 @@ export function createKnowledgeHubMcpServer(
       recordIds: z.array(entityRef).max(100).optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
+      confirmBaseline: z.boolean().optional().describe(
+        'When true, an approved schedule change is written with apply_project_change_to_baseline. Omit it to leave the baseline unchanged. Cancel in the hub does not send this.',
+      ),
       deliveryLinks: z
         .array(
           z.object({
@@ -4268,7 +4297,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'apply_project_change_to_baseline',
-    'Apply an approved change request that stores a baseline start or finish. Writes those dates onto the project, marks the change implemented, and records an audit entry. A second call does not write again. changeId may be a UUID or human key. Requires pm:write.',
+    'Apply an approved change request that stores a baseline start or finish. Same function as confirming approval in the hub. Writes those dates onto the project, marks the change implemented, sets baselineAppliedAt and baselineAppliedBy, and writes one audit entry with the change key, actor, before and after dates, working-day duration, and budget delta. A second call does not write again. changeId may be a UUID or human key. Requires pm:write.',
     {
       changeId: entityRef,
     },

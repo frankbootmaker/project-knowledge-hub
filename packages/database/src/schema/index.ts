@@ -2310,6 +2310,10 @@ export const projectChangeItems = pgTable(
       withTimezone: true,
       mode: 'date',
     }),
+    /** User who confirmed that apply. Null for an apply with no acting user. */
+    baselineAppliedBy: uuid('baseline_applied_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     knowledgeRecordId: uuid('knowledge_record_id').references(
       () => knowledgeRecords.id,
       { onDelete: 'set null' },

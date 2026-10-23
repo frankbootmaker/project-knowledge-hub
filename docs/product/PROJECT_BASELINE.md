@@ -46,7 +46,7 @@ project_epics / project_user_stories / project_milestones
 * `kind`: `scope` \| `timeline` \| `stakeholder` \| `budget` \| `other`
 * `status`: `proposed` \| `approved` \| `rejected` \| `implemented` \| `cancelled`
 * Optional requester / approver, effective date, baseline before/after dates
-* **Apply to baseline** (`POST /api/v1/project-change-items/:id/apply-baseline`, MCP `apply_project_change_to_baseline`) writes an approved schedule change onto the project, marks the change implemented, sets `baseline_applied_at`, and writes `project.change_baseline_applied`. A second call does not write again.
+* **Approve and confirm.** Saving a change as Approved opens a dialog with the old and new baseline finish, inclusive working-day duration, and budget delta. Confirm calls the same apply as `POST /api/v1/project-change-items/:id/apply-baseline` and MCP `apply_project_change_to_baseline`: it writes the schedule, marks the change implemented, sets `baseline_applied_at` and `baseline_applied_by`, and writes `project.change_baseline_applied`. Cancel does not write; the change stays in its previous saved status. A PATCH that sets `approved` without `confirmBaseline: true` does not move the baseline. A schedule apply does not change the approved budget (delta 0). A second apply does not write again.
 * Optional documents (`project_change_record_links`; the legacy `knowledge_record_id` column stores the first link for older clients) and delivery links for epics, stories, milestones, and tasks. Sprints stay out. The manage dialog uses Details, Items, Documents, and Media tabs; Add opens a searchable paged picker with a type filter. Media links workspace images and titled URLs and is stored with the change item.
 
 ### Boundaries

@@ -23,7 +23,7 @@ import {
   rescheduleDeliveryFrom,
 } from './delivery-dependencies.js';
 import { redistributeCloudAgentUsage, setTaskCloudAgentLinks } from './ai-usage-import.js';
-import { loadProjectCalendar } from './project-calendar.js';
+import { loadProjectCalendar, loadProjectCalendars } from './project-calendar.js';
 import type { PublicItemMediaLink } from './project-item-media.js';
 import {
   withMediaLinkCounts,
@@ -42,6 +42,8 @@ import {
   raidSeveritySchema,
   resolveBugCreate,
   displayedTaskCompletionPercent,
+  planDurationWorkingDays,
+  type ProjectWorkingCalendar,
   resolveTaskCompletionPercent,
   statusForTaskCompletionChange,
   taskCompletedAt,
@@ -157,6 +159,8 @@ export type PublicTask = {
   dueDate: string | null;
   baselineFinishDate: string | null;
   durationDays: number | null;
+  /** Inclusive working days from startDate through dueDate. Null when either date is missing. */
+  durationWorkingDays: number | null;
   forecastHours: number | null;
   actualHours: number | null;
   storyPoints: number | null;
@@ -271,6 +275,7 @@ function toPublicTask(
     completedAt?: string | null;
     cloudAgentIds?: string[];
     cloudAgentLinks?: PublicCloudAgentLink[];
+    calendar?: ProjectWorkingCalendar;
   },
 ): PublicTask {
   const keys = toHumanKeyFields(
@@ -304,6 +309,10 @@ function toPublicTask(
     dueDate: row.dueDate,
     baselineFinishDate: row.baselineFinishDate,
     durationDays: row.durationDays ?? null,
+    durationWorkingDays: planDurationWorkingDays(
+      { start: row.startDate, finish: row.dueDate },
+      extras?.calendar,
+    ),
     forecastHours: row.forecastHours,
     actualHours: row.actualHours,
     storyPoints: row.storyPoints ?? null,
@@ -540,6 +549,7 @@ function mapTasksWithContext(
   keyPrefixByProject: Map<string, string | null>,
   completedAtByTask: Map<string, string>,
   cloudAgents: Map<string, { ids: string[]; links: PublicCloudAgentLink[] }>,
+  calendars: Map<string, ProjectWorkingCalendar>,
 ): PublicTask[] {
   return rows.map((row) => {
     const story = row.userStoryId ? stories.get(row.userStoryId) : undefined;
@@ -555,6 +565,7 @@ function mapTasksWithContext(
       completedAt: taskCompletedAt(row.status, completedAtByTask.get(row.id)),
       cloudAgentIds: agents?.ids,
       cloudAgentLinks: agents?.links,
+      calendar: calendars.get(row.projectId),
     });
   });
 }
@@ -565,11 +576,12 @@ async function withTaskContext(
   keyPrefixByProject: Map<string, string | null>,
 ): Promise<PublicTask[]> {
   const ids = rows.map((row) => row.id);
-  const [raciMap, context, completedAtByTask, cloudAgents] = await Promise.all([
+  const [raciMap, context, completedAtByTask, cloudAgents, calendars] = await Promise.all([
     loadRaciForTasks(database, ids),
     loadTaskContext(database, rows),
     loadCompletedAtByTask(database, ids),
     loadCloudAgentLinks(database, ids),
+    loadProjectCalendars(database, rows.map((row) => row.projectId)),
   ]);
   return mapTasksWithContext(
     rows,
@@ -579,6 +591,7 @@ async function withTaskContext(
     keyPrefixByProject,
     completedAtByTask,
     cloudAgents,
+    calendars,
   );
 }
 

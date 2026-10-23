@@ -8,6 +8,7 @@ import {
   projectChangeRecordLinks,
   projectEpics,
   projectMilestones,
+  projectNonWorkingDays,
   projectTasks,
   projectUserStories,
   projects,
@@ -19,11 +20,14 @@ import {
   changeDeliveryEntityTypeSchema,
   changeKindSchema,
   changeStatusSchema,
+  coerceProjectCalendar,
   formatHumanKey,
+  planDurationWorkingDays,
   type ChangeDeliveryEntityType,
   type ChangeKind,
   type ChangeStatus,
 } from '@project-knowledge-hub/domain';
+import { writeAuditEvent } from './identity.js';
 import type { PublicItemMediaLink } from './project-item-media.js';
 import { withMediaLinkCounts, withMediaLinks } from './project-item-media.js';
 import { diffReplacement } from './replace-diff.js';
@@ -79,6 +83,8 @@ export type PublicChangeItem = {
   baselineEndBefore: string | null;
   baselineEndAfter: string | null;
   baselineAppliedAt: string | null;
+  baselineAppliedByUserId: string | null;
+  baselineAppliedBy: PublicChangePerson | null;
   knowledgeRecordId: string | null;
   knowledgeRecordTitle: string | null;
   records: PublicChangeRecordLink[];
@@ -295,6 +301,10 @@ function toPublicChangeItem(
     baselineEndBefore: row.baselineEndBefore,
     baselineEndAfter: row.baselineEndAfter,
     baselineAppliedAt: row.baselineAppliedAt?.toISOString() ?? null,
+    baselineAppliedByUserId: row.baselineAppliedBy,
+    baselineAppliedBy: row.baselineAppliedBy
+      ? people.get(row.baselineAppliedBy) ?? null
+      : null,
     knowledgeRecordId: row.knowledgeRecordId,
     knowledgeRecordTitle: knowledgeTitle,
     records,
@@ -331,7 +341,7 @@ export async function listChangeItems(
   const people = await loadPeople(
     database,
     rows.flatMap((row) =>
-      [row.requestedByUserId, row.approvedByUserId].filter(
+      [row.requestedByUserId, row.approvedByUserId, row.baselineAppliedBy].filter(
         (id): id is string => Boolean(id),
       ),
     ),
@@ -830,14 +840,27 @@ export function changeHasScheduleChange(item: {
   return item.baselineStartAfter != null || item.baselineEndAfter != null;
 }
 
+export type BaselineApplyContext = {
+  actorType: string;
+  actorId?: string | null;
+  actingUserId?: string | null;
+  organizationId?: string | null;
+  ipAddress?: string | null;
+  via?: string;
+};
+
 /**
  * Write an approved change's schedule onto the project baseline.
  * Sets the project end (and start, when present), marks the change
- * implemented, and records baselineAppliedAt. A second call is a no-op.
+ * implemented, records baselineAppliedAt and baselineAppliedBy, and writes
+ * one audit entry. A second call is a no-op. The UI confirmation and MCP
+ * `apply_project_change_to_baseline` both call this function.
+ * Cancelling the confirmation never calls it, so the saved change stays as it was.
  */
 export async function applyChangeToBaseline(
   database: Database,
   changeId: string,
+  context: BaselineApplyContext = { actorType: 'user' },
 ): Promise<{ changeItem: PublicChangeItem; applied: boolean }> {
   const existing = await getChangeItem(database, changeId);
   if (existing.baselineAppliedAt) {
@@ -875,6 +898,26 @@ export async function applyChangeToBaseline(
     startField: 'startDate',
     endField: 'endDate',
   });
+  const holidayRows = await database.db
+    .select({ day: projectNonWorkingDays.day })
+    .from(projectNonWorkingDays)
+    .where(eq(projectNonWorkingDays.projectId, project.id));
+  const calendar = coerceProjectCalendar({
+    hoursPerWorkday: project.hoursPerWorkday,
+    workdaysPerWeek: project.workdaysPerWeek,
+    nonWorkingDays: holidayRows.map((row) => row.day),
+  });
+  const durationBefore = planDurationWorkingDays(
+    { start: project.startDate, finish: project.endDate },
+    calendar,
+  );
+  const durationAfter = planDurationWorkingDays(
+    { start: nextStart, finish: nextEnd },
+    calendar,
+  );
+  const budgetBefore = project.approvedBudget ?? project.initialBudget ?? null;
+  const appliedBy = context.actingUserId
+    ?? (context.actorType === 'user' ? context.actorId ?? null : null);
 
   let applied = false;
   await database.db.transaction(async (tx) => {
@@ -883,6 +926,7 @@ export async function applyChangeToBaseline(
       .set({
         status: 'implemented',
         baselineAppliedAt: new Date(),
+        baselineAppliedBy: appliedBy,
         decidedAt: existing.decidedAt ? new Date(existing.decidedAt) : new Date(),
         updatedAt: new Date(),
       })
@@ -905,10 +949,35 @@ export async function applyChangeToBaseline(
     applied = true;
   });
 
-  return {
-    changeItem: await getChangeItem(database, changeId),
-    applied,
-  };
+  const changeItem = await getChangeItem(database, changeId);
+  if (applied) {
+    await writeAuditEvent(database, {
+      organizationId: context.organizationId ?? null,
+      actorType: context.actorType,
+      actorId: context.actorId ?? null,
+      action: 'project.change_baseline_applied',
+      entityType: 'project_change_item',
+      entityId: changeItem.id,
+      metadata: {
+        projectId: project.id,
+        changeKey: changeItem.humanKey,
+        actorUserId: appliedBy,
+        baselineStartBefore: project.startDate,
+        baselineStartAfter: nextStart,
+        baselineEndBefore: project.endDate,
+        baselineEndAfter: nextEnd,
+        durationWorkingDaysBefore: durationBefore,
+        durationWorkingDaysAfter: durationAfter,
+        budgetBefore,
+        budgetAfter: budgetBefore,
+        budgetDelta: budgetBefore == null ? null : 0,
+        ...(context.via ? { via: context.via } : {}),
+      },
+      ipAddress: context.ipAddress ?? null,
+    });
+  }
+
+  return { changeItem, applied };
 }
 
 export async function deleteChangeItem(
