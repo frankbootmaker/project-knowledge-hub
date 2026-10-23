@@ -1229,6 +1229,15 @@ export function ProjectTaskManageModal({
                       disabled={pending || !canMutate}
                     />
                   </Field>
+                  <div className="flex flex-col justify-end self-stretch">
+                    <Switch
+                      id="bug-regression-edit"
+                      checked={regression}
+                      onCheckedChange={setRegression}
+                      label={t('regression')}
+                      disabled={pending || !canMutate}
+                    />
+                  </div>
                   <DescriptionMarkdownField
                     className="kh-ops-field-span"
                     label={t('stepsToReproduce')}
@@ -1254,27 +1263,6 @@ export function ProjectTaskManageModal({
                     readOnly={!canMutate}
                     rows={3}
                   />
-                  <Switch
-                    id="bug-regression-edit"
-                    checked={regression}
-                    onCheckedChange={setRegression}
-                    label={t('regression')}
-                    disabled={pending || !canMutate}
-                  />
-                  <Field label={t('affectedSystem')}>
-                    <Select
-                      value={affectedSystemId}
-                      onChange={(e) => setAffectedSystemId(e.target.value)}
-                      disabled={pending || !canMutate}
-                    >
-                      <option value="">{t('noAffectedSystem')}</option>
-                      {systems.map((system) => (
-                        <option key={system.id} value={system.id}>
-                          {system.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
                   <Field label={t('resolution')}>
                     <Select
                       value={resolution}
@@ -1290,6 +1278,20 @@ export function ProjectTaskManageModal({
                       {BUG_RESOLUTIONS.map((value) => (
                         <option key={value} value={value}>
                           {t(`resolutionValue.${value}`)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t('affectedSystem')}>
+                    <Select
+                      value={affectedSystemId}
+                      onChange={(e) => setAffectedSystemId(e.target.value)}
+                      disabled={pending || !canMutate}
+                    >
+                      <option value="">{t('noAffectedSystem')}</option>
+                      {systems.map((system) => (
+                        <option key={system.id} value={system.id}>
+                          {system.name}
                         </option>
                       ))}
                     </Select>
