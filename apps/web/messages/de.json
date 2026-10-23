@@ -1915,6 +1915,7 @@
     "monitoringAuditErrorValidation": "Validierung",
     "monitoringAuditErrorNotFound": "Nicht gefunden",
     "monitoringAuditErrorForbidden": "Verboten",
+    "monitoringAuditErrorConflict": "Konflikt",
     "monitoringAuditErrorInternal": "Intern",
     "monitoringAuditErrorUnclassified": "Nicht klassifiziert",
     "monitoringAuditErrorClient": "Client",

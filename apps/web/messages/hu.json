@@ -1915,6 +1915,7 @@
     "monitoringAuditErrorValidation": "Validáció",
     "monitoringAuditErrorNotFound": "Nem található",
     "monitoringAuditErrorForbidden": "Tiltott",
+    "monitoringAuditErrorConflict": "Ütközés",
     "monitoringAuditErrorInternal": "Belső",
     "monitoringAuditErrorUnclassified": "Nincs besorolás",
     "monitoringAuditErrorClient": "Kliens",

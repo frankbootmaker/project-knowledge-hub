@@ -10,6 +10,7 @@ export const MCP_AUDIT_ERROR_TYPES = [
   'validation',
   'not_found',
   'forbidden',
+  'conflict',
   'internal',
 ] as const;
 
@@ -82,7 +83,12 @@ function isInvalidParams(error: unknown): boolean {
   return code === -32602 || code === 'InvalidParams';
 }
 
-/** Map a thrown tool error onto the four audit buckets. */
+function isCallerConflict(status: number, code: string): boolean {
+  if (status === 409) return true;
+  return /CONFLICT|DUPLICATE|CONTENT_CHANGED|TAKEN|AMBIGUOUS|STILL_REFERENCED/i.test(code);
+}
+
+/** Map a thrown tool error onto the audit buckets. `internal` is only 5xx or unhandled. */
 export function classifyMcpToolError(error: unknown): McpAuditErrorType {
   if (isInvalidParams(error)) return 'validation';
   if (isAppErrorLike(error)) {
@@ -96,11 +102,13 @@ export function classifyMcpToolError(error: unknown): McpAuditErrorType {
     ) {
       return 'forbidden';
     }
+    if (isCallerConflict(status, code)) return 'conflict';
     if (
       status === 400
       || status === 422
       || code === 'VALIDATION_ERROR'
       || /VALIDAT/i.test(code)
+      || (status >= 400 && status < 500)
     ) {
       return 'validation';
     }
@@ -122,6 +130,12 @@ export function classifyMcpToolErrorMessage(message: string): McpAuditErrorType 
     return 'forbidden';
   }
   if (/\bnot found\b/i.test(message)) return 'not_found';
+  if (
+    /content changed|already uses this cloud agent|duplicate entry|uniqueness|precondition|conflict/i
+      .test(message)
+  ) {
+    return 'conflict';
+  }
   return 'internal';
 }
 

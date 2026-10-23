@@ -253,6 +253,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-22
 
+* **Conflict audit filter (PRO-B-43)** — Admin → Monitoring adds Conflict to the error-type `Select`. It uses a warn `Badge`, the same tone as forbidden and not found. Copy is in English, German, and Hungarian.
+
 * **Baseline approval (PRO-B-41)** — Saving a change as Approved opens a `Modal` with finish, working-day duration, and budget delta in `.kh-ops-menu-type` and `tabular-nums`. Dates use `LocalDateTime`. Confirm and Cancel are footer `Button`s. Cancel writes nothing. The baseline grid labels a missing approved finish as the forecast. The edit dialog still locks the finish and links the change request that set it with `kh-text-link`. The task dialog shows baseline finish and inclusive working days in the same sans. Copy is in English, German, and Hungarian.
 
 * **Shared cloud agents (PRO-T-117)** — The task dialog Details tab lists each linked cloud agent and the tasks that share it. The AI tab adds and removes ids (up to 20) with the same list. Ids use `.kh-ops-menu-type` (IBM Plex Sans, 13px, regular) and `tabular-nums`. They are not IBM Plex Mono and not a key badge. Copy is in English, German, and Hungarian.

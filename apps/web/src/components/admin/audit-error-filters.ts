@@ -5,6 +5,7 @@ export const AUDIT_ERROR_TYPE_FILTERS = [
   'validation',
   'not_found',
   'forbidden',
+  'conflict',
   'internal',
 ] as const;
 
@@ -57,6 +58,8 @@ export function auditErrorTypeTone(
   errorType: MonitoringAuditErrorType | null,
 ): 'neutral' | 'warn' | 'danger' {
   if (errorType === 'internal') return 'danger';
-  if (errorType === 'forbidden' || errorType === 'not_found') return 'warn';
+  if (errorType === 'forbidden' || errorType === 'not_found' || errorType === 'conflict') {
+    return 'warn';
+  }
   return 'neutral';
 }
