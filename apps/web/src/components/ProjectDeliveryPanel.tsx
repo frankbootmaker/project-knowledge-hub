@@ -1784,6 +1784,15 @@ export function ProjectDeliveryPanel({
                       disabled={pending}
                     />
                   </Field>
+                  <div className="flex flex-col justify-end self-stretch">
+                    <Switch
+                      id="bug-regression-create"
+                      checked={bugRegression}
+                      onCheckedChange={setBugRegression}
+                      label={t('regression')}
+                      disabled={pending}
+                    />
+                  </div>
                   <Field className="kh-ops-field-span" label={t('stepsToReproduce')}>
                     <Textarea
                       value={bugSteps}
@@ -1808,13 +1817,6 @@ export function ProjectDeliveryPanel({
                       disabled={pending}
                     />
                   </Field>
-                  <Switch
-                    id="bug-regression-create"
-                    checked={bugRegression}
-                    onCheckedChange={setBugRegression}
-                    label={t('regression')}
-                    disabled={pending}
-                  />
                   <Field label={t('affectedSystem')}>
                     <Select
                       value={bugSystemId}
