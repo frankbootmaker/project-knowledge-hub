@@ -7,6 +7,7 @@ import {
   workspaces,
 } from '@project-knowledge-hub/database';
 import { addDaysYmd, todayYmd } from '@project-knowledge-hub/domain';
+import { loadWorkspacePaidAiContexts } from './ai-billing.js';
 import { countAssignedTasksByDue } from './project-delivery.js';
 import { listProjectHealthSnapshots } from './project-overall-rag.js';
 
@@ -95,6 +96,10 @@ export async function getDashboardInsights(
   };
 
   if (workspaceIds.length === 0) return empty;
+
+  // Overlap the workspace AI ledger with the project list. Health reuses it.
+  const warmPaidAi = loadWorkspacePaidAiContexts(database, workspaceIds, today);
+  warmPaidAi.catch(() => undefined);
 
   const projectRows = await database.db
     .select({

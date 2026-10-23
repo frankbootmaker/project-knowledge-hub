@@ -1,8 +1,10 @@
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   aiBillingAllocationOverrides,
   aiBillingEntries,
+  aiModelPrices,
+  aiUsageEvents,
   ensureExchangeRates,
   loadExchangeRateBook,
   projectTaskCloudAgentLinks,
@@ -70,7 +72,11 @@ import {
   type AiTokenRates,
   type AiUsageForCost,
 } from './project-budget.js';
-import { loadImportedTheoretical } from './ai-usage-pricing.js';
+import {
+  buildImportedTheoretical,
+  loadImportedTheoretical,
+  presentWorkspaceAiModelPrices,
+} from './ai-usage-pricing.js';
 
 const PROVIDER_MAX = 80;
 const PLAN_MAX = 80;
@@ -580,6 +586,25 @@ type TaskUsageRow = {
   tokens: number;
 };
 
+function taskHasBillableUsage(task: {
+  status: string;
+  tokensUsed: number | null;
+  tokensInput: number | null;
+  tokensOutput: number | null;
+  tokensCache: number | null;
+  tokensCacheWrite: number | null;
+}): boolean {
+  if (task.status === 'cancelled') return false;
+  const usage: AiUsageForCost = {
+    tokensUsed: task.tokensUsed,
+    tokensInput: task.tokensInput,
+    tokensOutput: task.tokensOutput,
+    tokensCache: task.tokensCache,
+    tokensCacheWrite: task.tokensCacheWrite,
+  };
+  return usageTokenTotal(usage) > 0 || usageHasTokenBreakdown(usage);
+}
+
 async function taskUsageRows(
   database: Database,
   taskRows: ReadonlyArray<{
@@ -600,25 +625,31 @@ async function taskUsageRows(
     aiModelId?: string | null;
   }>,
   today: string,
+  preloaded?: {
+    completedAt: Map<string, string>;
+    agentIdsByTask: Map<string, string[]>;
+  },
 ): Promise<TaskUsageRow[]> {
-  const completedAt = await loadCompletedAtByTask(
+  const completedAt = preloaded?.completedAt ?? await loadCompletedAtByTask(
     database,
     taskRows.map((row) => row.id),
   );
-  const agentIdsByTask = new Map<string, string[]>();
-  const taskIds = taskRows.map((row) => row.id);
-  if (taskIds.length > 0) {
-    const linkRows = await database.db
-      .select({
-        taskId: projectTaskCloudAgentLinks.taskId,
-        cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId,
-      })
-      .from(projectTaskCloudAgentLinks)
-      .where(inArray(projectTaskCloudAgentLinks.taskId, taskIds));
-    for (const link of linkRows) {
-      const list = agentIdsByTask.get(link.taskId) ?? [];
-      list.push(link.cloudAgentId);
-      agentIdsByTask.set(link.taskId, list);
+  const agentIdsByTask = preloaded?.agentIdsByTask ?? new Map<string, string[]>();
+  if (!preloaded) {
+    const taskIds = taskRows.map((row) => row.id);
+    if (taskIds.length > 0) {
+      const linkRows = await database.db
+        .select({
+          taskId: projectTaskCloudAgentLinks.taskId,
+          cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId,
+        })
+        .from(projectTaskCloudAgentLinks)
+        .where(inArray(projectTaskCloudAgentLinks.taskId, taskIds));
+      for (const link of linkRows) {
+        const list = agentIdsByTask.get(link.taskId) ?? [];
+        list.push(link.cloudAgentId);
+        agentIdsByTask.set(link.taskId, list);
+      }
     }
   }
   const usages: TaskUsageRow[] = [];
@@ -818,80 +849,82 @@ function catalogTheoretical(
   return roundAiMoney(total);
 }
 
-/**
- * Workspace ledger, usage, and FX loaded once so every project in that
- * workspace can allocate paid AI without repeating the queries.
- */
-async function loadWorkspacePaidAiContextUncached(
+type PaidAiTaskRow = {
+  id: string;
+  projectId: string;
+  workspaceId: string;
+  aiSystemId: string | null;
+  sprintId: string | null;
+  status: string;
+  tokensUsed: number | null;
+  tokensInput: number | null;
+  tokensOutput: number | null;
+  tokensCache: number | null;
+  tokensCacheWrite: number | null;
+  aiModelId: string | null;
+  billingPeriod: string | null;
+  usageOccurredAt: Date | null;
+  updatedAt: Date;
+  cloudAgentId: string | null;
+};
+
+function reportingCurrencyOf(
+  value: string | null | undefined,
+): ProjectCurrency {
+  const parsed = projectCurrencySchema.safeParse(value);
+  return parsed.success ? parsed.data : 'EUR';
+}
+
+async function loadSharedFxRates(
   database: Database,
-  workspaceId: string,
-  today: string,
-) {
+  dates: readonly string[],
+): Promise<FxRate[]> {
+  if (dates.length === 0) return [];
+  const fetchImpl: FxFetcher | undefined =
+    process.env.NODE_ENV === 'test' ? undefined : globalThis.fetch;
+  await ensureExchangeRates(database, dates, fetchImpl);
+  return loadExchangeRateBook(database, dates);
+}
 
-  const [entryRows, overrideRows, projectRows, assistantRows, taskRows] =
-    await Promise.all([
-      database.db
-        .select()
-        .from(aiBillingEntries)
-        .where(eq(aiBillingEntries.workspaceId, workspaceId))
-        .orderBy(asc(aiBillingEntries.period)),
-      database.db
-        .select()
-        .from(aiBillingAllocationOverrides)
-        .where(eq(aiBillingAllocationOverrides.workspaceId, workspaceId)),
-      database.db
-        .select({
-          id: projects.id,
-          status: projects.status,
-          currency: projects.currency,
-          archivedAt: projects.archivedAt,
-        })
-        .from(projects)
-        .where(eq(projects.workspaceId, workspaceId)),
-      database.db
-        .select({
-          id: systems.id,
-          projectId: systems.projectId,
-        })
-        .from(systems)
-        .where(
-          and(
-            eq(systems.workspaceId, workspaceId),
-            eq(systems.systemType, AI_ASSISTANT_SYSTEM_TYPE),
-            isNull(systems.archivedAt),
-          ),
-        ),
-      database.db
-        .select({
-          id: projectTasks.id,
-          projectId: projectTasks.projectId,
-          aiSystemId: projectTasks.aiSystemId,
-          sprintId: projectTasks.sprintId,
-          status: projectTasks.status,
-          tokensUsed: projectTasks.tokensUsed,
-          tokensInput: projectTasks.tokensInput,
-          tokensOutput: projectTasks.tokensOutput,
-          tokensCache: projectTasks.tokensCache,
-          tokensCacheWrite: projectTasks.tokensCacheWrite,
-          aiModelId: projectTasks.aiModelId,
-          billingPeriod: projectTasks.billingPeriod,
-          usageOccurredAt: projectTasks.usageOccurredAt,
-          updatedAt: projectTasks.updatedAt,
-          cloudAgentId: projectTasks.cloudAgentId,
-        })
-        .from(projectTasks)
-        .innerJoin(projects, eq(projectTasks.projectId, projects.id))
-        .where(
-          and(
-            eq(projects.workspaceId, workspaceId),
-            isNull(projectTasks.archivedAt),
-            isNull(projects.archivedAt),
-          ),
-        ),
-    ]);
-
-  const usages = await taskUsageRows(database, taskRows, today);
-  const imported = await loadImportedTheoretical(database, workspaceId);
+/**
+ * One workspace's paid-AI context from rows already loaded for a batch.
+ * The math matches the previous per-workspace query path.
+ */
+async function assembleWorkspacePaidAi(input: {
+  database: Database;
+  today: string;
+  entryRows: Array<typeof aiBillingEntries.$inferSelect>;
+  overrideRows: Parameters<typeof allocationCandidates>[0]['overrideRows'];
+  projectRows: Array<{
+    id: string;
+    status: string;
+    currency: string;
+    archivedAt: Date | null;
+  }>;
+  assistantRows: Array<{ id: string; projectId: string | null }>;
+  taskRows: PaidAiTaskRow[];
+  prices: ReturnType<typeof presentWorkspaceAiModelPrices>;
+  linkedAgentIds: ReadonlySet<string>;
+  events: Parameters<typeof buildImportedTheoretical>[2];
+  agentIdsByTask: Map<string, string[]>;
+  completedAt: Map<string, string>;
+  reportingCurrency: ProjectCurrency;
+  rates: readonly FxRate[];
+}) {
+  const usages = await taskUsageRows(
+    input.database,
+    input.taskRows,
+    input.today,
+    {
+      completedAt: input.completedAt,
+      agentIdsByTask: input.agentIdsByTask,
+    },
+  );
+  const imported = buildImportedTheoretical(
+    input.prices,
+    input.linkedAgentIds,
+    input.events,
+  );
   const billableUsages = usages.filter(
     (row) => !taskSupersededByImport(row.cloudAgentIds, imported.agentIds),
   );
@@ -907,7 +940,6 @@ async function loadWorkspacePaidAiContextUncached(
     })),
     events: imported.allocationEvents,
   });
-
   const catalog = priceTaskUsagesFromCatalog(
     billableUsages.map((row) => ({
       usage: row.usage,
@@ -928,21 +960,17 @@ async function loadWorkspacePaidAiContextUncached(
     period: string,
     aiSystemId: string | null,
   ) => tokensInSlices(tokenSlices, projectId, period, aiSystemId);
-
-  const openProjects = projectRows.filter(
+  const openProjects = input.projectRows.filter(
     (row) => !row.archivedAt && row.status !== 'archived',
   );
   const systemProjectId = new Map(
-    assistantRows.map((row) => [row.id, row.projectId]),
+    input.assistantRows.map((row) => [row.id, row.projectId]),
   );
-
-  const paidSlices = slicesFromEntries(entryRows);
-  const fxDates = [
-    ...paidSlices.map((slice) => slice.onDate),
-    ...usages.map((row) => row.onDate),
-    ...imported.rows.map((row) => row.occurredOn),
-  ];
-  const fxBook = await loadWorkspaceFx(database, workspaceId, fxDates);
+  const paidSlices = slicesFromEntries(input.entryRows);
+  const fxBook = {
+    reportingCurrency: input.reportingCurrency,
+    rates: input.rates,
+  };
   const folded = foldBillingSlices({
     slices: paidSlices,
     reportingCurrency: fxBook.reportingCurrency,
@@ -952,44 +980,284 @@ async function loadWorkspacePaidAiContextUncached(
         slice,
         openProjects,
         systemProjectId,
-        overrideRows,
+        overrideRows: input.overrideRows,
         tokensOf,
       }),
   });
-  return { today, entryRows, pricedBillable, imported, fxBook, folded };
+  return {
+    today: input.today,
+    entryRows: input.entryRows,
+    pricedBillable,
+    imported,
+    fxBook,
+    folded,
+  };
 }
 
 export type WorkspacePaidAiContext = Awaited<
-  ReturnType<typeof loadWorkspacePaidAiContextUncached>
+  ReturnType<typeof assembleWorkspacePaidAi>
 >;
+
+/**
+ * Ledger, usage, and FX for many workspaces.
+ * Query count follows the batch, not the number of workspaces.
+ */
+async function loadWorkspacePaidAiContextsUncached(
+  database: Database,
+  workspaceIds: readonly string[],
+  today: string,
+): Promise<Map<string, WorkspacePaidAiContext>> {
+  const ids = [...new Set(workspaceIds)];
+  const result = new Map<string, WorkspacePaidAiContext>();
+  if (ids.length === 0) return result;
+
+  const [
+    entryRows,
+    overrideRows,
+    projectRows,
+    assistantRows,
+    taskRows,
+    priceRows,
+    linkRows,
+    eventRows,
+    currencyRows,
+  ] = await Promise.all([
+    database.db
+      .select()
+      .from(aiBillingEntries)
+      .where(inArray(aiBillingEntries.workspaceId, ids))
+      .orderBy(asc(aiBillingEntries.period)),
+    database.db
+      .select()
+      .from(aiBillingAllocationOverrides)
+      .where(inArray(aiBillingAllocationOverrides.workspaceId, ids)),
+    database.db
+      .select({
+        id: projects.id,
+        workspaceId: projects.workspaceId,
+        status: projects.status,
+        currency: projects.currency,
+        archivedAt: projects.archivedAt,
+      })
+      .from(projects)
+      .where(inArray(projects.workspaceId, ids)),
+    database.db
+      .select({
+        id: systems.id,
+        workspaceId: systems.workspaceId,
+        projectId: systems.projectId,
+      })
+      .from(systems)
+      .where(
+        and(
+          inArray(systems.workspaceId, ids),
+          eq(systems.systemType, AI_ASSISTANT_SYSTEM_TYPE),
+          isNull(systems.archivedAt),
+        ),
+      ),
+    database.db
+      .select({
+        id: projectTasks.id,
+        projectId: projectTasks.projectId,
+        workspaceId: projects.workspaceId,
+        aiSystemId: projectTasks.aiSystemId,
+        sprintId: projectTasks.sprintId,
+        status: projectTasks.status,
+        tokensUsed: projectTasks.tokensUsed,
+        tokensInput: projectTasks.tokensInput,
+        tokensOutput: projectTasks.tokensOutput,
+        tokensCache: projectTasks.tokensCache,
+        tokensCacheWrite: projectTasks.tokensCacheWrite,
+        aiModelId: projectTasks.aiModelId,
+        billingPeriod: projectTasks.billingPeriod,
+        usageOccurredAt: projectTasks.usageOccurredAt,
+        updatedAt: projectTasks.updatedAt,
+        cloudAgentId: projectTasks.cloudAgentId,
+      })
+      .from(projectTasks)
+      .innerJoin(projects, eq(projectTasks.projectId, projects.id))
+      .where(
+        and(
+          inArray(projects.workspaceId, ids),
+          isNull(projectTasks.archivedAt),
+          isNull(projects.archivedAt),
+        ),
+      ),
+    database.db
+      .select()
+      .from(aiModelPrices)
+      .where(or(
+        isNull(aiModelPrices.workspaceId),
+        inArray(aiModelPrices.workspaceId, ids),
+      )),
+    database.db
+      .select({
+        taskId: projectTaskCloudAgentLinks.taskId,
+        cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId,
+        workspaceId: projects.workspaceId,
+      })
+      .from(projectTaskCloudAgentLinks)
+      .innerJoin(projectTasks, eq(projectTaskCloudAgentLinks.taskId, projectTasks.id))
+      .innerJoin(projects, eq(projectTasks.projectId, projects.id))
+      .where(
+        and(
+          inArray(projects.workspaceId, ids),
+          isNull(projectTasks.archivedAt),
+          isNull(projects.archivedAt),
+        ),
+      ),
+    database.db
+      .select({
+        workspaceId: aiUsageEvents.workspaceId,
+        occurredAt: aiUsageEvents.occurredAt,
+        model: aiUsageEvents.model,
+        tokensInput: aiUsageEvents.tokensInput,
+        tokensCacheWrite: aiUsageEvents.tokensCacheWrite,
+        tokensCache: aiUsageEvents.tokensCache,
+        tokensOutput: aiUsageEvents.tokensOutput,
+        cost: aiUsageEvents.cost,
+        projectTaskId: aiUsageEvents.projectTaskId,
+        cloudAgentId: aiUsageEvents.cloudAgentId,
+        tokensTotal: aiUsageEvents.tokensTotal,
+        projectId: projectTasks.projectId,
+        aiSystemId: projectTasks.aiSystemId,
+        projectName: projects.name,
+      })
+      .from(aiUsageEvents)
+      .leftJoin(projectTasks, eq(aiUsageEvents.projectTaskId, projectTasks.id))
+      .leftJoin(projects, eq(projectTasks.projectId, projects.id))
+      .where(inArray(aiUsageEvents.workspaceId, ids)),
+    database.db
+      .select({
+        id: workspaces.id,
+        reportingCurrency: workspaces.reportingCurrency,
+      })
+      .from(workspaces)
+      .where(inArray(workspaces.id, ids)),
+  ]);
+
+  const usageTaskIds = taskRows
+    .filter((row) => taskHasBillableUsage(row))
+    .map((row) => row.id);
+  const completedAt = await loadCompletedAtByTask(database, usageTaskIds);
+  const agentIdsByTask = new Map<string, string[]>();
+  const linkedByWorkspace = new Map<string, Set<string>>();
+  for (const link of linkRows) {
+    const agents = linkedByWorkspace.get(link.workspaceId) ?? new Set<string>();
+    agents.add(link.cloudAgentId);
+    linkedByWorkspace.set(link.workspaceId, agents);
+    const list = agentIdsByTask.get(link.taskId) ?? [];
+    list.push(link.cloudAgentId);
+    agentIdsByTask.set(link.taskId, list);
+  }
+
+  const previewUsages = await taskUsageRows(database, taskRows, today, {
+    completedAt,
+    agentIdsByTask,
+  });
+  const fxDates = [
+    ...slicesFromEntries(entryRows).map((slice) => slice.onDate),
+    ...previewUsages.map((row) => row.onDate),
+    ...eventRows.map((row) => row.occurredAt.toISOString().slice(0, 10)),
+  ];
+  const rates = await loadSharedFxRates(database, fxDates);
+  const currencyByWorkspace = new Map(
+    currencyRows.map((row) => [row.id, reportingCurrencyOf(row.reportingCurrency)]),
+  );
+
+  for (const workspaceId of ids) {
+    const context = await assembleWorkspacePaidAi({
+      database,
+      today,
+      entryRows: entryRows.filter((row) => row.workspaceId === workspaceId),
+      overrideRows: overrideRows.filter((row) => row.workspaceId === workspaceId),
+      projectRows: projectRows.filter((row) => row.workspaceId === workspaceId),
+      assistantRows: assistantRows.filter((row) => row.workspaceId === workspaceId),
+      taskRows: taskRows.filter((row) => row.workspaceId === workspaceId),
+      prices: presentWorkspaceAiModelPrices(priceRows, workspaceId),
+      linkedAgentIds: linkedByWorkspace.get(workspaceId) ?? new Set<string>(),
+      events: eventRows.filter((row) => row.workspaceId === workspaceId),
+      agentIdsByTask,
+      completedAt,
+      reportingCurrency: currencyByWorkspace.get(workspaceId) ?? 'EUR',
+      rates,
+    });
+    result.set(workspaceId, context);
+  }
+
+  return result;
+}
 
 const workspacePaidAiInflight = new WeakMap<
   Database,
   Map<string, Promise<WorkspacePaidAiContext>>
 >();
 
-export async function loadWorkspacePaidAiContext(
-  database: Database,
-  workspaceId: string,
-  today: string,
-): Promise<WorkspacePaidAiContext> {
+function paidAiBucket(database: Database): Map<string, Promise<WorkspacePaidAiContext>> {
   let bucket = workspacePaidAiInflight.get(database);
   if (!bucket) {
     bucket = new Map();
     workspacePaidAiInflight.set(database, bucket);
   }
-  const key = `${workspaceId}:${today}`;
-  const existing = bucket.get(key);
-  if (existing) return existing;
-  const pending = loadWorkspacePaidAiContextUncached(
-    database,
-    workspaceId,
-    today,
-  ).finally(() => {
-    if (bucket?.get(key) === pending) bucket.delete(key);
-  });
-  bucket.set(key, pending);
-  return pending;
+  return bucket;
+}
+
+/**
+ * Paid-AI contexts for every workspace in one batched load.
+ * A workspace already loading is reused instead of queried again.
+ */
+export async function loadWorkspacePaidAiContexts(
+  database: Database,
+  workspaceIds: readonly string[],
+  today: string,
+): Promise<Map<string, WorkspacePaidAiContext>> {
+  const ids = [...new Set(workspaceIds)];
+  const bucket = paidAiBucket(database);
+  const pending = new Map<string, Promise<WorkspacePaidAiContext>>();
+  const missing: string[] = [];
+  for (const id of ids) {
+    const key = `${id}:${today}`;
+    const existing = bucket.get(key);
+    if (existing) pending.set(id, existing);
+    else missing.push(id);
+  }
+  if (missing.length > 0) {
+    const batch = loadWorkspacePaidAiContextsUncached(database, missing, today);
+    for (const id of missing) {
+      const key = `${id}:${today}`;
+      const one = batch.then((map) => {
+        const context = map.get(id);
+        if (!context) {
+          throw new Error(`Missing paid AI context for workspace ${id}`);
+        }
+        return context;
+      });
+      const tracked = one.finally(() => {
+        if (bucket.get(key) === tracked) bucket.delete(key);
+      });
+      bucket.set(key, tracked);
+      pending.set(id, tracked);
+    }
+  }
+  const result = new Map<string, WorkspacePaidAiContext>();
+  await Promise.all(ids.map(async (id) => {
+    const context = await pending.get(id);
+    if (context) result.set(id, context);
+  }));
+  return result;
+}
+
+export async function loadWorkspacePaidAiContext(
+  database: Database,
+  workspaceId: string,
+  today: string,
+): Promise<WorkspacePaidAiContext> {
+  const contexts = await loadWorkspacePaidAiContexts(database, [workspaceId], today);
+  const context = contexts.get(workspaceId);
+  if (!context) {
+    throw new Error(`Missing paid AI context for workspace ${workspaceId}`);
+  }
+  return context;
 }
 
 export function projectPaidAiFromContext(

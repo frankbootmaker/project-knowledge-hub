@@ -19,8 +19,10 @@ import {
   scheduleSlipItemTypeSchema,
   scheduleSlipSettingsFromRow,
   scheduleSlipThresholdSchema,
+  todayYmd,
   workdaysPerWeekSchema,
 } from '@project-knowledge-hub/domain';
+import { loadWorkspacePaidAiContext } from '../lib/ai-billing.js';
 import {
   parseBudgetAmount,
   upsertProjectCostSnapshot,
@@ -252,6 +254,13 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
 
     requireWorkspaceView(principal, query.workspaceId);
 
+    const warmPaidAi = loadWorkspacePaidAiContext(
+      app.database,
+      query.workspaceId,
+      todayYmd(),
+    );
+    warmPaidAi.catch(() => undefined);
+
     const rows = await app.database.db
       .select()
       .from(projects)
@@ -448,9 +457,20 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     }
 
     requireWorkspaceView(principal, project.workspaceId);
-    const [tagMap, healthById] = await Promise.all([
+    const warmPaidAi = loadWorkspacePaidAiContext(
+      app.database,
+      project.workspaceId,
+      todayYmd(),
+    );
+    warmPaidAi.catch(() => undefined);
+    const [tagMap, healthById, scheduleById, pinned] = await Promise.all([
       getProjectTags(app.database, [project.id]),
       listProjectHealth(app.database, [project.id]),
+      loadProjectScheduleFacts(app.database, [project]),
+      loadPinnedRecords(app.database, [
+        project.charterRecordId,
+        project.initialPlanRecordId,
+      ]),
     ]);
     return {
       project: {
@@ -458,6 +478,8 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
           app.database,
           project,
           tagMap.get(project.id) ?? [],
+          scheduleById.get(project.id),
+          pinned,
         )),
         health: healthById.get(project.id) ?? emptyProjectHealth(),
       },

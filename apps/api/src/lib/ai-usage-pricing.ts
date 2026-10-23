@@ -112,6 +112,25 @@ export async function listGlobalAiModelPrices(
   return sortPrices(presentAiModelPrices(domain).map((row) => withSource({ ...row, id: row.id ?? '' })));
 }
 
+export function presentWorkspaceAiModelPrices(
+  stored: readonly PriceRow[],
+  workspaceId: string,
+): PublicAiModelPrice[] {
+  const rows = stored
+    .filter((row) => row.workspaceId == null || row.workspaceId === workspaceId)
+    .map((row) => toDomain(row));
+  const hasDefault = rows.some((row) => row.workspaceId == null);
+  const domain = hasDefault
+    ? rows
+    : [
+        ...DEFAULT_AI_MODEL_PRICES.map((row, index) => ({ ...row, id: `default-${index}` })),
+        ...rows,
+      ];
+  return sortPrices(
+    presentAiModelPrices(domain).map((row) => withSource({ ...row, id: row.id ?? '' })),
+  );
+}
+
 export async function listAiModelPrices(
   database: Database,
   workspaceId: string,
@@ -120,15 +139,71 @@ export async function listAiModelPrices(
     .select()
     .from(aiModelPrices)
     .where(or(isNull(aiModelPrices.workspaceId), eq(aiModelPrices.workspaceId, workspaceId)));
-  const rows = stored.map((row) => toDomain(row));
-  const hasDefault = rows.some((row) => row.workspaceId == null);
-  const domain = hasDefault
-    ? rows
-    : [
-        ...DEFAULT_AI_MODEL_PRICES.map((row, index) => ({ ...row, id: `default-${index}` })),
-        ...rows,
-      ];
-  return sortPrices(presentAiModelPrices(domain).map((row) => withSource({ ...row, id: row.id ?? '' })));
+  return presentWorkspaceAiModelPrices(stored, workspaceId);
+}
+
+export type ImportedUsageEventRow = {
+  occurredAt: Date;
+  model: string;
+  tokensInput: number;
+  tokensCacheWrite: number;
+  tokensCache: number;
+  tokensOutput: number;
+  cost: string | null;
+  projectTaskId: string | null;
+  cloudAgentId: string | null;
+  tokensTotal: number;
+  projectId: string | null;
+  aiSystemId: string | null;
+  projectName: string | null;
+};
+
+/** Same pricing as {@link loadImportedTheoretical}, from rows already loaded. */
+export function buildImportedTheoretical(
+  prices: readonly PublicAiModelPrice[],
+  linkedAgentIds: ReadonlySet<string>,
+  events: readonly ImportedUsageEventRow[],
+): ImportedTheoretical {
+  const priced = priceImportedUsage(
+    events.map((row) => ({
+      occurredOn: row.occurredAt.toISOString().slice(0, 10),
+      model: row.model,
+      tokensInput: row.tokensInput,
+      tokensCacheWrite: row.tokensCacheWrite,
+      tokensCache: row.tokensCache,
+      tokensOutput: row.tokensOutput,
+      cost: row.cost,
+      linked:
+        row.projectTaskId != null
+        || (row.cloudAgentId != null && linkedAgentIds.has(row.cloudAgentId)),
+      projectId: row.projectId,
+      projectName: row.projectName,
+      cloudAgentId: row.cloudAgentId,
+    })),
+    asRates(prices),
+  );
+  return {
+    rows: priced.rows,
+    agentIds: importedCloudAgentIds(priced.rows),
+    allocationEvents: events.map((row) => {
+      const parts =
+        Number(row.tokensInput) +
+        Number(row.tokensCacheWrite) +
+        Number(row.tokensCache) +
+        Number(row.tokensOutput);
+      const total = Number(row.tokensTotal);
+      return {
+        projectId: row.projectId,
+        aiSystemId: row.aiSystemId,
+        cloudAgentId: row.cloudAgentId,
+        occurredAt: row.occurredAt,
+        tokens: total > 0 ? total : parts,
+      };
+    }),
+    unpricedModels: priced.unpricedModels,
+    months: priced.months,
+    prices: [...prices],
+  };
 }
 
 function asRates(prices: readonly PublicAiModelPrice[]): AiModelPrice[] {
@@ -156,80 +231,46 @@ export async function loadImportedTheoretical(
   database: Database,
   workspaceId: string,
 ): Promise<ImportedTheoretical> {
-  const prices = await listAiModelPrices(database, workspaceId);
-  const linkedAgentRows = await database.db
-    .select({ cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId })
-    .from(projectTaskCloudAgentLinks)
-    .innerJoin(projectTasks, eq(projectTaskCloudAgentLinks.taskId, projectTasks.id))
-    .innerJoin(projects, eq(projectTasks.projectId, projects.id))
-    .where(
-      and(
-        eq(projects.workspaceId, workspaceId),
-        isNull(projectTasks.archivedAt),
-        isNull(projects.archivedAt),
+  const [prices, linkedAgentRows, events] = await Promise.all([
+    listAiModelPrices(database, workspaceId),
+    database.db
+      .select({ cloudAgentId: projectTaskCloudAgentLinks.cloudAgentId })
+      .from(projectTaskCloudAgentLinks)
+      .innerJoin(projectTasks, eq(projectTaskCloudAgentLinks.taskId, projectTasks.id))
+      .innerJoin(projects, eq(projectTasks.projectId, projects.id))
+      .where(
+        and(
+          eq(projects.workspaceId, workspaceId),
+          isNull(projectTasks.archivedAt),
+          isNull(projects.archivedAt),
+        ),
       ),
-    );
-  const linkedAgents = new Set(linkedAgentRows.map((row) => row.cloudAgentId));
-  const events = await database.db
-    .select({
-      occurredAt: aiUsageEvents.occurredAt,
-      model: aiUsageEvents.model,
-      tokensInput: aiUsageEvents.tokensInput,
-      tokensCacheWrite: aiUsageEvents.tokensCacheWrite,
-      tokensCache: aiUsageEvents.tokensCache,
-      tokensOutput: aiUsageEvents.tokensOutput,
-      cost: aiUsageEvents.cost,
-      projectTaskId: aiUsageEvents.projectTaskId,
-      cloudAgentId: aiUsageEvents.cloudAgentId,
-      tokensTotal: aiUsageEvents.tokensTotal,
-      projectId: projectTasks.projectId,
-      aiSystemId: projectTasks.aiSystemId,
-      projectName: projects.name,
-    })
-    .from(aiUsageEvents)
-    .leftJoin(projectTasks, eq(aiUsageEvents.projectTaskId, projectTasks.id))
-    .leftJoin(projects, eq(projectTasks.projectId, projects.id))
-    .where(eq(aiUsageEvents.workspaceId, workspaceId));
-  const priced = priceImportedUsage(
-    events.map((row) => ({
-      occurredOn: row.occurredAt.toISOString().slice(0, 10),
-      model: row.model,
-      tokensInput: row.tokensInput,
-      tokensCacheWrite: row.tokensCacheWrite,
-      tokensCache: row.tokensCache,
-      tokensOutput: row.tokensOutput,
-      cost: row.cost,
-      linked:
-        row.projectTaskId != null
-        || (row.cloudAgentId != null && linkedAgents.has(row.cloudAgentId)),
-      projectId: row.projectId,
-      projectName: row.projectName,
-      cloudAgentId: row.cloudAgentId,
-    })),
-    asRates(prices),
-  );
-  return {
-    rows: priced.rows,
-    agentIds: importedCloudAgentIds(priced.rows),
-    allocationEvents: events.map((row) => {
-      const parts =
-        Number(row.tokensInput) +
-        Number(row.tokensCacheWrite) +
-        Number(row.tokensCache) +
-        Number(row.tokensOutput);
-      const total = Number(row.tokensTotal);
-      return {
-        projectId: row.projectId,
-        aiSystemId: row.aiSystemId,
-        cloudAgentId: row.cloudAgentId,
-        occurredAt: row.occurredAt,
-        tokens: total > 0 ? total : parts,
-      };
-    }),
-    unpricedModels: priced.unpricedModels,
-    months: priced.months,
+    database.db
+      .select({
+        occurredAt: aiUsageEvents.occurredAt,
+        model: aiUsageEvents.model,
+        tokensInput: aiUsageEvents.tokensInput,
+        tokensCacheWrite: aiUsageEvents.tokensCacheWrite,
+        tokensCache: aiUsageEvents.tokensCache,
+        tokensOutput: aiUsageEvents.tokensOutput,
+        cost: aiUsageEvents.cost,
+        projectTaskId: aiUsageEvents.projectTaskId,
+        cloudAgentId: aiUsageEvents.cloudAgentId,
+        tokensTotal: aiUsageEvents.tokensTotal,
+        projectId: projectTasks.projectId,
+        aiSystemId: projectTasks.aiSystemId,
+        projectName: projects.name,
+      })
+      .from(aiUsageEvents)
+      .leftJoin(projectTasks, eq(aiUsageEvents.projectTaskId, projectTasks.id))
+      .leftJoin(projects, eq(projectTasks.projectId, projects.id))
+      .where(eq(aiUsageEvents.workspaceId, workspaceId)),
+  ]);
+  return buildImportedTheoretical(
     prices,
-  };
+    new Set(linkedAgentRows.map((row) => row.cloudAgentId)),
+    events,
+  );
 }
 
 export type { AiModelPriceWrite, AiModelPriceScope, ModelRateImportPlan };
