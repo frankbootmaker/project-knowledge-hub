@@ -1713,7 +1713,7 @@ export function createKnowledgeHubMcpServer(
     'get_project',
     {
       description:
-        'Get a project by id or slug. projectSlug may be the current slug or a previous one; url uses the current slug. The same previous slug in another workspace is ambiguous without workspaceSlug. Returns status (lifecycle stage), health.overall, finishDate, forecastFinishDate, baselineFinishDate, durationWorkingDays, forecast duration, definitionOfDone, and url.',
+        'Get a project by id or slug. Former slugs resolve. Returns status (lifecycle stage), health.overall, finishDate, forecastFinishDate, baselineFinishDate, durationWorkingDays, forecast duration, definitionOfDone, and url.',
       inputSchema: {
         projectId: z.string().uuid().optional(),
         projectSlug: z.string().min(1).max(80).optional(),
