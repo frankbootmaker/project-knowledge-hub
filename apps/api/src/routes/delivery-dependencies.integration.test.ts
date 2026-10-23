@@ -650,7 +650,8 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
     expect(metadata.baselineEndBefore).toBe('2026-10-22');
     expect(metadata.baselineEndAfter).toBe('2026-11-02');
     expect(metadata.durationWorkingDaysBefore).toBe(57);
-    expect(metadata.budgetDelta).toBe(0);
+    // This fixture stores no approved or initial budget, so the delta is absent.
+    expect(metadata.budgetDelta).toBeNull();
     expect(metadata.actorUserId).toBeTruthy();
     expect(metadata.changeKey == null || typeof metadata.changeKey === 'string').toBe(true);
 
