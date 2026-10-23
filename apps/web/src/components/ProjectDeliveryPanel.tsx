@@ -1790,6 +1790,7 @@ export function ProjectDeliveryPanel({
                       checked={bugRegression}
                       onCheckedChange={setBugRegression}
                       label={t('regression')}
+                      labelLayout="inline"
                       disabled={pending}
                     />
                   </div>

@@ -1235,6 +1235,7 @@ export function ProjectTaskManageModal({
                       checked={regression}
                       onCheckedChange={setRegression}
                       label={t('regression')}
+                      labelLayout="inline"
                       disabled={pending || !canMutate}
                     />
                   </div>

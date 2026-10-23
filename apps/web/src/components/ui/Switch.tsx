@@ -8,17 +8,25 @@ export function Switch({
   label,
   disabled,
   id,
+  labelLayout = 'spread',
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   label: string;
   disabled?: boolean;
   id?: string;
+  /** `spread` fills the row (label left, control right). `inline` keeps label beside the control. */
+  labelLayout?: 'spread' | 'inline';
 }) {
   const switchId = id ?? 'kh-switch';
 
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div
+      className={cn(
+        'flex items-center',
+        labelLayout === 'inline' ? 'gap-2' : 'justify-between gap-3',
+      )}
+    >
       <label
         htmlFor={switchId}
         className="text-xs font-semibold tracking-wide text-ink"
