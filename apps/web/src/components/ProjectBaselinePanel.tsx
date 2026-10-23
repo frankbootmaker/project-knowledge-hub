@@ -119,10 +119,24 @@ type DraftStakeholder = {
 
 const SLIP_TYPES = ['task', 'user_story', 'epic', 'milestone'] as const;
 
+type PrefixMention = {
+  id: string;
+  title: string;
+  slug: string;
+  projectSlug: string | null;
+  excerpt: string;
+};
+
+type RetiredPrefix = {
+  keyPrefix: string;
+  releasedAt: string | null;
+};
+
 export function ProjectBaselinePanel({
   projectId,
   workspaceSlug,
   canMutate,
+  canReleasePrefixes = false,
   project,
   initialStakeholders,
   members,
@@ -132,6 +146,7 @@ export function ProjectBaselinePanel({
   projectId: string;
   workspaceSlug: string;
   canMutate: boolean;
+  canReleasePrefixes?: boolean;
   project: BaselineProject;
   initialStakeholders: InitialStakeholder[];
   members: Member[];
@@ -194,6 +209,13 @@ export function ProjectBaselinePanel({
   const [draftStakeholders, setDraftStakeholders] = useState<DraftStakeholder[]>(
     [],
   );
+  const [prefixConfirm, setPrefixConfirm] = useState<{
+    previous: string;
+    next: string;
+    mentions: PrefixMention[];
+    mentionsFailed: boolean;
+  } | null>(null);
+  const [retiredPrefixes, setRetiredPrefixes] = useState<RetiredPrefix[]>([]);
 
   const currencyCode = project.currency ?? 'EUR';
   const initialBudgetNumber =
@@ -268,7 +290,23 @@ export function ProjectBaselinePanel({
       })),
     );
     setError(null);
+    setPrefixConfirm(null);
     setEditOpen(true);
+    if (canReleasePrefixes) {
+      void loadRetiredPrefixes();
+    }
+  }
+
+  async function loadRetiredPrefixes() {
+    const response = await fetch(
+      `/api/v1/projects/${projectId}/key-prefix-history`,
+      { credentials: 'include' },
+    );
+    if (!response.ok) return;
+    const payload = (await response.json()) as { prefixes?: RetiredPrefix[] };
+    setRetiredPrefixes(
+      (payload.prefixes ?? []).filter((row) => !row.releasedAt),
+    );
   }
 
   function addNonWorkingDay() {
@@ -309,6 +347,68 @@ export function ProjectBaselinePanel({
       setError(t('scheduleSlipThreshold'));
       return;
     }
+    const nextPrefix = keyPrefix.trim().toUpperCase();
+    const previousPrefix = (project.keyPrefix ?? '').toUpperCase();
+    if (previousPrefix && nextPrefix && nextPrefix !== previousPrefix) {
+      setPending(true);
+      setError(null);
+      let mentions: PrefixMention[] = [];
+      let mentionsFailed = false;
+      try {
+        const response = await fetch(
+          `/api/v1/projects/${projectId}/key-prefix-mentions?prefix=${encodeURIComponent(previousPrefix)}`,
+          { credentials: 'include' },
+        );
+        if (!response.ok) {
+          mentionsFailed = true;
+        } else {
+          const payload = (await response.json()) as { mentions?: PrefixMention[] };
+          mentions = payload.mentions ?? [];
+        }
+      } catch {
+        mentionsFailed = true;
+      } finally {
+        setPending(false);
+      }
+      setPrefixConfirm({
+        previous: previousPrefix,
+        next: nextPrefix,
+        mentions,
+        mentionsFailed,
+      });
+      return;
+    }
+    await persistBaseline(thresholdDays);
+  }
+
+  async function releasePrefix(prefix: string) {
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/v1/projects/${projectId}/key-prefix-history/${encodeURIComponent(prefix)}/release`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { Origin: window.location.origin },
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message || t('failedUpdate'));
+      }
+      setRetiredPrefixes((rows) => rows.filter((row) => row.keyPrefix !== prefix));
+      pushToast(t('keyPrefixReleased'), 'success');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failedUpdate'));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function persistBaseline(thresholdDays: number) {
     setPending(true);
     setError(null);
     try {
@@ -374,6 +474,7 @@ export function ProjectBaselinePanel({
       if (stakeholdersPayload.initialStakeholders) {
         setStakeholders(stakeholdersPayload.initialStakeholders);
       }
+      setPrefixConfirm(null);
       setEditOpen(false);
       pushToast(t('updated'), 'success');
       router.refresh();
@@ -669,32 +770,101 @@ export function ProjectBaselinePanel({
 
       <Modal
         open={editOpen}
-        onClose={() => setEditOpen(false)}
-        title={t('editTitle')}
-        description={t('editDescription')}
+        onClose={() => {
+          setPrefixConfirm(null);
+          setEditOpen(false);
+        }}
+        title={prefixConfirm ? t('keyPrefixConfirmTitle') : t('editTitle')}
+        description={prefixConfirm ? undefined : t('editDescription')}
         size={DELIVERY_ITEM_MODAL_SIZE}
         closeOnEscape={!pickerOpen}
         footer={
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending}
-              onClick={() => setEditOpen(false)}
-            >
-              {tCommon('cancel')}
-            </Button>
-            <Button
-              type="button"
-              disabled={pending}
-              onClick={() => void save()}
-            >
-              {pending ? tCommon('saving') : tCommon('save')}
-            </Button>
-          </>
+          prefixConfirm ? (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending}
+                onClick={() => setPrefixConfirm(null)}
+              >
+                {tCommon('back')}
+              </Button>
+              <Button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  const thresholdDays = Number(slipThreshold);
+                  void persistBaseline(thresholdDays);
+                }}
+              >
+                {pending ? tCommon('saving') : t('keyPrefixConfirmAction')}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending}
+                onClick={() => setEditOpen(false)}
+              >
+                {tCommon('cancel')}
+              </Button>
+              <Button
+                type="button"
+                disabled={pending}
+                onClick={() => void save()}
+              >
+                {pending ? tCommon('saving') : tCommon('save')}
+              </Button>
+            </>
+          )
         }
       >
-        <div className="grid gap-3">
+        {prefixConfirm ? (
+          <div className="grid gap-3">
+            {error ? <ErrorText>{error}</ErrorText> : null}
+            <p className="kh-ops-menu-type m-0">
+              {t('keyPrefixConfirmBody', {
+                previous: prefixConfirm.previous,
+                next: prefixConfirm.next,
+              })}
+            </p>
+            <section className="grid gap-2">
+              <h3 className="kh-ops-menu-type m-0 font-medium">
+                {t('keyPrefixMentionsTitle', { previous: prefixConfirm.previous })}
+              </h3>
+              {prefixConfirm.mentionsFailed ? (
+                <p className="kh-ops-menu-type m-0 text-ink-muted">
+                  {t('keyPrefixMentionsFailed')}
+                </p>
+              ) : prefixConfirm.mentions.length === 0 ? (
+                <p className="kh-ops-menu-type m-0 text-ink-muted">
+                  {t('keyPrefixMentionsEmpty')}
+                </p>
+              ) : (
+                <ul className="m-0 grid list-none gap-2 p-0">
+                  {prefixConfirm.mentions.map((mention) => (
+                    <li key={mention.id} className="grid gap-1">
+                      <Link
+                        className="kh-text-link kh-ops-menu-type"
+                        href={recordHref({
+                          workspaceSlug,
+                          projectSlug: mention.projectSlug,
+                          recordSlug: mention.slug,
+                        })}
+                      >
+                        {mention.title}
+                      </Link>
+                      <p className="kh-ops-menu-type m-0 text-ink-muted">{mention.excerpt}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        ) : null}
+        <div className={prefixConfirm ? 'hidden' : 'grid gap-3'}>
           {error ? <ErrorText>{error}</ErrorText> : null}
           <div className="kh-ops-form-grid">
             <Field label={t('startDate')}>
@@ -886,12 +1056,42 @@ export function ProjectBaselinePanel({
               }
               disabled={pending}
               maxLength={3}
-              className="font-mono uppercase"
+              className="kh-ops-key-badge uppercase"
               placeholder={suggestKeyPrefix(
                 project.slug || project.name || 'PRJ',
               )}
             />
-            <p className="mt-1 mb-0 text-xs text-ink-muted">{t('keyPrefixHint')}</p>
+            <p className="kh-ops-menu-type mt-1 mb-0 text-ink-muted">{t('keyPrefixHint')}</p>
+            {canReleasePrefixes ? (
+              <div className="mt-3 grid gap-2">
+                <p className="kh-ops-menu-type m-0">{t('keyPrefixHistoryTitle')}</p>
+                {retiredPrefixes.length === 0 ? (
+                  <p className="kh-ops-menu-type m-0 text-ink-muted">
+                    {t('keyPrefixHistoryEmpty')}
+                  </p>
+                ) : (
+                  <ul className="m-0 grid list-none gap-2 p-0">
+                    {retiredPrefixes.map((row) => (
+                      <li
+                        key={row.keyPrefix}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span className="kh-ops-key-badge">{row.keyPrefix}</span>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={pending}
+                          onClick={() => void releasePrefix(row.keyPrefix)}
+                          className="kh-ops-menu-type shrink-0"
+                        >
+                          {t('keyPrefixRelease')}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
           </Field>
           <Field label={t('definitionOfDone')}>
             <Textarea

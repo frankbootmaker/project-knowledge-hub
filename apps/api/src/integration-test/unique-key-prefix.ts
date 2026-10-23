@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { sql } from 'drizzle-orm';
-import { projects, type Database } from '@project-knowledge-hub/database';
+import { and, isNull, sql } from 'drizzle-orm';
+import {
+  projectKeyPrefixHistory,
+  projects,
+  type Database,
+} from '@project-knowledge-hub/database';
 import { KEY_PREFIX_PATTERN } from '@project-knowledge-hub/domain';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -50,7 +54,19 @@ export async function allocateGlobalIntegrationKeyPrefix(
       .from(projects)
       .where(sql`upper(${projects.keyPrefix}) = ${candidate}`)
       .limit(1);
-    if (!existing) {
+    const [reserved] = existing
+      ? [existing]
+      : await database.db
+        .select({ id: projectKeyPrefixHistory.id })
+        .from(projectKeyPrefixHistory)
+        .where(
+          and(
+            sql`upper(${projectKeyPrefixHistory.keyPrefix}) = ${candidate}`,
+            isNull(projectKeyPrefixHistory.releasedAt),
+          ),
+        )
+        .limit(1);
+    if (!existing && !reserved) {
       return candidate;
     }
   }

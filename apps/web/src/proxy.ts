@@ -59,7 +59,10 @@ export function proxy(request: NextRequest) {
     // After a DB import/restore, the browser may still hold a stale kh_session
     // while the sessions table no longer matches — that caused a redirect loop
     // and looked like the site was down.
-    response = NextResponse.next();
+    const headers = new Headers(request.headers);
+    headers.set('x-kh-pathname', pathname);
+    headers.set('x-kh-search', request.nextUrl.search);
+    response = NextResponse.next({ request: { headers } });
   }
 
   const existingLocale = request.cookies.get(localeCookieName)?.value;

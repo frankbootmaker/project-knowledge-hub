@@ -40,6 +40,10 @@ import {
 } from '../../../../../../components/ProjectStageBadge';
 import type { ProjectSectionStatuses } from '../../../../../../lib/project-sections';
 import { computeChangeRag, formatRiskReasons } from '../../../../../../lib/project-health';
+import {
+  redirectHumanKeyQuery,
+  redirectRetiredProjectSlug,
+} from '../../../../../../lib/project-record-access';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
 function ragBadgeTone(
@@ -201,6 +205,11 @@ export default async function ProjectDetailPage({
   const projectsPayload = (await projectsResponse.json()) as { projects: Project[] };
   const projectSummary = projectsPayload.projects.find((item) => item.slug === projectSlug);
   if (!projectSummary) {
+    await redirectRetiredProjectSlug({
+      workspaceId: workspace.id,
+      workspaceSlug: slug,
+      requestedSlug: projectSlug,
+    });
     notFound();
   }
 
@@ -210,6 +219,13 @@ export default async function ProjectDetailPage({
   }
   const detailPayload = (await detailResponse.json()) as { project: Project };
   const project = detailPayload.project;
+  await redirectHumanKeyQuery({
+    projectId: project.id,
+    pathname: `/workspaces/${slug}/projects/${project.slug}`,
+    task: initialOpenTaskId,
+    raid: initialOpenRaidId,
+    change: initialOpenChangeId,
+  });
   const isArchived = Boolean(project.archivedAt);
 
   const canMutate =
@@ -541,6 +557,7 @@ export default async function ProjectDetailPage({
         projectId={project.id}
         workspaceSlug={workspace.slug}
         canMutate={canMutate && !isArchived}
+        canReleasePrefixes={canPurge && !isArchived}
         project={project}
         initialStakeholders={initialStakeholders}
         members={members}

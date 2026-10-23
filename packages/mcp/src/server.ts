@@ -86,6 +86,7 @@ export type McpToolHandlers = {
     scheduleSlipRiskEnabled?: boolean;
     scheduleSlipThresholdDays?: number;
     scheduleSlipItemTypes?: Array<'task' | 'user_story' | 'epic' | 'milestone'>;
+    slug?: string;
   }) => Promise<unknown>;
   listSystems: (input: {
     workspaceId?: string;
@@ -1712,7 +1713,7 @@ export function createKnowledgeHubMcpServer(
     'get_project',
     {
       description:
-        'Get a project by id or slug. Returns status (lifecycle stage), health.overall, finishDate, forecastFinishDate, baselineFinishDate, durationWorkingDays, forecast duration, definitionOfDone, and url.',
+        'Get a project by id or slug. Former slugs resolve. Returns status (lifecycle stage), health.overall, finishDate, forecastFinishDate, baselineFinishDate, durationWorkingDays, forecast duration, definitionOfDone, and url.',
       inputSchema: {
         projectId: z.string().uuid().optional(),
         projectSlug: z.string().min(1).max(80).optional(),
@@ -1731,14 +1732,14 @@ export function createKnowledgeHubMcpServer(
       )(),
   );
 
-  /** UUID or human key such as HL1-T-12 / HL1-RR-3. When using a human key, if the prefix matches multiple projects across accessible workspaces and the key exists in more than one, returns an ambiguous key error with candidate project names; use the full UUID or specify projectId in that case. */
+  /** UUID or human key such as HL1-T-12 / HL1-RR-3. A retired project prefix still resolves to that project. When the prefix matches multiple projects across accessible workspaces (including a retired prefix) and the key exists in more than one, returns an ambiguous key error with candidate project names; use the full UUID or specify projectId in that case (PRO-T-3). */
   const entityRef = z.string().min(1).max(80);
 
   server.registerTool(
     'update_project_baseline',
     {
       description:
-        'Update project baseline window, working calendar, pinned docs, definitionOfDone, currency, budgets, and issue key prefix. charterRecordId and initialPlanRecordId accept a UUID or document key in this project, any record type. hoursPerWorkday, workdaysPerWeek (Monday-first, 1–7), and nonWorkingDays (YYYY-MM-DD, replaces the list) drive scheduling. endDate is the approved baseline finish. finishDate, forecastFinishDate, baselineFinishDate, and durationWorkingDays are calculated and are not inputs. Apply an approved schedule change with apply_project_change_to_baseline. Returns the saved project, including definitionOfDone and pinned key and title. Budget fields accept number or string and are returned as JSON numbers. Requires pm:write.',
+        'Update project baseline window, working calendar, pinned docs, definitionOfDone, currency, budgets, and issue key prefix. Changing keyPrefix keeps the previous prefix resolvable and reserves it in the workspace until a workspace admin releases it. The same prefix in another workspace can make an unscoped key ambiguous (PRO-T-3). charterRecordId and initialPlanRecordId accept a UUID or document key in this project, any record type. hoursPerWorkday, workdaysPerWeek (Monday-first, 1–7), and nonWorkingDays (YYYY-MM-DD, replaces the list) drive scheduling. endDate is the approved baseline finish. finishDate, forecastFinishDate, baselineFinishDate, and durationWorkingDays are calculated and are not inputs. Apply an approved schedule change with apply_project_change_to_baseline. Returns the saved project, including definitionOfDone and pinned key and title. Budget fields accept number or string and are returned as JSON numbers. Requires pm:write.',
       inputSchema: {
         projectId: z.string().uuid(),
         startDate: isoDateNullableSchema.optional(),
@@ -1781,7 +1782,7 @@ export function createKnowledgeHubMcpServer(
     'create_project',
     {
       description:
-        'Create a project in an allowlisted workspace. Requires projects:write and an acting user who is maintainer, workspace_admin, or system_admin. Call list_workspaces, then list_project_metadata. The project is always created in stage idea; a human promotes it to active. keyPrefix is AAA or AA0 — omit it to auto-assign, or read the suggested prefix when the value is taken. A similar name is rejected unless confirmDuplicateName is true. Returns id, keyPrefix, and url. generatedByModel is stored as provenance.',
+        'Create a project in an allowlisted workspace. Requires projects:write and an acting user who is maintainer, workspace_admin, or system_admin. Call list_workspaces, then list_project_metadata. The project is always created in stage idea; a human promotes it to active. keyPrefix is AAA or AA0 — omit it to auto-assign, or read the suggested prefix when the value is taken, including a retired prefix another project still reserves. The URL slug is allocated from the name and skips slugs another project still reserves. A similar name is rejected unless confirmDuplicateName is true. Returns id, keyPrefix, and url. generatedByModel is stored as provenance.',
       inputSchema: {
         workspaceId: z.string().uuid(),
         name: z.string().min(1).max(160),
@@ -1812,10 +1813,11 @@ export function createKnowledgeHubMcpServer(
     'update_project',
     {
       description:
-        'Update a project name, description, methodology, or currency. Requires projects:write and an acting user who can create projects in that workspace. status (alias stage) may change only within MCP transitions. Promoting idea to active is rejected — a human does that in the hub. A similar new name needs confirmDuplicateName. Writes an audit entry. Returns the project, including provenance. scheduleSlipRiskEnabled, scheduleSlipThresholdDays, and scheduleSlipItemTypes control auto schedule-slip RAID risks.',
+        'Update a project name, slug, description, methodology, or currency. slug must be unique in the workspace, including former slugs reserved by another project. The previous slug stays reserved and still resolves; url uses the new slug. Requires projects:write and an acting user who can create projects in that workspace. status (alias stage) may change only within MCP transitions. Promoting idea to active is rejected — a human does that in the hub. A similar new name needs confirmDuplicateName. Writes an audit entry. Returns the project, including provenance. scheduleSlipRiskEnabled, scheduleSlipThresholdDays, and scheduleSlipItemTypes control auto schedule-slip RAID risks.',
       inputSchema: {
         projectId: z.string().uuid(),
         name: z.string().min(1).max(160).optional(),
+        slug: z.string().min(1).max(64).optional(),
         description: z.string().max(10000).nullable().optional(),
         methodology: projectMethodologyEnum.nullable().optional(),
         currency: projectCurrencyEnum.optional(),

@@ -46,7 +46,7 @@ export async function KnowledgeRecordEditView({
   const session = await requireSession();
   const workspace = await requireWorkspaceBySlug(workspaceSlug);
   const routeProject = projectContext
-    ? await requireProjectBySlug(workspace.id, projectContext.projectSlug)
+    ? await requireProjectBySlug(workspace.id, projectContext.projectSlug, workspace.slug)
     : null;
 
   if (!canMutateWorkspace(session, workspace.id)) {
