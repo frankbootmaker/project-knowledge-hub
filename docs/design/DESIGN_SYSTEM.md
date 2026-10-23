@@ -253,7 +253,7 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-23
 
-* **Bug form grid (PRO-B-44)** — Bug create and task-manage dialogs pair **Build or version** (`foundInNote`) with the **Regression** `Switch` on one `.kh-ops-form-grid` row (switch cell uses flex end alignment). **Resolution** and **Affected system** share the next pair row on edit; create keeps **Affected system** on its own row after expected/actual behavior. Below `@container kh-modal-xl` 760px the grid stacks to one column. Copy is in English, German, and Hungarian (`hu` import strings use *forrás* instead of *nyers* where it means source paste).
+* **Bug form grid (PRO-B-44)** — Bug create and task-manage dialogs pair **Build or version** (`foundInNote`) with the **Regression** `Switch` on one `.kh-ops-form-grid` row (switch cell uses flex end alignment; `Switch` `labelLayout="inline"` keeps the label beside the control). **Resolution** and **Affected system** share the next pair row on edit; create keeps **Affected system** on its own row after expected/actual behavior. Below `@container kh-modal-xl` 760px the grid stacks to one column. Copy is in English, German, and Hungarian (`hu` import strings use *forrás* instead of *nyers* where it means source paste). Description markdown chips read **Markdown** / **Preview** (`Előnézet`, `Vorschau`) in every locale.
 
 ### 2026-10-22
 
