@@ -169,8 +169,10 @@ export async function ensureExchangeRates(
   if (!options?.force) {
     const target = weekdayOnOrBefore(cap);
     const acceptable = cap >= today ? previousWeekday(target) : target;
-    const early = await latestEurOnOrBefore(database, earliest);
-    const fresh = await latestEurOnOrBefore(database, cap);
+    const [early, fresh] = await Promise.all([
+      latestEurOnOrBefore(database, earliest),
+      latestEurOnOrBefore(database, cap),
+    ]);
     if (early && fresh && fresh >= acceptable) return { imported: 0 };
   }
   const loaded = await loadReferenceRates({
@@ -196,23 +198,25 @@ export async function loadExchangeRateBook(
   const max = valid[valid.length - 1];
   if (!min || !max) return [];
   const floor = shiftIsoDate(min, -14);
-  const rows = await database.db
-    .select()
-    .from(exchangeRates)
-    .where(and(gte(exchangeRates.rateDate, floor), lte(exchangeRates.rateDate, max)));
-  const prior = await database.db.execute<{
-    rate_date: string;
-    base: string;
-    quote: string;
-    rate: string | number;
-    source: string;
-  }>(sql`
-    SELECT DISTINCT ON (base, quote, source)
-      rate_date, base, quote, rate, source
-    FROM exchange_rates
-    WHERE rate_date < ${floor}
-    ORDER BY base, quote, source, rate_date DESC
-  `);
+  const [rows, prior] = await Promise.all([
+    database.db
+      .select()
+      .from(exchangeRates)
+      .where(and(gte(exchangeRates.rateDate, floor), lte(exchangeRates.rateDate, max))),
+    database.db.execute<{
+      rate_date: string;
+      base: string;
+      quote: string;
+      rate: string | number;
+      source: string;
+    }>(sql`
+      SELECT DISTINCT ON (base, quote, source)
+        rate_date, base, quote, rate, source
+      FROM exchange_rates
+      WHERE rate_date < ${floor}
+      ORDER BY base, quote, source, rate_date DESC
+    `),
+  ]);
   const book = rows.map(toFxRate);
   const priorRows = Array.isArray(prior) ? prior : [];
   for (const row of priorRows) {

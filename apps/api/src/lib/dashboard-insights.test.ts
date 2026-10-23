@@ -7,6 +7,10 @@ vi.mock('./project-overall-rag.js', () => ({
   listProjectHealthSnapshots: vi.fn(),
 }));
 
+vi.mock('./ai-billing.js', () => ({
+  loadWorkspacePaidAiContexts: vi.fn(async () => new Map()),
+}));
+
 vi.mock('./project-delivery.js', () => ({
   countAssignedTasksByDue: vi.fn(async () => ({
     overdue: 0,

@@ -28,9 +28,13 @@ export type WorkspaceListRow = {
   updatedAt: string;
 };
 
-export const getSession = cache(async (): Promise<SessionPayload | null> => {
+export async function readSessionToken(): Promise<string | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get(cookieName)?.value;
+  return cookieStore.get(cookieName)?.value ?? null;
+}
+
+export const getSession = cache(async (): Promise<SessionPayload | null> => {
+  const token = await readSessionToken();
   if (!token) {
     return null;
   }
@@ -71,8 +75,7 @@ export async function requireSession(): Promise<SessionPayload> {
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(cookieName)?.value;
+  const token = await readSessionToken();
   const headers = new Headers(init.headers);
   if (token) {
     headers.set('Cookie', `${cookieName}=${token}`);

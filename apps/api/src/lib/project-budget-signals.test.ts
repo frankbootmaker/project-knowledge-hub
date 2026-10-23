@@ -5,11 +5,11 @@ import {
 } from './project-budget-signals.js';
 import { projectBudgetSignalFromParts } from './project-budget.js';
 
-function countingDatabase(projectCount: number) {
+function countingDatabase(projectCount: number, workspaceCount = 1) {
   let selects = 0;
   const projectRows = Array.from({ length: projectCount }, (_, index) => ({
     id: `p${index}`,
-    workspaceId: 'ws-1',
+    workspaceId: `ws-${index % workspaceCount}`,
     currency: 'EUR',
     initialBudget: null,
     approvedBudget: null,
@@ -73,6 +73,19 @@ describe('project budget signals', () => {
     expect(oneSignals.get('p0')?.bac).toBeNull();
     expect(manySignals.get('p4')?.financialRag).toBe('green');
     expect(manySignals.size).toBe(5);
+  });
+
+  it('keeps the same query count when projects span more workspaces', async () => {
+    const oneWorkspace = countingDatabase(4, 1);
+    const twoWorkspaces = countingDatabase(4, 2);
+    const today = '2026-10-23';
+    const ids = ['p0', 'p1', 'p2', 'p3'];
+
+    await listProjectBudgetSignals(oneWorkspace.database, ids, today);
+    await listProjectBudgetSignals(twoWorkspaces.database, ids, today);
+
+    expect(oneWorkspace.selectCount()).toBeGreaterThan(0);
+    expect(twoWorkspaces.selectCount()).toBe(oneWorkspace.selectCount());
   });
 
   it('matches the budget summary financial and risk RAG', () => {

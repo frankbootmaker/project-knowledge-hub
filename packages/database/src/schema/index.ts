@@ -435,6 +435,13 @@ export const exchangeRates = pgTable(
       table.source,
     ),
     index('exchange_rates_pair_date_idx').on(table.base, table.quote, table.rateDate),
+    index('exchange_rates_base_date_idx').on(table.base, table.rateDate),
+    index('exchange_rates_pair_latest_idx').on(
+      table.base,
+      table.quote,
+      table.source,
+      table.rateDate,
+    ),
   ],
 );
 
@@ -1951,6 +1958,11 @@ export const projectTaskActivities = pgTable(
   (table) => [
     index('project_task_activities_task_id_idx').on(table.taskId),
     index('project_task_activities_task_created_idx').on(table.taskId, table.createdAt),
+    index('project_task_activities_task_type_created_idx').on(
+      table.taskId,
+      table.type,
+      table.createdAt,
+    ),
   ],
 );
 
