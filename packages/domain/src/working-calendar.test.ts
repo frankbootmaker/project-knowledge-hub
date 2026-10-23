@@ -4,6 +4,7 @@ import {
   EVERY_DAY_CALENDAR,
   addWorkingDays,
   diffWorkingDays,
+  exclusiveWorkingDays,
   inclusiveWorkingDays,
   isWorkingDay,
   planDurationWorkingDays,
@@ -42,7 +43,9 @@ describe('project working calendar', () => {
     expect(addWorkingDays('2026-10-01', 1, mondayFriday)).toBe('2026-10-02');
     expect(addWorkingDays('2026-10-02', 1, mondayFriday)).toBe('2026-10-05');
     expect(addWorkingDays('2026-10-05', -1, mondayFriday)).toBe('2026-10-02');
-    expect(diffWorkingDays('2026-10-02', '2026-10-05', mondayFriday)).toBe(1);
+    expect(exclusiveWorkingDays('2026-10-02', '2026-10-05', mondayFriday)).toBe(1);
+    // Friday and the following Monday. The start day counts.
+    expect(diffWorkingDays('2026-10-02', '2026-10-05', mondayFriday)).toBe(2);
     expect(addWorkingDays('2026-10-02', 0, mondayFriday)).toBe('2026-10-02');
   });
 
@@ -54,13 +57,16 @@ describe('project working calendar', () => {
     };
     expect(isWorkingDay('2026-10-09', calendar)).toBe(false);
     expect(addWorkingDays('2026-10-08', 1, calendar)).toBe('2026-10-12');
-    expect(diffWorkingDays('2026-10-08', '2026-10-12', calendar)).toBe(1);
+    expect(exclusiveWorkingDays('2026-10-08', '2026-10-12', calendar)).toBe(1);
+    // Thursday plus Monday. Friday is a holiday and the start day counts.
+    expect(diffWorkingDays('2026-10-08', '2026-10-12', calendar)).toBe(2);
     expect(scheduledEffortHours(2, calendar)).toBe(15);
   });
 
   it('counts every day when the week is seven workdays', () => {
     expect(addWorkingDays('2026-10-02', 1, EVERY_DAY_CALENDAR)).toBe('2026-10-03');
-    expect(diffWorkingDays('2026-10-01', '2026-10-06', EVERY_DAY_CALENDAR)).toBe(5);
+    expect(exclusiveWorkingDays('2026-10-01', '2026-10-06', EVERY_DAY_CALENDAR)).toBe(5);
+    expect(diffWorkingDays('2026-10-01', '2026-10-06', EVERY_DAY_CALENDAR)).toBe(6);
   });
 
   it('rejects a calendar with no working hours', () => {
@@ -114,6 +120,18 @@ describe('project working calendar', () => {
         mondayFriday,
       ),
     ).toBe(0);
+    // Saturday 3 Oct through Monday 5 Oct. The weekend start does not count.
+    expect(diffWorkingDays('2026-10-03', '2026-10-05', mondayFriday)).toBe(1);
+    expect(diffWorkingDays('2026-10-03', '2026-10-03', mondayFriday)).toBe(0);
+    expect(
+      planDurationWorkingDays(
+        { start: '2026-10-03', finish: '2026-10-05' },
+        mondayFriday,
+      ),
+    ).toBe(1);
+    // Thursday 20 Aug and Friday 21 Aug are holidays, so they drop out of 57.
+    expect(isWorkingDay('2026-08-20', calendar)).toBe(false);
+    expect(isWorkingDay('2026-08-01', calendar)).toBe(false);
   });
 });
 

@@ -22,6 +22,7 @@ import {
   paidConversionDate,
   parseUsageOccurredAt,
   parseProjectCurrency,
+  parseReportingCurrency,
   projectCurrencySchema,
   theoreticalUsageDate,
   taskCompletedAt,
@@ -1586,8 +1587,7 @@ export async function loadPlatformAiCost(
 ): Promise<PlatformAiCostReport> {
   const window = resolveAiBillingWindow({ from: query.from, to: query.to }, now);
   if (query.period) assertAiBillingPeriod(query.period);
-  const reportingCurrency = projectCurrencySchema.safeParse(query.reportingCurrency ?? 'EUR');
-  const rollup = reportingCurrency.success ? reportingCurrency.data : 'EUR';
+  const rollup = parseReportingCurrency(query.reportingCurrency);
   const workspaceRows = await database.db
     .select({
       id: workspaces.id,

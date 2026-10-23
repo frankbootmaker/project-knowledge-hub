@@ -261,6 +261,7 @@ const projectBaselineResult = {
         'forecastFinishDate',
         'baselineFinishDate',
         'durationWorkingDays',
+        'forecastDurationWorkingDays',
         'charterRecordId',
         'charterRecord',
         'initialPlanRecordId',
@@ -335,6 +336,12 @@ const projectBaselineResult = {
           nullable: true,
           description:
             'Inclusive working days from the project start through baselineFinishDate. A single working day is 1. Null when start or baseline finish is missing. Calculated. Not an input.',
+        },
+        forecastDurationWorkingDays: {
+          type: 'integer',
+          nullable: true,
+          description:
+            'Inclusive working days from the project start through the forecast finish. Null when either date is missing. Label this as forecast, not as the approved baseline. Calculated. Not an input.',
         },
         charterRecordId: { ...uuidProp('Pinned charter id'), nullable: true },
         charterRecord: pinnedRecordOutput,
@@ -499,6 +506,27 @@ const taskRowResult = {
       maximum: 100,
       nullable: true,
       description: 'Tasks have no planned target. Always null.',
+    },
+    dueDate: {
+      ...ymd,
+      nullable: true,
+      description: 'Forecast finish. Not the approved baseline finish.',
+    },
+    baselineFinishDate: {
+      ...ymd,
+      nullable: true,
+      description: 'Approved task finish. Null until a baseline is stored.',
+    },
+    durationDays: {
+      type: 'integer',
+      nullable: true,
+      description: 'Stored scheduling span. Due date is the start plus this many working days.',
+    },
+    durationWorkingDays: {
+      type: 'integer',
+      nullable: true,
+      description:
+        'Inclusive working days from startDate through dueDate. One working day is 1. A weekend start does not count.',
     },
     cloudAgentId: {
       type: 'string',
@@ -3130,7 +3158,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'apply_project_change_to_baseline',
     description:
-      'Apply an approved change request that stores a baseline start or finish. Writes those dates onto the project, marks the change implemented, and records an audit entry. A second call does not write again. changeId may be a UUID or human key. Requires pm:write.',
+      'Apply an approved change request that stores a baseline start or finish. Same function as confirming approval in the hub. Writes those dates onto the project, marks the change implemented, sets baselineAppliedAt and baselineAppliedBy, and writes one audit entry with the change key, actor, before and after dates, working-day duration, and budget delta. A second call does not write again. changeId may be a UUID or human key. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3145,7 +3173,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'update_project_change_item',
     description:
-      'Update a change-management item. changeId is required. baselineEndAfter stores a proposed finish and does not change the project until apply_project_change_to_baseline. Requires pm:write.',
+      'Update a change-management item. changeId is required. baselineEndAfter stores a proposed finish and does not change the project until confirmBaseline is true or apply_project_change_to_baseline. Setting status to approved without confirmBaseline leaves the baseline unchanged. Requires pm:write.',
     scope: 'pm:write',
     write: true,
     body: {
@@ -3180,6 +3208,11 @@ const EXTRA_HUB_TOOLS: Array<{
         },
         sortOrder: { type: 'integer', minimum: 0, maximum: 100000 },
         archived: { type: 'boolean' },
+        confirmBaseline: {
+          type: 'boolean',
+          description:
+            'When true, an approved schedule change is applied with the same function as apply_project_change_to_baseline. Omit it to leave the baseline unchanged.',
+        },
         deliveryLinks: {
           type: 'array',
           maxItems: 200,
@@ -3350,7 +3383,7 @@ const EXTRA_HUB_TOOLS: Array<{
   {
     name: 'get_platform_ai_cost',
     description:
-      'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts from the token-rate currency at usageOccurredAt, else completedAt, else updatedAt. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. from and to are YYYY-MM. An invalid from or to is rejected and names that field; it does not fall back to the last 12 months. Omit both for that default. System administrator only. Requires pm:read. Via call_hub_tool.',
+      'Platform AI cost summary for every workspace: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts from the token-rate currency at usageOccurredAt, else completedAt, else updatedAt. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. Allowed: EUR, USD, GBP, CHF, HUF, PLN, CZK, RON, SEK, NOK, DKK, CAD, AUD, JPY. Lowercase is normalised (usd is USD). An unsupported code such as XXX is rejected and the error names reportingCurrency; it does not fall back to EUR. from and to are YYYY-MM. An invalid from or to is rejected and names that field; it does not fall back to the last 12 months. Omit both for that default. System administrator only. Requires pm:read. Via call_hub_tool.',
     scope: 'pm:read',
     write: false,
     body: {
@@ -3371,7 +3404,24 @@ const EXTRA_HUB_TOOLS: Array<{
           type: 'string',
           minLength: 3,
           maxLength: 3,
-          description: 'Currency of the cross-workspace total. Default EUR.',
+          enum: [
+            'EUR',
+            'USD',
+            'GBP',
+            'CHF',
+            'HUF',
+            'PLN',
+            'CZK',
+            'RON',
+            'SEK',
+            'NOK',
+            'DKK',
+            'CAD',
+            'AUD',
+            'JPY',
+          ],
+          description:
+            'Currency of the cross-workspace total. Default EUR. Lowercase is normalised (usd is USD). An unsupported code such as XXX is a validation error that names reportingCurrency and does not fall back to EUR.',
         },
       },
     },

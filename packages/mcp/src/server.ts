@@ -895,6 +895,7 @@ export type McpToolHandlers = {
     knowledgeRecordId?: string | null;
     sortOrder?: number;
     archived?: boolean;
+    confirmBaseline?: boolean;
     deliveryLinks?: Array<{ entityType: string; entityId: string }>;
   }) => Promise<unknown>;
   applyProjectChangeToBaseline: (input: {
@@ -1656,6 +1657,7 @@ export function createKnowledgeHubMcpServer(
       forecastFinishDate: nullableOutputText(),
       baselineFinishDate: nullableOutputText(),
       durationWorkingDays: z.number().int().nullable(),
+      forecastDurationWorkingDays: z.number().int().nullable().optional(),
       charterRecordId: nullableOutputText(),
       charterRecord: pinnedRecordOutput(),
       initialPlanRecordId: nullableOutputText(),
@@ -1710,7 +1712,7 @@ export function createKnowledgeHubMcpServer(
     'get_project',
     {
       description:
-        'Get a project by id or projectSlug. Returns status (lifecycle stage), health.overall (RAG; financial null if budget summary failed), baseline, calendar, finishDate, forecastFinishDate, baselineFinishDate, durationWorkingDays, charter/plan, keyPrefix, budgets, definitionOfDone, url, MCP provenance.',
+        'Get a project by id or slug. Returns status (lifecycle stage), health.overall, finishDate, forecastFinishDate, baselineFinishDate, durationWorkingDays, forecast duration, definitionOfDone, and url.',
       inputSchema: {
         projectId: z.string().uuid().optional(),
         projectSlug: z.string().min(1).max(80).optional(),
@@ -2438,6 +2440,30 @@ export function createKnowledgeHubMcpServer(
         .max(100)
         .nullable()
         .describe('Tasks have no planned target. Always null.')
+        .optional(),
+      dueDate: z
+        .string()
+        .nullable()
+        .describe('Forecast finish (YYYY-MM-DD). Not the approved baseline finish.')
+        .optional(),
+      baselineFinishDate: z
+        .string()
+        .nullable()
+        .describe('Approved task finish. Null until a baseline is stored.')
+        .optional(),
+      durationDays: z
+        .number()
+        .int()
+        .nullable()
+        .describe('Stored scheduling span. Due date is the start plus this many working days.')
+        .optional(),
+      durationWorkingDays: z
+        .number()
+        .int()
+        .nullable()
+        .describe(
+          'Inclusive working days from startDate through dueDate on the project calendar. One working day is 1. A weekend start does not count. Null when a date is missing.',
+        )
         .optional(),
       cloudAgentId: z
         .string()
@@ -3682,11 +3708,19 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'get_platform_ai_cost',
-    'Platform AI cost summary across workspaces: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts on the usage date. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. from and to are YYYY-MM. An invalid from or to is rejected and names that field; it does not fall back to the last 12 months. Omit both for that default. System administrator only. Requires pm:read.',
+    'Platform AI cost summary across workspaces: paid cost by type, theoretical API cost, difference, and ratio, converted into one reporting currency (default EUR). Multi-month entries are prorated by days before conversion. Paid amounts convert on paid-at, or the service start when paid-at is missing. Theoretical cost converts on the usage date. Months and totals include fxRate, fxRateDate, and fxSource. Entries keep the original amount and currency and add convertedAmount, convertedCurrency, fxRate, fxRateDate, and fxSource. A missing quote day uses the previous quote. reportingCurrency overrides the total currency. Allowed codes: EUR, USD, GBP, CHF, HUF, PLN, CZK, RON, SEK, NOK, DKK, CAD, AUD, JPY. Lowercase is normalised (usd is USD). An unsupported code such as XXX is rejected and the error names reportingCurrency; it does not fall back to EUR. from and to are YYYY-MM. An invalid from or to is rejected and names that field; it does not fall back to the last 12 months. Omit both for that default. System administrator only. Requires pm:read.',
     {
       from: z.string().optional().describe('YYYY-MM. Invalid values are rejected.'),
       to: z.string().optional().describe('YYYY-MM. Invalid values are rejected.'),
-      reportingCurrency: z.string().min(3).max(3).optional(),
+      reportingCurrency: z
+        .string()
+        .trim()
+        .min(3)
+        .max(3)
+        .optional()
+        .describe(
+          'Reporting currency. Allowed: EUR, USD, GBP, CHF, HUF, PLN, CZK, RON, SEK, NOK, DKK, CAD, AUD, JPY. Lowercase is normalised (usd is USD). An unsupported code such as XXX is a validation error that names reportingCurrency. Default EUR.',
+        ),
     },
     async (args) =>
       wrap('get_platform_ai_cost', 'pm:read', () =>
@@ -4250,6 +4284,9 @@ export function createKnowledgeHubMcpServer(
       recordIds: z.array(entityRef).max(100).optional(),
       sortOrder: z.number().int().min(0).max(100000).optional(),
       archived: z.boolean().optional(),
+      confirmBaseline: z.boolean().optional().describe(
+        'When true, an approved schedule change is written with apply_project_change_to_baseline. Omit it to leave the baseline unchanged. Cancel in the hub does not send this.',
+      ),
       deliveryLinks: z
         .array(
           z.object({
@@ -4268,7 +4305,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'apply_project_change_to_baseline',
-    'Apply an approved change request that stores a baseline start or finish. Writes those dates onto the project, marks the change implemented, and records an audit entry. A second call does not write again. changeId may be a UUID or human key. Requires pm:write.',
+    'Apply an approved change request that stores a baseline start or finish. Same function as confirming approval in the hub. Writes those dates onto the project, marks the change implemented, sets baselineAppliedAt and baselineAppliedBy, and writes one audit entry with the change key, actor, before and after dates, working-day duration, and budget delta. A second call does not write again. changeId may be a UUID or human key. Requires pm:write.',
     {
       changeId: entityRef,
     },

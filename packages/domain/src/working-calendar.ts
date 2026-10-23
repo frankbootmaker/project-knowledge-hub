@@ -243,10 +243,12 @@ export function addWorkingDays(
 
 /**
  * Working days strictly after `start` through `end`.
- * `addWorkingDays(start, diffWorkingDays(start, end))` matches `end` when
- * `end` is a working day (or the zero-offset anchor).
+ * Scheduling uses this span: `addWorkingDays(start, exclusiveWorkingDays(start, end))`
+ * matches `end` when `end` is a working day (or the zero-offset anchor).
+ * A same-day span is 0. Baseline duration uses `diffWorkingDays`, which counts
+ * the start day.
  */
-export function diffWorkingDays(
+export function exclusiveWorkingDays(
   start: string,
   end: string,
   calendar: ProjectWorkingCalendar = DEFAULT_PROJECT_CALENDAR,
@@ -269,6 +271,28 @@ export function diffWorkingDays(
     }
   }
   return sign * count;
+}
+
+/**
+ * Inclusive working days from `start` through `end`.
+ * A working start day counts, so one working day is 1.
+ * A non-working start (weekend or holiday) does not.
+ * The earlier date is the anchor when the range runs backwards.
+ */
+export function diffWorkingDays(
+  start: string,
+  end: string,
+  calendar: ProjectWorkingCalendar = DEFAULT_PROJECT_CALENDAR,
+): number {
+  if (start === end) {
+    parseYmd(start);
+    return isWorkingDay(start, calendar) ? 1 : 0;
+  }
+  const span = exclusiveWorkingDays(start, end, calendar);
+  const anchor = end >= start ? start : end;
+  if (!isWorkingDay(anchor, calendar)) return span;
+  if (span === 0) return end >= start ? 1 : -1;
+  return span + Math.sign(span);
 }
 
 /** Effort hours for a working-day duration. Gantt uses this with the same calendar. */
@@ -307,17 +331,15 @@ export function planWindowFromDatedItems(
 
 /**
  * Inclusive working days from `start` through `finish`.
- * A working start day counts, so one working day is duration 1.
- * A non-working start day does not. `diffWorkingDays` stays exclusive of
- * the start day because task scheduling uses that span.
+ * Same count as `diffWorkingDays`: a working start day is 1, a weekend
+ * or holiday start is not added.
  */
 export function inclusiveWorkingDays(
   start: string,
   finish: string,
   calendar: ProjectWorkingCalendar = DEFAULT_PROJECT_CALENDAR,
 ): number {
-  const span = diffWorkingDays(start, finish, calendar);
-  return span + (isWorkingDay(start, calendar) ? 1 : 0);
+  return diffWorkingDays(start, finish, calendar);
 }
 
 /**

@@ -1405,6 +1405,7 @@ export {
   assertUsableCalendar,
   coerceProjectCalendar,
   diffWorkingDays,
+  exclusiveWorkingDays,
   hoursPerWorkdaySchema,
   inclusiveWorkingDays,
   isWorkingDay,
@@ -1419,6 +1420,12 @@ export {
   type PlanDateSpan,
   type ProjectWorkingCalendar,
 } from './working-calendar.js';
+
+export {
+  baselineApprovalNeedsConfirm,
+  previewBaselineApply,
+  type BaselineApplyPreview,
+} from './baseline-approval.js';
 
 export {
   DEFAULT_SCHEDULE_SLIP_ITEM_TYPES,
@@ -1718,6 +1725,24 @@ export function parseProjectCurrency(value: string): ProjectCurrency {
         `Invalid currency "${value}". Allowed values: ` +
         `${projectCurrencySchema.options.join(', ')}.`,
       statusCode: 400,
+    });
+  }
+  return parsed.data;
+}
+
+/** Platform AI cost rollup currency. Blank stays EUR. `usd` is USD. `XXX` is rejected. */
+export function parseReportingCurrency(value: string | null | undefined): ProjectCurrency {
+  const shown = (value ?? '').trim();
+  if (!shown) return 'EUR';
+  const parsed = projectCurrencySchema.safeParse(shown.toUpperCase());
+  if (!parsed.success) {
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message:
+        `Invalid reportingCurrency "${shown}". Allowed values: ` +
+        `${projectCurrencySchema.options.join(', ')}.`,
+      statusCode: 400,
+      details: { field: 'reportingCurrency' },
     });
   }
   return parsed.data;

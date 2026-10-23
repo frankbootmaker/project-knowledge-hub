@@ -634,9 +634,75 @@ describe.skipIf(!hasIntegrationEnv)('delivery dependencies', () => {
     expect(project.baselineFinishDate).toBe('2026-11-02');
 
     const audits = await database!.db
-      .select({ action: auditEvents.action })
+      .select({ action: auditEvents.action, metadataJson: auditEvents.metadataJson })
       .from(auditEvents)
       .where(eq(auditEvents.entityId, changeId));
-    expect(audits.filter((row) => row.action === 'project.change_baseline_applied')).toHaveLength(1);
+    const appliedAudits = audits.filter((row) => row.action === 'project.change_baseline_applied');
+    expect(appliedAudits).toHaveLength(1);
+    const metadata = appliedAudits[0]?.metadataJson as {
+      changeKey?: string | null;
+      baselineEndBefore?: string | null;
+      baselineEndAfter?: string | null;
+      durationWorkingDaysBefore?: number | null;
+      budgetDelta?: number | null;
+      actorUserId?: string | null;
+    };
+    expect(metadata.baselineEndBefore).toBe('2026-10-22');
+    expect(metadata.baselineEndAfter).toBe('2026-11-02');
+    expect(metadata.durationWorkingDaysBefore).toBe(57);
+    // This fixture stores no approved or initial budget, so the delta is absent.
+    expect(metadata.budgetDelta).toBeNull();
+    expect(metadata.actorUserId).toBeTruthy();
+    expect(metadata.changeKey == null || typeof metadata.changeKey === 'string').toBe(true);
+
+    const proposed = await app!.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/change-items`,
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        kind: 'timeline',
+        title: 'Approve without writing',
+        status: 'proposed',
+        baselineEndAfter: '2026-12-31',
+      },
+    });
+    expect(proposed.statusCode).toBe(200);
+    const proposedId = (proposed.json() as { changeItem: { id: string } }).changeItem.id;
+    const approvedOnly = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-change-items/${proposedId}`,
+      headers: { cookie: adminCookie, origin },
+      payload: { status: 'approved' },
+    });
+    expect(approvedOnly.statusCode).toBe(200);
+    expect((approvedOnly.json() as { applied: boolean }).applied).toBe(false);
+    const still = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectId}`,
+      headers: { cookie: adminCookie },
+    });
+    expect((still.json() as { project: { endDate: string | null } }).project.endDate).toBe('2026-11-02');
+
+    const confirmed = await app!.inject({
+      method: 'PATCH',
+      url: `/api/v1/project-change-items/${proposedId}`,
+      headers: { cookie: adminCookie, origin },
+      payload: { status: 'approved', confirmBaseline: true },
+    });
+    expect(confirmed.statusCode).toBe(200);
+    const confirmedBody = confirmed.json() as {
+      applied: boolean;
+      changeItem: { status: string; baselineAppliedAt: string | null; baselineAppliedByUserId: string | null };
+    };
+    expect(confirmedBody.applied).toBe(true);
+    expect(confirmedBody.changeItem.status).toBe('implemented');
+    expect(confirmedBody.changeItem.baselineAppliedAt).toBeTruthy();
+    expect(confirmedBody.changeItem.baselineAppliedByUserId).toBeTruthy();
+    const moved = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectId}`,
+      headers: { cookie: adminCookie },
+    });
+    expect((moved.json() as { project: { endDate: string | null } }).project.endDate).toBe('2026-12-31');
   });
 });

@@ -253,6 +253,10 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-22
 
+* **Conflict audit filter (PRO-B-43)** — Admin → Monitoring adds Conflict to the error-type `Select`. It uses a warn `Badge`, the same tone as forbidden and not found. Copy is in English, German, and Hungarian.
+
+* **Baseline approval (PRO-B-41)** — Saving a change as Approved opens a `Modal` with finish, working-day duration, and budget delta in `.kh-ops-menu-type` and `tabular-nums`. Dates use `LocalDateTime`. Confirm and Cancel are footer `Button`s. Cancel writes nothing. The baseline grid labels a missing approved finish as the forecast. The edit dialog still locks the finish and links the change request that set it with `kh-text-link`. The task dialog shows baseline finish and inclusive working days in the same sans. Copy is in English, German, and Hungarian.
+
 * **Shared cloud agents (PRO-T-117)** — The task dialog Details tab lists each linked cloud agent and the tasks that share it. The AI tab adds and removes ids (up to 20) with the same list. Ids use `.kh-ops-menu-type` (IBM Plex Sans, 13px, regular) and `tabular-nums`. They are not IBM Plex Mono and not a key badge. Copy is in English, German, and Hungarian.
 
 * **Utilization stack (PRO-T-126)** — Resource utilization stat cards keep Capacity, Planned demand, and Burn demand, and add a `.kh-ops-stat-note` subtitle (also the card tooltip). Planned demand is forecast hours on open tasks. The roster chart is a stacked bar against each person's capacity, plus a total row: burned (`--kh-accent`) then hatched planned (`--kh-accent-soft`). Burn plus planned past 100% continues in `--kh-warn` with a 100% marker. A text legend and a focus/hover tooltip list burned, planned, total, capacity, and percent. The track `aria-label` repeats that sentence. Hours use the UI sans with `tabular-nums`. Copy is in English, German, and Hungarian.

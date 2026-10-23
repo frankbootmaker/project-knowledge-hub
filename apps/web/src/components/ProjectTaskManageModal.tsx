@@ -76,7 +76,9 @@ type TaskDetail = {
   completionPercent?: number | null;
   startDate: string | null;
   dueDate: string | null;
+  baselineFinishDate?: string | null;
   durationDays?: number | null;
+  durationWorkingDays?: number | null;
   forecastHours: string | null;
   actualHours: string | null;
   milestoneId: string | null;
@@ -1096,6 +1098,17 @@ export function ProjectTaskManageModal({
                   disabled={pending || !canMutate || durationDays.trim() !== ''}
                 />
               </Field>
+              {task.baselineFinishDate ? (
+                <Field label={t('baselineFinish')}>
+                  <p className="kh-ops-menu-type m-0 tabular-nums">{task.baselineFinishDate}</p>
+                </Field>
+              ) : null}
+              {task.durationWorkingDays != null ? (
+                <Field label={t('durationWorkingDays')}>
+                  <p className="kh-ops-menu-type m-0 tabular-nums">{task.durationWorkingDays}</p>
+                  <p className="kh-ops-menu-type mt-1 mb-0 text-ink-muted">{t('durationWorkingDaysHint')}</p>
+                </Field>
+              ) : null}
               {scheduleDriven ? (
                 <p className="kh-ops-field-span m-0 text-xs text-ink-muted">
                   {t('startComputed')}

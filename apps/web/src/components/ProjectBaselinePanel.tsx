@@ -389,15 +389,30 @@ export function ProjectBaselinePanel({
     return <LocalDateTime value={value} dateOnly className="tabular-nums" />;
   }
 
-  const baselineFinish = project.baselineFinishDate ?? project.endDate;
-  const forecastFinish = project.forecastFinishDate ?? project.finishDate;
+  const approvedFinish = project.baselineFinishDate ?? project.endDate ?? null;
+  const forecastFinish = project.forecastFinishDate ?? project.finishDate ?? null;
+  const baselineFinish = approvedFinish ?? forecastFinish;
+  const baselineFinishIsForecast = !approvedFinish && Boolean(forecastFinish);
+  const forecastDuration = planDurationWorkingDays(
+    { start: project.startDate ?? null, finish: forecastFinish },
+    coerceProjectCalendar({
+      hoursPerWorkday: project.hoursPerWorkday,
+      workdaysPerWeek: project.workdaysPerWeek,
+      nonWorkingDays: project.nonWorkingDays ?? [],
+    }),
+  );
+  const durationCount = project.durationWorkingDays ?? (approvedFinish ? null : forecastDuration);
+  const durationIsForecast = project.durationWorkingDays == null && forecastDuration != null && !approvedFinish;
 
   const durationLabel =
-    project.durationWorkingDays == null
+    durationCount == null
       ? tCommon('none')
-      : t('durationValue', { count: project.durationWorkingDays });
+      : durationIsForecast
+        ? t('forecastDurationValue', { count: durationCount })
+        : t('durationValue', { count: durationCount });
+  const draftFinish = approvedFinish ?? forecastFinish;
   const draftDuration = planDurationWorkingDays(
-    { start: startDate || null, finish: baselineFinish },
+    { start: startDate || null, finish: draftFinish },
     coerceProjectCalendar({
       hoursPerWorkday,
       workdaysPerWeek: Number(workdaysPerWeek),
@@ -407,7 +422,9 @@ export function ProjectBaselinePanel({
   const draftDurationLabel =
     draftDuration == null
       ? tCommon('none')
-      : t('durationValue', { count: draftDuration });
+      : !approvedFinish && forecastFinish
+        ? t('forecastDurationValue', { count: draftDuration })
+        : t('durationValue', { count: draftDuration });
   const hoursLabel = String(project.hoursPerWorkday ?? 8);
   const workdays = project.workdaysPerWeek ?? 5;
   const holidayList = [...(project.nonWorkingDays ?? [])].sort();
@@ -447,7 +464,7 @@ export function ProjectBaselinePanel({
                 <strong className="tabular-nums">{durationLabel}</strong>
               </div>
               <div className="kh-ops-field-cell">
-                <small>{t('baselineFinish')}</small>
+                <small>{baselineFinishIsForecast ? t('forecastFinish') : t('baselineFinish')}</small>
                 <strong>{dateLabel(baselineFinish)}</strong>
               </div>
               <div className="kh-ops-field-cell">
@@ -693,9 +710,11 @@ export function ProjectBaselinePanel({
               <p className="kh-ops-menu-type m-0 min-h-10 py-2 tabular-nums">{draftDurationLabel}</p>
             </Field>
           </div>
-          <Field label={t('baselineFinish')}>
-            <p className="kh-ops-menu-type m-0">{dateLabel(baselineFinish)}</p>
-            <p className="kh-ops-menu-type mt-1 mb-0 text-ink-muted">{t('finishLockedHint')}</p>
+          <Field label={baselineFinishIsForecast ? t('forecastFinish') : t('baselineFinish')}>
+            <p className="kh-ops-menu-type m-0">{dateLabel(approvedFinish ?? forecastFinish)}</p>
+            <p className="kh-ops-menu-type mt-1 mb-0 text-ink-muted">
+              {baselineFinishIsForecast ? t('forecastFallbackHint') : t('finishLockedHint')}
+            </p>
             {scheduleChanges.length > 0 ? (
               <ul className="m-0 mt-2 grid list-none gap-1 p-0">
                 {scheduleChanges.map((change) => (

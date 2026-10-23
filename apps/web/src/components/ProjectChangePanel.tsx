@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import {
+  baselineApprovalNeedsConfirm,
+  coerceProjectCalendar,
+  previewBaselineApply,
+} from '@project-knowledge-hub/domain';
+import { formatMoney } from '../lib/project-currency';
+import { LocalDateTime } from './LocalDateTime';
 import { CollapsibleSection } from './CollapsibleSection';
 import { ProjectChangeList } from './ProjectChangeList';
 import { DeliveryItemLinkPicker } from './DeliveryItemLinkPicker';
@@ -57,6 +64,7 @@ export type ChangeItem = {
   baselineEndBefore: string | null;
   baselineEndAfter: string | null;
   baselineAppliedAt?: string | null;
+  baselineAppliedBy?: { userId: string; displayName: string; email: string } | null;
   knowledgeRecordId: string | null;
   knowledgeRecordTitle: string | null;
   records?: ChangeRecordLink[];
@@ -139,10 +147,22 @@ function deliveryLinksFromKeys(keys: string[]): Array<{
   return links;
 }
 
+export type ChangeProjectBaseline = {
+  startDate: string | null;
+  endDate: string | null;
+  hoursPerWorkday?: number | null;
+  workdaysPerWeek?: number | null;
+  nonWorkingDays?: string[];
+  currency?: string | null;
+  approvedBudget?: string | number | null;
+  initialBudget?: string | number | null;
+};
+
 export function ProjectChangePanel({
   projectId,
   canMutate,
   initialChangeItems,
+  projectBaseline,
   members,
   epics,
   stories,
@@ -154,6 +174,7 @@ export function ProjectChangePanel({
   projectId: string;
   canMutate: boolean;
   initialChangeItems: ChangeItem[];
+  projectBaseline?: ChangeProjectBaseline;
   members: Member[];
   epics: DeliveryOption[];
   stories: DeliveryOption[];
@@ -163,6 +184,7 @@ export function ProjectChangePanel({
   initialOpenChangeId?: string | null;
 }) {
   const t = useTranslations('changes');
+  const locale = useLocale();
   const tRecords = useTranslations('records');
   const tCommon = useTranslations('common');
   const tArchive = useTranslations('archive');
@@ -197,6 +219,7 @@ export function ProjectChangePanel({
     setManageId(initialOpenChangeId);
   }, [initialOpenChangeId, initialChangeItems]);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
   const [changeTab, setChangeTab] = useState<ChangeTab>('details');
   const [mediaDrafts, setMediaDrafts] = useState<ItemMediaDraft[] | null>(null);
@@ -405,49 +428,43 @@ export function ProjectChangePanel({
   }
 
   const managedItem = items.find((item) => item.id === manageId) ?? null;
-  const canApplyBaseline = Boolean(
-    canMutate
-    && managedItem
-    && managedItem.status === 'approved'
-    && !managedItem.baselineAppliedAt
-    && (managedItem.baselineEndAfter || managedItem.baselineStartAfter),
-  );
 
-  async function applyBaseline() {
-    if (!manageId || !canApplyBaseline) return;
-    setPending(true);
-    setError(null);
-    try {
-      const response = await fetch(
-        `/api/v1/project-change-items/${manageId}/apply-baseline`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: { Origin: window.location.origin },
-        },
-      );
-      const payload = (await response.json().catch(() => ({}))) as {
-        changeItem?: ChangeItem;
-        error?: { message?: string };
-      };
-      if (!response.ok || !payload.changeItem) {
-        throw new Error(payload.error?.message || t('failedApply'));
-      }
-      const saved = payload.changeItem;
-      setItems((prev) => prev.map((item) => (
-        item.id === saved.id ? { ...item, ...saved } : item
-      )));
-      pushToast(t('baselineApplied'), 'success');
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('failedApply'));
-    } finally {
-      setPending(false);
-    }
+  function moneyAmount(value: string | number | null | undefined): number | null {
+    if (value == null || value === '') return null;
+    const amount = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(amount) ? amount : null;
   }
 
-  async function submitUpdate() {
+  const approvalPreview = previewBaselineApply({
+    projectStart: projectBaseline?.startDate ?? null,
+    projectFinish: projectBaseline?.endDate ?? null,
+    changeStartAfter: baselineStartAfter || null,
+    changeFinishAfter: baselineEndAfter || null,
+    approvedBudget: moneyAmount(projectBaseline?.approvedBudget),
+    initialBudget: moneyAmount(projectBaseline?.initialBudget),
+    calendar: coerceProjectCalendar({
+      hoursPerWorkday: projectBaseline?.hoursPerWorkday,
+      workdaysPerWeek: projectBaseline?.workdaysPerWeek,
+      nonWorkingDays: projectBaseline?.nonWorkingDays ?? [],
+    }),
+  });
+
+  function cancelApproval() {
+    setApproveOpen(false);
+    if (managedItem) setStatus(managedItem.status);
+  }
+
+  async function submitUpdate(confirmed = false) {
     if (!canMutate || !manageId || !title.trim()) return;
+    const needsConfirm = managedItem != null && baselineApprovalNeedsConfirm({
+      savedStatus: managedItem.status,
+      nextStatus: status,
+      baselineAppliedAt: managedItem.baselineAppliedAt ?? null,
+    });
+    if (needsConfirm && !confirmed) {
+      setApproveOpen(true);
+      return;
+    }
     setPending(true);
     setError(null);
     try {
@@ -460,11 +477,17 @@ export function ProjectChangePanel({
             'Content-Type': 'application/json',
             Origin: window.location.origin,
           },
-          body: JSON.stringify(payloadBody()),
+          body: JSON.stringify({
+            ...payloadBody(),
+            ...(confirmed && approvalPreview.appliesSchedule
+              ? { confirmBaseline: true }
+              : {}),
+          }),
         },
       );
       const payload = (await response.json().catch(() => ({}))) as {
         changeItem?: ChangeItem;
+        applied?: boolean;
         error?: { message?: string };
       };
       if (!response.ok || !payload.changeItem) {
@@ -481,8 +504,9 @@ export function ProjectChangePanel({
       setItems((prev) =>
         prev.map((item) => (item.id === manageId ? payload.changeItem! : item)),
       );
+      setApproveOpen(false);
       setManageId(null);
-      pushToast(t('updated'), 'success');
+      pushToast(payload.applied ? t('baselineApplied') : t('updated'), 'success');
       refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedUpdate'));
@@ -983,10 +1007,15 @@ export function ProjectChangePanel({
           </div>
         ) : null}
         {managedItem?.baselineAppliedAt ? (
-          <p className="kh-ops-menu-type m-0 text-ink-muted">{t('baselineAppliedNote')}</p>
-        ) : canApplyBaseline ? (
-          <p className="kh-ops-menu-type m-0 text-ink-muted">{t('applyToBaselineHint')}</p>
-        ) : null}
+          <p className="kh-ops-menu-type m-0 text-ink-muted">
+            {t('baselineAppliedNote')}
+            {managedItem.baselineAppliedBy?.displayName
+              ? ` · ${managedItem.baselineAppliedBy.displayName}`
+              : ''}
+          </p>
+        ) : (
+          <p className="kh-ops-menu-type m-0 text-ink-muted">{t('approveConfirmHint')}</p>
+        )}
       </div>
     );
   }
@@ -1166,16 +1195,6 @@ export function ProjectChangePanel({
               ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {canApplyBaseline ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={pending || confirmDelete}
-                  onClick={() => void applyBaseline()}
-                >
-                  {t('applyToBaseline')}
-                </Button>
-              ) : null}
               <Button
                 type="button"
                 variant="secondary"
@@ -1217,6 +1236,55 @@ export function ProjectChangePanel({
           </div>
         ) : null}
         {tabbedForm(pending || confirmDelete || !canMutate)}
+      </Modal>
+
+      <Modal
+        open={approveOpen}
+        onClose={cancelApproval}
+        title={t('approveConfirmTitle')}
+        description={t('approveConfirmDescription')}
+        footer={
+          <>
+            <Button type="button" variant="secondary" disabled={pending} onClick={cancelApproval}>
+              {tCommon('cancel')}
+            </Button>
+            <Button type="button" disabled={pending} onClick={() => void submitUpdate(true)}>
+              {pending ? tCommon('saving') : t('approveConfirmAction')}
+            </Button>
+          </>
+        }
+      >
+        <dl className="kh-ops-menu-type m-0 grid gap-3">
+          <div>
+            <dt className="text-ink-muted">{t('approveFinish')}</dt>
+            <dd className="m-0 tabular-nums">
+              {approvalPreview.finishBefore
+                ? <LocalDateTime value={approvalPreview.finishBefore} dateOnly />
+                : tCommon('none')}
+              {' → '}
+              {approvalPreview.finishAfter
+                ? <LocalDateTime value={approvalPreview.finishAfter} dateOnly />
+                : tCommon('none')}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-ink-muted">{t('approveDuration')}</dt>
+            <dd className="m-0 tabular-nums">
+              {approvalPreview.durationBefore ?? tCommon('none')}
+              {' → '}
+              {approvalPreview.durationAfter ?? tCommon('none')}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-ink-muted">{t('approveBudgetDelta')}</dt>
+            <dd className="m-0 tabular-nums">
+              {approvalPreview.budgetDelta == null
+                ? tCommon('none')
+                : formatMoney(approvalPreview.budgetDelta, projectBaseline?.currency ?? 'EUR', locale)}
+            </dd>
+          </div>
+        </dl>
+        <p className="kh-ops-menu-type mb-0 mt-3 text-ink-muted">{t('approveBudgetNote')}</p>
       </Modal>
 
       <Modal
