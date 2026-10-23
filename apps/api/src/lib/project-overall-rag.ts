@@ -12,30 +12,38 @@ import {
   type ProjectHealth,
   type ProjectRagStatus,
 } from '@project-knowledge-hub/domain';
-import { getProjectBudgetSummary } from './project-budget.js';
+import { listProjectBudgetSignals } from './project-budget-signals.js';
 
 export { emptyProjectHealth, type ProjectHealth };
 
+export type ProjectHealthSnapshot = {
+  health: ProjectHealth;
+  bac: number | null;
+  cpi: number | null;
+  spi: number | null;
+};
+
 /**
- * Overall project health for many projects.
+ * Overall project health for many projects, plus the budget figures the
+ * dashboard uses for attention rows.
  *
  * Timeline uses TIMELINE_AT_RISK_DAYS (7). Risk and financial come from the
- * budget summary (assessRiskRag / computeFinancialRag). Risk reasons travel
- * with that same result. Overall is the worst of the three. If the budget
- * summary throws, overall is the timeline RAG only and financial is null.
+ * same signal as the budget summary (assessRiskRag / computeFinancialRag).
+ * If that signal throws or a project is missing from it, overall is the
+ * timeline RAG only and financial is null.
  *
- * Schedule rows are loaded in two queries. Budget summaries stay one call
- * per project, matching the previous list endpoint.
+ * Schedule rows are two queries. Budget signals are one batched load, not
+ * one getProjectBudgetSummary per project.
  */
-export async function listProjectHealth(
+export async function listProjectHealthSnapshots(
   database: Database,
   projectIds: string[],
   today = todayYmd(),
-): Promise<Map<string, ProjectHealth>> {
-  const result = new Map<string, ProjectHealth>();
+): Promise<Map<string, ProjectHealthSnapshot>> {
+  const result = new Map<string, ProjectHealthSnapshot>();
   if (projectIds.length === 0) return result;
 
-  const [milestoneRows, taskRows] = await Promise.all([
+  const [milestoneRows, taskRows, signals] = await Promise.all([
     database.db
       .select({
         projectId: projectMilestones.projectId,
@@ -62,6 +70,7 @@ export async function listProjectHealth(
           isNull(projectTasks.archivedAt),
         ),
       ),
+    listProjectBudgetSignals(database, projectIds, today).catch(() => null),
   ]);
 
   const scheduleByProject = new Map<
@@ -79,28 +88,46 @@ export async function listProjectHealth(
     scheduleByProject.set(row.projectId, list);
   }
 
-  await Promise.all(
-    projectIds.map(async (projectId) => {
-      const timeline = timelineRag(scheduleByProject.get(projectId) ?? [], today);
-      try {
-        const summary = await getProjectBudgetSummary(database, projectId);
-        result.set(
-          projectId,
-          projectHealthFromBudget({
-            timeline,
-            budget: {
-              risk: summary.riskRag,
-              financial: summary.financialRag,
-              riskReasons: summary.riskReasons,
-            },
-          }),
-        );
-      } catch {
-        result.set(projectId, projectHealthFromBudget({ timeline, budget: null }));
-      }
-    }),
-  );
+  for (const projectId of projectIds) {
+    const timeline = timelineRag(scheduleByProject.get(projectId) ?? [], today);
+    const signal = signals?.get(projectId);
+    if (!signal) {
+      result.set(projectId, {
+        health: projectHealthFromBudget({ timeline, budget: null }),
+        bac: null,
+        cpi: null,
+        spi: null,
+      });
+      continue;
+    }
+    result.set(projectId, {
+      health: projectHealthFromBudget({
+        timeline,
+        budget: {
+          risk: signal.riskRag,
+          financial: signal.financialRag,
+          riskReasons: signal.riskReasons,
+        },
+      }),
+      bac: signal.bac,
+      cpi: signal.cpi,
+      spi: signal.spi,
+    });
+  }
 
+  return result;
+}
+
+export async function listProjectHealth(
+  database: Database,
+  projectIds: string[],
+  today = todayYmd(),
+): Promise<Map<string, ProjectHealth>> {
+  const snapshots = await listProjectHealthSnapshots(database, projectIds, today);
+  const result = new Map<string, ProjectHealth>();
+  for (const [projectId, snapshot] of snapshots) {
+    result.set(projectId, snapshot.health);
+  }
   return result;
 }
 

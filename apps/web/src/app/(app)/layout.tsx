@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { Suspense, type ReactNode } from 'react';
 import { OpsAppShell } from '../../components/ops/OpsAppShell';
-import { apiFetch, getSession } from '../../lib/session';
+import { fetchWorkspaceList, getSession } from '../../lib/session';
 import { getThemePreference } from '../../lib/theme-actions';
 
 export default async function AppShellLayout({ children }: { children: ReactNode }) {
@@ -10,17 +10,10 @@ export default async function AppShellLayout({ children }: { children: ReactNode
     redirect('/login');
   }
 
-  const [themePreference, workspacesResponse] = await Promise.all([
+  const [themePreference, workspaces] = await Promise.all([
     getThemePreference(),
-    apiFetch('/api/v1/workspaces'),
+    fetchWorkspaceList(),
   ]);
-  const workspaces = workspacesResponse.ok
-    ? (
-        (await workspacesResponse.json()) as {
-          workspaces: Array<{ id: string; slug: string; name: string }>;
-        }
-      ).workspaces
-    : [];
 
   return (
     <Suspense fallback={<div className="min-h-screen">{children}</div>}>

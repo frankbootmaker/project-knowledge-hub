@@ -819,34 +819,26 @@ function catalogTheoretical(
 }
 
 /**
- * Allocate the workspace ledger onto one project and compare it with the
- * theoretical API cost. With no applicable ledger entries, paid AC is the
- * legacy bill exactly.
+ * Workspace ledger, usage, and FX loaded once so every project in that
+ * workspace can allocate paid AI without repeating the queries.
  */
-export async function loadProjectPaidAi(
+async function loadWorkspacePaidAiContextUncached(
   database: Database,
-  project: {
-    id: string;
-    workspaceId: string;
-    currency: string;
-    startDate: string | null;
-    endDate: string | null;
-  },
-  systemInputs: readonly AiSystemPaidInput[],
+  workspaceId: string,
   today: string,
-): Promise<ProjectPaidAi> {
-  const currency = projectCurrencySchema.parse(project.currency);
+) {
+
   const [entryRows, overrideRows, projectRows, assistantRows, taskRows] =
     await Promise.all([
       database.db
         .select()
         .from(aiBillingEntries)
-        .where(eq(aiBillingEntries.workspaceId, project.workspaceId))
+        .where(eq(aiBillingEntries.workspaceId, workspaceId))
         .orderBy(asc(aiBillingEntries.period)),
       database.db
         .select()
         .from(aiBillingAllocationOverrides)
-        .where(eq(aiBillingAllocationOverrides.workspaceId, project.workspaceId)),
+        .where(eq(aiBillingAllocationOverrides.workspaceId, workspaceId)),
       database.db
         .select({
           id: projects.id,
@@ -855,7 +847,7 @@ export async function loadProjectPaidAi(
           archivedAt: projects.archivedAt,
         })
         .from(projects)
-        .where(eq(projects.workspaceId, project.workspaceId)),
+        .where(eq(projects.workspaceId, workspaceId)),
       database.db
         .select({
           id: systems.id,
@@ -864,7 +856,7 @@ export async function loadProjectPaidAi(
         .from(systems)
         .where(
           and(
-            eq(systems.workspaceId, project.workspaceId),
+            eq(systems.workspaceId, workspaceId),
             eq(systems.systemType, AI_ASSISTANT_SYSTEM_TYPE),
             isNull(systems.archivedAt),
           ),
@@ -891,7 +883,7 @@ export async function loadProjectPaidAi(
         .innerJoin(projects, eq(projectTasks.projectId, projects.id))
         .where(
           and(
-            eq(projects.workspaceId, project.workspaceId),
+            eq(projects.workspaceId, workspaceId),
             isNull(projectTasks.archivedAt),
             isNull(projects.archivedAt),
           ),
@@ -899,7 +891,7 @@ export async function loadProjectPaidAi(
     ]);
 
   const usages = await taskUsageRows(database, taskRows, today);
-  const imported = await loadImportedTheoretical(database, project.workspaceId);
+  const imported = await loadImportedTheoretical(database, workspaceId);
   const billableUsages = usages.filter(
     (row) => !taskSupersededByImport(row.cloudAgentIds, imported.agentIds),
   );
@@ -931,10 +923,6 @@ export async function loadProjectPaidAi(
     rowAmount: catalog.rows[index]?.rowAmount ?? 0,
     currency: catalog.rows[index]?.currency ?? null,
   }));
-  const modeBySystem = new Map(
-    systemInputs.map((system) => [system.systemId, system.costMode]),
-  );
-
   const tokensOf = (
     projectId: string,
     period: string,
@@ -954,7 +942,7 @@ export async function loadProjectPaidAi(
     ...usages.map((row) => row.onDate),
     ...imported.rows.map((row) => row.occurredOn),
   ];
-  const fxBook = await loadWorkspaceFx(database, project.workspaceId, fxDates);
+  const fxBook = await loadWorkspaceFx(database, workspaceId, fxDates);
   const folded = foldBillingSlices({
     slices: paidSlices,
     reportingCurrency: fxBook.reportingCurrency,
@@ -968,6 +956,58 @@ export async function loadProjectPaidAi(
         tokensOf,
       }),
   });
+  return { today, entryRows, pricedBillable, imported, fxBook, folded };
+}
+
+export type WorkspacePaidAiContext = Awaited<
+  ReturnType<typeof loadWorkspacePaidAiContextUncached>
+>;
+
+const workspacePaidAiInflight = new WeakMap<
+  Database,
+  Map<string, Promise<WorkspacePaidAiContext>>
+>();
+
+export async function loadWorkspacePaidAiContext(
+  database: Database,
+  workspaceId: string,
+  today: string,
+): Promise<WorkspacePaidAiContext> {
+  let bucket = workspacePaidAiInflight.get(database);
+  if (!bucket) {
+    bucket = new Map();
+    workspacePaidAiInflight.set(database, bucket);
+  }
+  const key = `${workspaceId}:${today}`;
+  const existing = bucket.get(key);
+  if (existing) return existing;
+  const pending = loadWorkspacePaidAiContextUncached(
+    database,
+    workspaceId,
+    today,
+  ).finally(() => {
+    if (bucket?.get(key) === pending) bucket.delete(key);
+  });
+  bucket.set(key, pending);
+  return pending;
+}
+
+export function projectPaidAiFromContext(
+  context: WorkspacePaidAiContext,
+  project: {
+    id: string;
+    workspaceId: string;
+    currency: string;
+    startDate: string | null;
+    endDate: string | null;
+  },
+  systemInputs: readonly AiSystemPaidInput[],
+): ProjectPaidAi {
+  const { today, entryRows, pricedBillable, imported, fxBook, folded } = context;
+  const currency = projectCurrencySchema.parse(project.currency);
+  const modeBySystem = new Map(
+    systemInputs.map((system) => [system.systemId, system.costMode]),
+  );
   const shares: AiBillingProjectShare[] = folded.sharesByProject.get(project.id) ?? [];
 
   const sliceGroups = new Map<
@@ -1113,6 +1153,32 @@ export async function loadProjectPaidAi(
     aiTheoreticalReporting: roundAiMoney(theoreticalReporting),
     aiCostFx,
   };
+}
+
+
+/**
+ * Allocate the workspace ledger onto one project and compare it with the
+ * theoretical API cost. With no applicable ledger entries, paid AC is the
+ * legacy bill exactly. Concurrent calls for the same workspace share one load.
+ */
+export async function loadProjectPaidAi(
+  database: Database,
+  project: {
+    id: string;
+    workspaceId: string;
+    currency: string;
+    startDate: string | null;
+    endDate: string | null;
+  },
+  systemInputs: readonly AiSystemPaidInput[],
+  today: string,
+): Promise<ProjectPaidAi> {
+  const context = await loadWorkspacePaidAiContext(
+    database,
+    project.workspaceId,
+    today,
+  );
+  return projectPaidAiFromContext(context, project, systemInputs);
 }
 
 export type WorkspaceAiAllocationProject = {

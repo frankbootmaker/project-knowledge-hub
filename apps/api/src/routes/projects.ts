@@ -165,8 +165,9 @@ async function toPublicProject(
   project: typeof projects.$inferSelect,
   tagList: Array<{ id: string; name: string; slug: string }>,
   facts?: ProjectScheduleFacts,
+  pinnedRecords?: Awaited<ReturnType<typeof loadPinnedRecords>>,
 ) {
-  const pinned = await loadPinnedRecords(database, [
+  const pinned = pinnedRecords ?? await loadPinnedRecords(database, [
     project.charterRecordId,
     project.initialPlanRecordId,
   ]);
@@ -265,10 +266,15 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       );
 
     const projectIds = rows.map((row) => row.id);
-    const [tagMap, healthById, scheduleById] = await Promise.all([
+    const pinnedIds = rows.flatMap((row) => [
+      row.charterRecordId,
+      row.initialPlanRecordId,
+    ]);
+    const [tagMap, healthById, scheduleById, pinned] = await Promise.all([
       getProjectTags(app.database, projectIds),
       listProjectHealth(app.database, projectIds),
       loadProjectScheduleFacts(app.database, rows),
+      loadPinnedRecords(app.database, pinnedIds),
     ]);
 
     return {
@@ -281,6 +287,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
               row,
               tagMap.get(row.id) ?? [],
               scheduleById.get(row.id),
+              pinned,
             )),
             health,
             overallRag: health.overall,

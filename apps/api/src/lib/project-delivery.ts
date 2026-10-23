@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   memberships,
@@ -1011,6 +1011,154 @@ export async function listTasks(
   );
 }
 
+export async function countAssignedTasksByDue(
+  database: Database,
+  userId: string,
+  options: {
+    isSystemAdmin?: boolean;
+    today: string;
+    soon: string;
+  },
+): Promise<{ overdue: number; dueSoon: number; later: number; none: number }> {
+  const conditions = [
+    eq(projectTaskRaci.userId, userId),
+    isNull(projectTasks.archivedAt),
+    isNull(projects.archivedAt),
+  ];
+  const selection = {
+    status: projectTasks.status,
+    dueDate: projectTasks.dueDate,
+  };
+  const rows = options.isSystemAdmin
+    ? await database.db
+        .select(selection)
+        .from(projectTaskRaci)
+        .innerJoin(projectTasks, eq(projectTaskRaci.taskId, projectTasks.id))
+        .innerJoin(projects, eq(projectTasks.projectId, projects.id))
+        .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
+        .where(and(...conditions))
+    : await database.db
+        .select(selection)
+        .from(projectTaskRaci)
+        .innerJoin(projectTasks, eq(projectTaskRaci.taskId, projectTasks.id))
+        .innerJoin(projects, eq(projectTasks.projectId, projects.id))
+        .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
+        .innerJoin(
+          memberships,
+          and(
+            eq(memberships.workspaceId, workspaces.id),
+            eq(memberships.userId, userId),
+          ),
+        )
+        .where(and(...conditions));
+
+  const tasksByDue = { overdue: 0, dueSoon: 0, later: 0, none: 0 };
+  for (const task of rows) {
+    if (task.status === 'done' || task.status === 'cancelled') continue;
+    if (!task.dueDate) {
+      tasksByDue.none += 1;
+      continue;
+    }
+    if (task.dueDate < options.today) tasksByDue.overdue += 1;
+    else if (task.dueDate <= options.soon) tasksByDue.dueSoon += 1;
+    else tasksByDue.later += 1;
+  }
+  return tasksByDue;
+}
+
+type AssignedTaskCursor = {
+  dueDate: string | null;
+  updatedAt: string;
+  id: string;
+};
+
+function encodeAssignedTaskCursor(task: {
+  dueDate: string | null;
+  updatedAt: string;
+  id: string;
+}): string {
+  return Buffer.from(JSON.stringify({
+    dueDate: task.dueDate,
+    updatedAt: task.updatedAt,
+    id: task.id,
+  }), 'utf8').toString('base64url');
+}
+
+function decodeAssignedTaskCursor(value: string): AssignedTaskCursor {
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as {
+      dueDate?: unknown;
+      updatedAt?: unknown;
+      id?: unknown;
+    };
+    const dueDate = parsed.dueDate == null ? null : parsed.dueDate;
+    if (
+      (dueDate !== null && (typeof dueDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)))
+      || typeof parsed.updatedAt !== 'string'
+      || Number.isNaN(Date.parse(parsed.updatedAt))
+      || typeof parsed.id !== 'string'
+      || parsed.id.length === 0
+    ) {
+      throw new Error('invalid');
+    }
+    return { dueDate, updatedAt: parsed.updatedAt, id: parsed.id };
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError({
+      code: 'VALIDATION_ERROR',
+      message: 'Invalid task page cursor',
+      statusCode: 400,
+    });
+  }
+}
+
+function assignedTaskCursorFilter(cursor: AssignedTaskCursor) {
+  const updatedAt = new Date(cursor.updatedAt);
+  const afterUpdated = or(
+    sql`${projectTasks.updatedAt} < ${updatedAt}`,
+    and(
+      eq(projectTasks.updatedAt, updatedAt),
+      sql`${projectTasks.id} < ${cursor.id}`,
+    ),
+  );
+  if (cursor.dueDate) {
+    return or(
+      sql`${projectTasks.dueDate} > ${cursor.dueDate}`,
+      and(eq(projectTasks.dueDate, cursor.dueDate), afterUpdated),
+      isNull(projectTasks.dueDate),
+    );
+  }
+  return and(isNull(projectTasks.dueDate), afterUpdated);
+}
+
+export async function pageAssignedTasksForUser(
+  database: Database,
+  userId: string,
+  options: {
+    isSystemAdmin?: boolean;
+    includeArchived?: boolean;
+    role?: RaciRole;
+    limit: number;
+    cursor?: string;
+  },
+): Promise<{ tasks: PublicAssignedTask[]; nextCursor: string | null }> {
+  const limit = Math.min(Math.max(options.limit, 1), 100);
+  const cursor = options.cursor ? decodeAssignedTaskCursor(options.cursor) : undefined;
+  const tasks = await listAssignedTasksForUser(database, userId, {
+    isSystemAdmin: options.isSystemAdmin,
+    includeArchived: options.includeArchived,
+    role: options.role,
+    limit: limit + 1,
+    cursor,
+  });
+  const page = tasks.slice(0, limit);
+  const last = page[page.length - 1];
+  return {
+    tasks: page,
+    nextCursor: tasks.length > limit && last ? encodeAssignedTaskCursor(last) : null,
+  };
+}
+
 export async function listAssignedTasksForUser(
   database: Database,
   userId: string,
@@ -1018,6 +1166,8 @@ export async function listAssignedTasksForUser(
     isSystemAdmin?: boolean;
     includeArchived?: boolean;
     role?: RaciRole;
+    limit?: number;
+    cursor?: AssignedTaskCursor;
   },
 ): Promise<PublicAssignedTask[]> {
   const conditions = [eq(projectTaskRaci.userId, userId)];
@@ -1028,6 +1178,11 @@ export async function listAssignedTasksForUser(
   if (options?.role) {
     conditions.push(eq(projectTaskRaci.role, options.role));
   }
+  if (options?.cursor) {
+    const cursorFilter = assignedTaskCursorFilter(options.cursor);
+    if (cursorFilter) conditions.push(cursorFilter);
+  }
+  const paging = options?.limit != null;
 
   const baseSelect = {
     task: projectTasks,
@@ -1041,8 +1196,8 @@ export async function listAssignedTasksForUser(
     milestoneTitle: projectMilestones.title,
   };
 
-  const rows = options?.isSystemAdmin
-    ? await database.db
+  const rowsQuery = options?.isSystemAdmin
+    ? database.db
         .select(baseSelect)
         .from(projectTaskRaci)
         .innerJoin(projectTasks, eq(projectTaskRaci.taskId, projectTasks.id))
@@ -1053,7 +1208,7 @@ export async function listAssignedTasksForUser(
           eq(projectTasks.milestoneId, projectMilestones.id),
         )
         .where(and(...conditions))
-    : await database.db
+    : database.db
         .select(baseSelect)
         .from(projectTaskRaci)
         .innerJoin(projectTasks, eq(projectTaskRaci.taskId, projectTasks.id))
@@ -1071,6 +1226,16 @@ export async function listAssignedTasksForUser(
           eq(projectTasks.milestoneId, projectMilestones.id),
         )
         .where(and(...conditions));
+
+  const rows = paging
+    ? await rowsQuery
+        .orderBy(
+          sql`${projectTasks.dueDate} asc nulls last`,
+          desc(projectTasks.updatedAt),
+          desc(projectTasks.id),
+        )
+        .limit(options.limit ?? 0)
+    : await rowsQuery;
 
   const taskRows = rows.map((row) => row.task);
   const keyPrefixByProject = new Map<string, string | null>();
@@ -1091,17 +1256,19 @@ export async function listAssignedTasksForUser(
     milestoneTitle: row.milestoneTitle,
   }));
 
-  tasks.sort((a, b) => {
-    if (a.dueDate && b.dueDate) {
-      const dueCmp = a.dueDate.localeCompare(b.dueDate);
-      if (dueCmp !== 0) return dueCmp;
-    } else if (a.dueDate) {
-      return -1;
-    } else if (b.dueDate) {
-      return 1;
-    }
-    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-  });
+  if (!paging) {
+    tasks.sort((a, b) => {
+      if (a.dueDate && b.dueDate) {
+        const dueCmp = a.dueDate.localeCompare(b.dueDate);
+        if (dueCmp !== 0) return dueCmp;
+      } else if (a.dueDate) {
+        return -1;
+      } else if (b.dueDate) {
+        return 1;
+      }
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  }
 
   return tasks;
 }

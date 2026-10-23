@@ -501,6 +501,247 @@ export function billAiAssistantUsage(input: {
   return { flatAccruedCost, tokenCost, noteOnlyTokens, billableCost };
 }
 
+export type ProjectAiSystemInput = {
+  systemId: string;
+  costMode: AiBudgetBreakdown['costMode'];
+  flatMonthlyFee: number;
+  legacyBillable: number;
+  rates: {
+    blendedPer1k: number | null;
+    inputPer1k: number | null;
+    outputPer1k: number | null;
+    cachePer1k: number | null;
+    cacheWritePer1k: number | null;
+    currency: string | null;
+  };
+};
+
+export type ProjectAiBill = {
+  aiFlatAc: number;
+  aiTokenAc: number;
+  aiNoteOnlyTokens: number;
+  aiSystems: AiBudgetBreakdown[];
+  systemInputs: ProjectAiSystemInput[];
+};
+
+type AiAssistantCostRow = {
+  id: string;
+  name: string;
+  aiCostMode: string | null;
+  aiFlatMonthlyFee: number | null;
+  aiTokenRatePer1k: number | null;
+  aiTokenRateInputPer1k: number | null;
+  aiTokenRateOutputPer1k: number | null;
+  aiTokenRateCachePer1k: number | null;
+  aiTokenRateCacheWritePer1k: number | null;
+  aiTokenRateCurrency: string | null;
+  aiBudgetAllocation: number | null;
+};
+
+type AiTaskCostRow = {
+  id: string;
+  tokensUsed: number | null;
+  tokensInput: number | null;
+  tokensOutput: number | null;
+  tokensCache: number | null;
+  tokensCacheWrite: number | null;
+  aiSystemId: string | null;
+  aiModelId: string | null;
+  status: string;
+  billingPeriod: string | null;
+  usageOccurredAt: Date | null;
+  updatedAt: Date;
+};
+
+/** Legacy AI bill for one project. Paid allocation is applied by the caller. */
+export function buildProjectAiBill(input: {
+  project: { startDate: string | null; endDate: string | null };
+  assistantRows: AiAssistantCostRow[];
+  taskRows: AiTaskCostRow[];
+  completedAt: Map<string, string>;
+  catalogPrices: Parameters<typeof priceTaskUsagesFromCatalog>[1];
+  today?: string;
+}): ProjectAiBill {
+  const today = input.today ?? todayYmd();
+  const usagesBySystem = new Map<string, CatalogPricedUsage[]>();
+  let orphanTokens = 0;
+  for (const task of input.taskRows) {
+    if (task.status === 'cancelled') continue;
+    const usage: AiUsageForCost = {
+      tokensUsed: task.tokensUsed,
+      tokensInput: task.tokensInput,
+      tokensOutput: task.tokensOutput,
+      tokensCache: task.tokensCache,
+      tokensCacheWrite: task.tokensCacheWrite,
+    };
+    const tokens = usageTokenTotal(usage);
+    if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
+    const period =
+      task.billingPeriod && /^\d{4}-(0[1-9]|1[0-2])$/.test(task.billingPeriod)
+        ? task.billingPeriod
+        : null;
+    const priced = priceTaskUsagesFromCatalog(
+      [
+        {
+          usage,
+          model: task.aiModelId,
+          onDate: theoreticalUsageDate({
+            usageOccurredAt: task.usageOccurredAt,
+            completedAt: taskCompletedAt(task.status, input.completedAt.get(task.id)),
+            updatedAt: task.updatedAt,
+            period,
+            fallback: today,
+          }),
+          tokens,
+        },
+      ],
+      input.catalogPrices,
+    ).rows[0];
+    if (!priced) continue;
+    if (task.aiSystemId) {
+      const list = usagesBySystem.get(task.aiSystemId) ?? [];
+      list.push(priced);
+      usagesBySystem.set(task.aiSystemId, list);
+    } else if (tokens > 0) {
+      orphanTokens += tokens;
+    }
+  }
+
+  const aiSystems: AiBudgetBreakdown[] = [];
+  let aiFlatAc = 0;
+  let aiTokenAc = 0;
+  let aiNoteOnlyTokens = orphanTokens;
+
+  for (const row of input.assistantRows) {
+    const modeParsed = row.aiCostMode
+      ? aiCostModeSchema.safeParse(row.aiCostMode)
+      : null;
+    const costMode = modeParsed?.success ? modeParsed.data : null;
+    const allocation = parseNumeric(row.aiBudgetAllocation);
+    const systemUsages = usagesBySystem.get(row.id) ?? [];
+    const billed = billAiAssistantUsage({
+      costMode,
+      flatMonthlyFee: parseNumeric(row.aiFlatMonthlyFee) ?? 0,
+      rates: {
+        blendedPer1k: null,
+        inputPer1k: null,
+        outputPer1k: null,
+        cachePer1k: null,
+        cacheWritePer1k: null,
+      },
+      usages: systemUsages.map((item) => item.usage),
+      tokenCostOverride: groupedCatalogCost(systemUsages),
+      startDate: input.project.startDate,
+      endDate: input.project.endDate,
+      today,
+    });
+
+    aiFlatAc += billed.flatAccruedCost;
+    aiTokenAc += billed.tokenCost;
+    aiNoteOnlyTokens += billed.noteOnlyTokens;
+
+    aiSystems.push({
+      systemId: row.id,
+      name: row.name,
+      costMode,
+      flatAccruedCost: billed.flatAccruedCost,
+      tokenCost: billed.tokenCost,
+      noteOnlyTokens: billed.noteOnlyTokens,
+      billableCost: billed.billableCost,
+      budgetAllocation: allocation,
+      overAllocation: allocation != null && billed.billableCost > allocation,
+    });
+  }
+
+  const systemInputs = aiSystems.map((system) => {
+    const row = input.assistantRows.find((item) => item.id === system.systemId);
+    const flatMonthlyFee = parseNumeric(row?.aiFlatMonthlyFee) ?? 0;
+    return {
+      systemId: system.systemId,
+      costMode: system.costMode,
+      flatMonthlyFee:
+        system.costMode === 'flat' || system.costMode === 'mixed'
+          ? flatMonthlyFee
+          : 0,
+      legacyBillable: system.billableCost,
+      rates: {
+        blendedPer1k: parseNumeric(row?.aiTokenRatePer1k),
+        inputPer1k: parseNumeric(row?.aiTokenRateInputPer1k),
+        outputPer1k: parseNumeric(row?.aiTokenRateOutputPer1k),
+        cachePer1k: parseNumeric(row?.aiTokenRateCachePer1k),
+        cacheWritePer1k: parseNumeric(row?.aiTokenRateCacheWritePer1k),
+        currency: row?.aiTokenRateCurrency ?? null,
+      },
+    };
+  });
+
+  return {
+    aiFlatAc,
+    aiTokenAc,
+    aiNoteOnlyTokens,
+    aiSystems,
+    systemInputs,
+  };
+}
+
+export function applyPaidAiBill(
+  built: ProjectAiBill,
+  paid: ProjectPaidAi,
+): {
+  aiBillableCost: number;
+  aiNoteOnlyTokens: number;
+  aiFlatAc: number;
+  aiTokenAc: number;
+  aiPaidAc: number;
+  aiTheoreticalApiCost: number;
+  aiCostDifference: number;
+  aiCostRatio: number | null;
+  aiPeriods: AiPaidPeriod[];
+  aiSprints: ProjectBudgetSummary['aiSprints'];
+  aiBillingEntries: PublicAiBillingEntry[];
+  aiSystems: AiBudgetBreakdown[];
+  reportingCurrency: ProjectCurrency;
+  aiPaidReporting: number;
+  aiTheoreticalReporting: number;
+  aiCostFx: ProjectPaidAi['aiCostFx'];
+} {
+  const paidBySystem = new Map(
+    paid.systemPaid.map((row) => [row.systemId, row.amount]),
+  );
+  const aiSystems = built.aiSystems.map((system) => {
+    const amount = paidBySystem.get(system.systemId) ?? system.billableCost;
+    return {
+      ...system,
+      billableCost: amount,
+      overAllocation:
+        system.budgetAllocation != null && amount > system.budgetAllocation,
+    };
+  });
+  const aiPaidAc = paid.aiPaidAc;
+  const aiTheoreticalApiCost = paid.aiTheoreticalApiCost;
+  return {
+    aiBillableCost: aiPaidAc,
+    aiFlatAc: roundMoney(built.aiFlatAc),
+    aiTokenAc: roundMoney(built.aiTokenAc),
+    aiPaidAc,
+    aiTheoreticalApiCost,
+    aiCostDifference: roundMoney(aiPaidAc - aiTheoreticalApiCost),
+    aiCostRatio:
+      aiTheoreticalApiCost > 0
+        ? Math.round((aiPaidAc / aiTheoreticalApiCost) * 1000) / 1000
+        : null,
+    aiPeriods: paid.periods,
+    aiSprints: paid.sprints,
+    aiBillingEntries: paid.entries,
+    aiNoteOnlyTokens: built.aiNoteOnlyTokens,
+    aiSystems,
+    reportingCurrency: paid.reportingCurrency,
+    aiPaidReporting: paid.aiPaidReporting,
+    aiTheoreticalReporting: paid.aiTheoreticalReporting,
+    aiCostFx: paid.aiCostFx,
+  };
+}
+
 export async function computeAiBudgetCosts(
   database: Database,
   projectId: string,
@@ -578,97 +819,14 @@ export async function computeAiBudgetCosts(
     taskRows.map((row) => row.id),
   );
   const catalogPrices = await listAiModelPrices(database, project.workspaceId);
-  const usagesBySystem = new Map<string, CatalogPricedUsage[]>();
-  let orphanTokens = 0;
-  for (const task of taskRows) {
-    if (task.status === 'cancelled') continue;
-    const usage: AiUsageForCost = {
-      tokensUsed: task.tokensUsed,
-      tokensInput: task.tokensInput,
-      tokensOutput: task.tokensOutput,
-      tokensCache: task.tokensCache,
-      tokensCacheWrite: task.tokensCacheWrite,
-    };
-    const tokens = usageTokenTotal(usage);
-    if (tokens <= 0 && !usageHasTokenBreakdown(usage)) continue;
-    const period =
-      task.billingPeriod && /^\d{4}-(0[1-9]|1[0-2])$/.test(task.billingPeriod)
-        ? task.billingPeriod
-        : null;
-    const priced = priceTaskUsagesFromCatalog(
-      [
-        {
-          usage,
-          model: task.aiModelId,
-          onDate: theoreticalUsageDate({
-            usageOccurredAt: task.usageOccurredAt,
-            completedAt: taskCompletedAt(task.status, completedAt.get(task.id)),
-            updatedAt: task.updatedAt,
-            period,
-            fallback: today,
-          }),
-          tokens,
-        },
-      ],
-      catalogPrices,
-    ).rows[0];
-    if (!priced) continue;
-    if (task.aiSystemId) {
-      const list = usagesBySystem.get(task.aiSystemId) ?? [];
-      list.push(priced);
-      usagesBySystem.set(task.aiSystemId, list);
-    } else if (tokens > 0) {
-      orphanTokens += tokens;
-    }
-  }
-
-  const aiSystems: AiBudgetBreakdown[] = [];
-  let aiFlatAc = 0;
-  let aiTokenAc = 0;
-  let aiNoteOnlyTokens = orphanTokens;
-
-  for (const row of assistantRows) {
-    const modeParsed = row.aiCostMode
-      ? aiCostModeSchema.safeParse(row.aiCostMode)
-      : null;
-    const costMode = modeParsed?.success ? modeParsed.data : null;
-    const allocation = parseNumeric(row.aiBudgetAllocation);
-    const systemUsages = usagesBySystem.get(row.id) ?? [];
-    const billed = billAiAssistantUsage({
-      costMode,
-      flatMonthlyFee: parseNumeric(row.aiFlatMonthlyFee) ?? 0,
-      rates: {
-        blendedPer1k: null,
-        inputPer1k: null,
-        outputPer1k: null,
-        cachePer1k: null,
-        cacheWritePer1k: null,
-      },
-      usages: systemUsages.map((item) => item.usage),
-      tokenCostOverride: groupedCatalogCost(systemUsages),
-      startDate: project.startDate,
-      endDate: project.endDate,
-      today,
-    });
-
-    aiFlatAc += billed.flatAccruedCost;
-    aiTokenAc += billed.tokenCost;
-    aiNoteOnlyTokens += billed.noteOnlyTokens;
-
-    aiSystems.push({
-      systemId: row.id,
-      name: row.name,
-      costMode,
-      flatAccruedCost: billed.flatAccruedCost,
-      tokenCost: billed.tokenCost,
-      noteOnlyTokens: billed.noteOnlyTokens,
-      billableCost: billed.billableCost,
-      budgetAllocation: allocation,
-      overAllocation:
-        allocation != null && billed.billableCost > allocation,
-    });
-  }
-
+  const built = buildProjectAiBill({
+    project,
+    assistantRows,
+    taskRows,
+    completedAt,
+    catalogPrices,
+    today,
+  });
   const paid = await loadProjectPaidAi(
     database,
     {
@@ -678,101 +836,34 @@ export async function computeAiBudgetCosts(
       startDate: project.startDate,
       endDate: project.endDate,
     },
-    aiSystems.map((system) => {
-      const row = assistantRows.find((item) => item.id === system.systemId);
-      const flatMonthlyFee = parseNumeric(row?.aiFlatMonthlyFee) ?? 0;
-      return {
-        systemId: system.systemId,
-        costMode: system.costMode,
-        flatMonthlyFee:
-          system.costMode === 'flat' || system.costMode === 'mixed'
-            ? flatMonthlyFee
-            : 0,
-        legacyBillable: system.billableCost,
-        rates: {
-          blendedPer1k: parseNumeric(row?.aiTokenRatePer1k),
-          inputPer1k: parseNumeric(row?.aiTokenRateInputPer1k),
-          outputPer1k: parseNumeric(row?.aiTokenRateOutputPer1k),
-          cachePer1k: parseNumeric(row?.aiTokenRateCachePer1k),
-          cacheWritePer1k: parseNumeric(row?.aiTokenRateCacheWritePer1k),
-          currency: row?.aiTokenRateCurrency ?? null,
-        },
-      };
-    }),
+    built.systemInputs,
     today,
   );
-  const paidBySystem = new Map(
-    paid.systemPaid.map((row) => [row.systemId, row.amount]),
-  );
-  for (const system of aiSystems) {
-    const amount = paidBySystem.get(system.systemId) ?? system.billableCost;
-    system.billableCost = amount;
-    system.overAllocation =
-      system.budgetAllocation != null && amount > system.budgetAllocation;
-  }
-  const aiPaidAc = paid.aiPaidAc;
-  const aiTheoreticalApiCost = paid.aiTheoreticalApiCost;
-
-  return {
-    aiBillableCost: aiPaidAc,
-    aiFlatAc: roundMoney(aiFlatAc),
-    aiTokenAc: roundMoney(aiTokenAc),
-    aiPaidAc,
-    aiTheoreticalApiCost,
-    aiCostDifference: roundMoney(aiPaidAc - aiTheoreticalApiCost),
-    aiCostRatio:
-      aiTheoreticalApiCost > 0
-        ? Math.round((aiPaidAc / aiTheoreticalApiCost) * 1000) / 1000
-        : null,
-    aiPeriods: paid.periods,
-    aiSprints: paid.sprints,
-    aiBillingEntries: paid.entries,
-    aiNoteOnlyTokens,
-    aiSystems,
-    reportingCurrency: paid.reportingCurrency,
-    aiPaidReporting: paid.aiPaidReporting,
-    aiTheoreticalReporting: paid.aiTheoreticalReporting,
-    aiCostFx: paid.aiCostFx,
-  };
+  return applyPaidAiBill(built, paid);
 }
 
 /**
  * OpEx for non-AI catalogue systems linked to the project.
  * AI assistants are handled by {@link computeAiBudgetCosts}.
  */
-export async function computeSystemItBudgetCosts(
-  database: Database,
-  projectId: string,
+export function systemItCostsFromRows(
+  rows: Array<{
+    id: string;
+    name: string;
+    itCostMode: string | null;
+    itFlatMonthlyFee: number | null;
+    itOneTimeCost: number | null;
+    itBudgetAllocation: number | null;
+  }>,
   project: {
     startDate: string | null;
     endDate: string | null;
   },
   today = todayYmd(),
-): Promise<{
+): {
   systemBillableCost: number;
   itSystems: SystemItBudgetBreakdown[];
-}> {
-  const rows = await database.db
-    .select({
-      id: systems.id,
-      name: systems.name,
-      itCostMode: systems.itCostMode,
-      itFlatMonthlyFee: systems.itFlatMonthlyFee,
-      itOneTimeCost: systems.itOneTimeCost,
-      itBudgetAllocation: systems.itBudgetAllocation,
-    })
-    .from(systems)
-    .where(
-      and(
-        eq(systems.projectId, projectId),
-        isNull(systems.archivedAt),
-        or(
-          isNull(systems.systemType),
-          ne(systems.systemType, AI_ASSISTANT_SYSTEM_TYPE),
-        ),
-      ),
-    );
-
+} {
   const itSystems: SystemItBudgetBreakdown[] = [];
   let systemBillableCost = 0;
 
@@ -824,6 +915,42 @@ export async function computeSystemItBudgetCosts(
   };
 }
 
+export async function computeSystemItBudgetCosts(
+  database: Database,
+  projectId: string,
+  project: {
+    startDate: string | null;
+    endDate: string | null;
+  },
+  today = todayYmd(),
+): Promise<{
+  systemBillableCost: number;
+  itSystems: SystemItBudgetBreakdown[];
+}> {
+  const rows = await database.db
+    .select({
+      id: systems.id,
+      name: systems.name,
+      itCostMode: systems.itCostMode,
+      itFlatMonthlyFee: systems.itFlatMonthlyFee,
+      itOneTimeCost: systems.itOneTimeCost,
+      itBudgetAllocation: systems.itBudgetAllocation,
+    })
+    .from(systems)
+    .where(
+      and(
+        eq(systems.projectId, projectId),
+        isNull(systems.archivedAt),
+        or(
+          isNull(systems.systemType),
+          ne(systems.systemType, AI_ASSISTANT_SYSTEM_TYPE),
+        ),
+      ),
+    );
+
+  return systemItCostsFromRows(rows, project, today);
+}
+
 async function loadRateMap(
   database: Database,
   projectId: string,
@@ -854,6 +981,50 @@ function resolveRateUserId(
   const accountable = raci.find((entry) => entry.role === 'A');
   if (accountable) return accountable.userId;
   return null;
+}
+
+export function budgetTaskCostsFromParts(input: {
+  tasks: Array<{
+    id: string;
+    status: string;
+    userStoryId: string | null;
+    currentOwnerUserId: string | null;
+    forecastHours: number | null;
+    actualHours: number | null;
+  }>;
+  raciByTask: Map<string, Array<{ userId: string; role: string }>>;
+  epicByStory: Map<string, string | null>;
+  rates: Map<string, number>;
+}): BudgetTaskCost[] {
+  return input.tasks.map((task) => {
+    const raci = input.raciByTask.get(task.id) ?? [];
+    const rateUserId = resolveRateUserId(task.currentOwnerUserId, raci);
+    const hourlyRate = rateUserId ? input.rates.get(rateUserId) ?? null : null;
+    const forecastHours = parseNumeric(task.forecastHours);
+    const actualHours = parseNumeric(task.actualHours);
+    const forecastCost =
+      forecastHours != null && hourlyRate != null
+        ? Math.round(forecastHours * hourlyRate * 100) / 100
+        : null;
+    const actualCost =
+      actualHours != null && hourlyRate != null
+        ? Math.round(actualHours * hourlyRate * 100) / 100
+        : null;
+    return {
+      taskId: task.id,
+      epicId: task.userStoryId
+        ? input.epicByStory.get(task.userStoryId) ?? null
+        : null,
+      userStoryId: task.userStoryId,
+      status: task.status,
+      forecastHours,
+      actualHours,
+      rateUserId,
+      hourlyRate,
+      forecastCost,
+      actualCost,
+    };
+  });
 }
 
 export async function listTaskBudgetCosts(
@@ -903,35 +1074,7 @@ export async function listTaskBudgetCosts(
   const epicByStory = new Map(storyRows.map((row) => [row.id, row.epicId]));
   const rates = await loadRateMap(database, projectId);
 
-  return tasks.map((task) => {
-    const raci = raciByTask.get(task.id) ?? [];
-    const rateUserId = resolveRateUserId(task.currentOwnerUserId, raci);
-    const hourlyRate = rateUserId ? rates.get(rateUserId) ?? null : null;
-    const forecastHours = parseNumeric(task.forecastHours);
-    const actualHours = parseNumeric(task.actualHours);
-    const forecastCost =
-      forecastHours != null && hourlyRate != null
-        ? Math.round(forecastHours * hourlyRate * 100) / 100
-        : null;
-    const actualCost =
-      actualHours != null && hourlyRate != null
-        ? Math.round(actualHours * hourlyRate * 100) / 100
-        : null;
-    return {
-      taskId: task.id,
-      epicId: task.userStoryId
-        ? epicByStory.get(task.userStoryId) ?? null
-        : null,
-      userStoryId: task.userStoryId,
-      status: task.status,
-      forecastHours,
-      actualHours,
-      rateUserId,
-      hourlyRate,
-      forecastCost,
-      actualCost,
-    };
-  });
+  return budgetTaskCostsFromParts({ tasks, raciByTask, epicByStory, rates });
 }
 
 function rollupEpics(
@@ -1097,55 +1240,112 @@ export async function upsertProjectCostSnapshot(
   });
 }
 
+export type ProjectBudgetSignal = {
+  bac: number | null;
+  ac: number;
+  cpi: number | null;
+  spi: number | null;
+  financialRag: ProjectRagStatus;
+  riskRag: ProjectRagStatus;
+  riskReasons: RiskRagReason[];
+  currency: ProjectCurrency;
+  initialBudget: number | null;
+  approvedBudget: number | null;
+  pv: number | null;
+  ev: number;
+  personAc: number;
+  aiAc: number;
+  systemAc: number;
+};
+
+/** Financial and risk RAG shared by the budget summary and the list batch. */
+export function projectBudgetSignalFromParts(input: {
+  project: {
+    currency: string;
+    initialBudget: number | null;
+    approvedBudget: number | null;
+    startDate: string | null;
+    endDate: string | null;
+  };
+  costs: BudgetTaskCost[];
+  aiBillableCost: number;
+  systemBillableCost: number;
+  raidRows: Array<{
+    kind: string;
+    status: string;
+    severity: string;
+    dueDate?: string | null;
+  }>;
+  today?: string;
+}): ProjectBudgetSignal {
+  const today = input.today ?? todayYmd();
+  const evm = computeEvmFromCosts(input.project, input.costs, today);
+  const merged = withNonPersonAc(
+    evm,
+    input.aiBillableCost,
+    input.systemBillableCost,
+  );
+  const risk = assessRiskRag(input.raidRows, today);
+  return {
+    ...merged,
+    riskRag: risk.status,
+    riskReasons: risk.reasons,
+  };
+}
+
 export async function getProjectBudgetSummary(
   database: Database,
   projectId: string,
 ): Promise<ProjectBudgetSummary> {
+  const today = todayYmd();
   const { project } = await requireProjectContext(database, projectId);
-  const costs = await listTaskBudgetCosts(database, projectId);
-  const evm = computeEvmFromCosts(project, costs);
-  const ai = await computeAiBudgetCosts(database, projectId, project);
-  const it = await computeSystemItBudgetCosts(database, projectId, project);
-  const merged = withNonPersonAc(evm, ai.aiBillableCost, it.systemBillableCost);
-
-  const raidRows = await database.db
-    .select({
-      kind: projectRaidItems.kind,
-      status: projectRaidItems.status,
-      severity: projectRaidItems.severity,
-      dueDate: projectRaidItems.dueDate,
-    })
-    .from(projectRaidItems)
-    .where(
-      and(
-        eq(projectRaidItems.projectId, projectId),
-        isNull(projectRaidItems.archivedAt),
+  const [costs, ai, it, raidRows, epicRows, snapshotRows, schedule] = await Promise.all([
+    listTaskBudgetCosts(database, projectId),
+    computeAiBudgetCosts(database, projectId, project, today),
+    computeSystemItBudgetCosts(database, projectId, project, today),
+    database.db
+      .select({
+        kind: projectRaidItems.kind,
+        status: projectRaidItems.status,
+        severity: projectRaidItems.severity,
+        dueDate: projectRaidItems.dueDate,
+      })
+      .from(projectRaidItems)
+      .where(
+        and(
+          eq(projectRaidItems.projectId, projectId),
+          isNull(projectRaidItems.archivedAt),
+        ),
       ),
-    );
-
-  const epicRows = await database.db
-    .select({
-      id: projectEpics.id,
-      title: projectEpics.title,
-    })
-    .from(projectEpics)
-    .where(
-      and(eq(projectEpics.projectId, projectId), isNull(projectEpics.archivedAt)),
-    )
-    .orderBy(asc(projectEpics.sortOrder), asc(projectEpics.title));
-
-  const snapshotRows = await database.db
-    .select()
-    .from(projectCostSnapshots)
-    .where(eq(projectCostSnapshots.projectId, projectId))
-    .orderBy(asc(projectCostSnapshots.capturedOn));
-
-  const risk = assessRiskRag(raidRows);
-  const schedule = await loadProjectScheduleFacts(database, [project]);
+    database.db
+      .select({
+        id: projectEpics.id,
+        title: projectEpics.title,
+      })
+      .from(projectEpics)
+      .where(
+        and(eq(projectEpics.projectId, projectId), isNull(projectEpics.archivedAt)),
+      )
+      .orderBy(asc(projectEpics.sortOrder), asc(projectEpics.title)),
+    database.db
+      .select()
+      .from(projectCostSnapshots)
+      .where(eq(projectCostSnapshots.projectId, projectId))
+      .orderBy(asc(projectCostSnapshots.capturedOn)),
+    loadProjectScheduleFacts(database, [project]),
+  ]);
+  const signal = projectBudgetSignalFromParts({
+    project,
+    costs,
+    aiBillableCost: ai.aiBillableCost,
+    systemBillableCost: it.systemBillableCost,
+    raidRows,
+    today,
+  });
   const facts = schedule.get(project.id);
 
   return {
-    ...merged,
+    ...signal,
     workspaceId: project.workspaceId,
     aiFlatAc: ai.aiFlatAc,
     aiTokenAc: ai.aiTokenAc,
@@ -1163,8 +1363,6 @@ export async function getProjectBudgetSummary(
     aiNoteOnlyTokens: ai.aiNoteOnlyTokens,
     aiSystems: ai.aiSystems,
     itSystems: it.itSystems,
-    riskRag: risk.status,
-    riskReasons: risk.reasons,
     startDate: project.startDate,
     endDate: project.endDate,
     baselineFinishDate: facts?.baselineFinishDate ?? project.endDate ?? null,
