@@ -1,23 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from '@project-knowledge-hub/database';
 import type { ProjectHealth } from '@project-knowledge-hub/domain';
+import type { ProjectHealthSnapshot } from './project-overall-rag.js';
 
 vi.mock('./project-overall-rag.js', () => ({
-  listProjectHealth: vi.fn(),
+  listProjectHealthSnapshots: vi.fn(),
 }));
 
 vi.mock('./project-delivery.js', () => ({
-  listAssignedTasksForUser: vi.fn(async () => []),
-}));
-
-vi.mock('./project-budget.js', () => ({
-  getProjectBudgetSummary: vi.fn(async () => {
-    throw new Error('budget attention is not part of this test');
-  }),
+  countAssignedTasksByDue: vi.fn(async () => ({
+    overdue: 0,
+    dueSoon: 0,
+    later: 0,
+    none: 0,
+  })),
 }));
 
 import { getDashboardInsights } from './dashboard-insights.js';
-import { listProjectHealth } from './project-overall-rag.js';
+import { listProjectHealthSnapshots } from './project-overall-rag.js';
 
 function query(rows: unknown[]) {
   const builder: Record<string, unknown> = {};
@@ -52,8 +52,12 @@ const projectRow = {
 
 describe('dashboard project health', () => {
   beforeEach(() => {
-    vi.mocked(listProjectHealth).mockReset();
+    vi.mocked(listProjectHealthSnapshots).mockReset();
   });
+
+  function snapshot(health: ProjectHealth): ProjectHealthSnapshot {
+    return { health, bac: null, cpi: null, spi: null };
+  }
 
   it('counts the shared overall RAG, including a budget-only red', async () => {
     const health: ProjectHealth = {
@@ -63,7 +67,9 @@ describe('dashboard project health', () => {
       financial: 'red',
       riskReasons: [],
     };
-    vi.mocked(listProjectHealth).mockResolvedValue(new Map([['p-1', health]]));
+    vi.mocked(listProjectHealthSnapshots).mockResolvedValue(
+      new Map([['p-1', snapshot(health)]]),
+    );
     const insights = await getDashboardInsights(
       database([
         [{ id: 'ws-1' }],
@@ -73,7 +79,7 @@ describe('dashboard project health', () => {
       { userId: 'user-1', isSystemAdmin: true },
     );
 
-    expect(listProjectHealth).toHaveBeenCalledWith(
+    expect(listProjectHealthSnapshots).toHaveBeenCalledWith(
       expect.anything(),
       ['p-1'],
       expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
@@ -84,17 +90,17 @@ describe('dashboard project health', () => {
   });
 
   it('counts an amber timeline from the shared function', async () => {
-    vi.mocked(listProjectHealth).mockResolvedValue(
+    vi.mocked(listProjectHealthSnapshots).mockResolvedValue(
       new Map([
         [
           'p-1',
-          {
+          snapshot({
             overall: 'amber',
             timeline: 'amber',
             risk: 'green',
             financial: 'green',
             riskReasons: [],
-          },
+          }),
         ],
       ]),
     );
@@ -104,5 +110,43 @@ describe('dashboard project health', () => {
     );
 
     expect(insights.projectHealthRag).toEqual({ green: 0, amber: 1, red: 0 });
+  });
+
+  it('builds budget attention from the health snapshot', async () => {
+    vi.mocked(listProjectHealthSnapshots).mockResolvedValue(
+      new Map([
+        [
+          'p-1',
+          {
+            health: {
+              overall: 'red',
+              timeline: 'green',
+              risk: 'green',
+              financial: 'red',
+              riskReasons: [],
+            },
+            bac: 100,
+            cpi: 0.5,
+            spi: 0.8,
+          },
+        ],
+      ]),
+    );
+    const insights = await getDashboardInsights(
+      database([[{ id: 'ws-1' }], [projectRow], []]),
+      { userId: 'user-1', isSystemAdmin: true },
+    );
+
+    expect(insights.budgetAttention).toEqual([
+      {
+        projectId: 'p-1',
+        projectName: 'Budget red',
+        projectSlug: 'budget-red',
+        workspaceSlug: 'lab',
+        cpi: 0.5,
+        spi: 0.8,
+        financialRag: 'red',
+      },
+    ]);
   });
 });

@@ -253,6 +253,8 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-23
 
+* **My Work streaming (PRO-B-45)** — `/dashboard` streams the count strip, insight widgets, My tasks, and workspace section in separate Suspense boundaries. Each placeholder is an existing `.kh-ops-panel` with `.kh-ops-empty` and the shared loading string (`common.loading`). The settled layout, type, and controls are unchanged. Copy stays English, German, and Hungarian.
+
 * **Project URL slug (PRO-T-128)** — Manage → Edit adds a URL slug `Field` and `Input` (`.kh-input`, IBM Plex Sans). The hint, confirm copy, and former-URL list use `.kh-ops-menu-type`. The details slug is the same sans, not monospace. Confirm and Release are `Button`s. Copy is in English, German, and Hungarian.
 
 * **Key prefix change (PRO-T-127)** — The baseline edit dialog asks for confirmation before a prefix change. The warning, the list of knowledge records that mention the old keys, and the retired-prefix list use `.kh-ops-menu-type` (IBM Plex Sans, 13px, regular). Record titles are `kh-text-link`. The prefix value stays `.kh-ops-key-badge`. Release is a secondary `Button` for workspace admins. Copy is in English, German, and Hungarian.

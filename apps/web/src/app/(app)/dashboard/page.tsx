@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
+import { Suspense } from 'react';
 import { DashboardInsightWidgets } from '../../../components/DashboardInsightWidgets';
 import { DashboardMyTasks } from '../../../components/DashboardMyTasks';
 import { DashboardRecentList } from '../../../components/DashboardRecentList';
@@ -10,8 +11,13 @@ import {
   Page,
   PageHeader,
 } from '../../../components/ui';
-import { loadDashboardData } from '../../../lib/dashboard';
-import { requireSession } from '../../../lib/session';
+import {
+  loadDashboardDisplayPrefs,
+  loadDashboardInsights,
+  loadDashboardTasks,
+  loadDashboardWorkspaceSection,
+} from '../../../lib/dashboard';
+import { requireSession, type SessionPayload } from '../../../lib/session';
 import { workspaceTileClassName } from '../../../lib/workspace-colors';
 
 function roleLabel(
@@ -25,68 +31,76 @@ function roleLabel(
   return null;
 }
 
-export default async function DashboardPage() {
-  const session = await requireSession();
+function SectionFallback({ label }: { label: string }) {
+  return (
+    <section className="kh-ops-panel" aria-busy="true">
+      <p className="kh-ops-empty m-0">{label}</p>
+    </section>
+  );
+}
+
+async function DueThisWeekBadge() {
   const t = await getTranslations('dashboard');
-  const data = await loadDashboardData(session);
+  const insights = await loadDashboardInsights();
+  const dueSoon = insights.tasksByDue.dueSoon;
+  const overdue = insights.tasksByDue.overdue;
+  const queueTone = overdue > 0 ? 'danger' : dueSoon > 0 ? 'warn' : 'success';
+  return <Badge tone={queueTone}>{t('dueThisWeekBadge', { count: dueSoon })}</Badge>;
+}
+
+async function DashboardCounts() {
+  const t = await getTranslations('dashboard');
+  const [tasks, insights] = await Promise.all([
+    loadDashboardTasks(),
+    loadDashboardInsights(),
+  ]);
+  const openTasks = tasks.filter(
+    (task) => task.status !== 'done' && task.status !== 'cancelled',
+  );
+  return (
+    <OpsCountStrip
+      items={[
+        { label: t('countAssigned'), value: openTasks.length },
+        { label: t('countDueThisWeek'), value: insights.tasksByDue.dueSoon },
+        {
+          label: t('countBlocked'),
+          value: tasks.filter((task) => task.status === 'blocked').length,
+        },
+        { label: t('countOverdue'), value: insights.tasksByDue.overdue },
+        { label: t('countOpenRaid'), value: insights.openRaid.total },
+      ]}
+    />
+  );
+}
+
+async function DashboardInsightsSection() {
+  const [insights, prefs] = await Promise.all([
+    loadDashboardInsights(),
+    loadDashboardDisplayPrefs(),
+  ]);
+  return (
+    <DashboardInsightWidgets
+      insights={insights}
+      prefs={prefs.dashboardWidgets}
+    />
+  );
+}
+
+async function DashboardTasksSection() {
+  const tasks = await loadDashboardTasks();
+  return <DashboardMyTasks tasks={tasks} />;
+}
+
+async function DashboardWorkspacesSection({ session }: { session: SessionPayload }) {
+  const t = await getTranslations('dashboard');
+  const data = await loadDashboardWorkspaceSection(session);
   const searchHref = data.primaryWorkspaceId
     ? `/search?workspaceId=${encodeURIComponent(data.primaryWorkspaceId)}`
     : '/search';
-  const hiddenWorkspaceCount = Math.max(
-    0,
-    data.workspaceTotal - data.workspaces.length,
-  );
-  const openTasks = data.myTasks.filter(
-    (task) => task.status !== 'done' && task.status !== 'cancelled',
-  );
-  const blockedCount = data.myTasks.filter((task) => task.status === 'blocked').length;
-  const dueSoon = data.insights.tasksByDue.dueSoon;
-  const overdue = data.insights.tasksByDue.overdue;
-  const queueTone = overdue > 0 ? 'danger' : dueSoon > 0 ? 'warn' : 'success';
+  const hiddenWorkspaceCount = Math.max(0, data.workspaceTotal - data.workspaces.length);
 
   return (
-    <Page wide>
-      <PageHeader
-        eyebrow={t('eyebrow', { name: session.user.displayName })}
-        title={t('title')}
-        description={
-          <>
-            {t('subtitle')}{' '}
-            {t('signedInAs', { email: session.user.email })}
-            {session.user.isSystemAdmin ? ` ${t('systemAdmin')}` : ''}.
-          </>
-        }
-        actions={
-          <Badge tone={queueTone}>
-            {t('dueThisWeekBadge', { count: dueSoon })}
-          </Badge>
-        }
-      />
-
-      {session.memberships.length === 0 && !session.user.isSystemAdmin ? (
-        <section className="kh-ops-panel" aria-live="polite">
-          <h2 className="kh-ops-panel-title">{t('waitingWorkspaceTitle')}</h2>
-          <p className="kh-ops-empty m-0">{t('waitingWorkspaceBody')}</p>
-        </section>
-      ) : null}
-
-      <OpsCountStrip
-        items={[
-          { label: t('countAssigned'), value: openTasks.length },
-          { label: t('countDueThisWeek'), value: dueSoon },
-          { label: t('countBlocked'), value: blockedCount },
-          { label: t('countOverdue'), value: overdue },
-          { label: t('countOpenRaid'), value: data.insights.openRaid.total },
-        ]}
-      />
-
-      <DashboardInsightWidgets
-        insights={data.insights}
-        prefs={data.displayPrefs.dashboardWidgets}
-      />
-
-      <DashboardMyTasks tasks={data.myTasks} />
-
+    <>
       <section className="kh-ops-panel">
         <div className="kh-ops-panel-head">
           <h2 className="kh-ops-panel-title">{t('myWorkspaces')}</h2>
@@ -172,6 +186,57 @@ export default async function DashboardPage() {
       </section>
 
       <DashboardRecentList items={data.recent} />
+    </>
+  );
+}
+
+export default async function DashboardPage() {
+  const session = await requireSession();
+  const t = await getTranslations('dashboard');
+  const tCommon = await getTranslations('common');
+  const loading = tCommon('loading');
+
+  return (
+    <Page wide>
+      <PageHeader
+        eyebrow={t('eyebrow', { name: session.user.displayName })}
+        title={t('title')}
+        description={
+          <>
+            {t('subtitle')}{' '}
+            {t('signedInAs', { email: session.user.email })}
+            {session.user.isSystemAdmin ? ` ${t('systemAdmin')}` : ''}.
+          </>
+        }
+        actions={
+          <Suspense fallback={null}>
+            <DueThisWeekBadge />
+          </Suspense>
+        }
+      />
+
+      {session.memberships.length === 0 && !session.user.isSystemAdmin ? (
+        <section className="kh-ops-panel" aria-live="polite">
+          <h2 className="kh-ops-panel-title">{t('waitingWorkspaceTitle')}</h2>
+          <p className="kh-ops-empty m-0">{t('waitingWorkspaceBody')}</p>
+        </section>
+      ) : null}
+
+      <Suspense fallback={<SectionFallback label={loading} />}>
+        <DashboardCounts />
+      </Suspense>
+
+      <Suspense fallback={<SectionFallback label={loading} />}>
+        <DashboardInsightsSection />
+      </Suspense>
+
+      <Suspense fallback={<SectionFallback label={loading} />}>
+        <DashboardTasksSection />
+      </Suspense>
+
+      <Suspense fallback={<SectionFallback label={loading} />}>
+        <DashboardWorkspacesSection session={session} />
+      </Suspense>
     </Page>
   );
 }

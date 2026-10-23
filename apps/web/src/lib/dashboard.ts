@@ -1,9 +1,15 @@
+import { cache } from 'react';
 import type { DisplayPrefs } from '@project-knowledge-hub/domain';
 import {
   DEFAULT_DISPLAY_PREFS,
   mergeDisplayPrefs,
 } from '@project-knowledge-hub/domain';
-import { apiFetch, type SessionPayload } from './session';
+import {
+  apiFetch,
+  fetchWorkspaceList,
+  type SessionPayload,
+  type WorkspaceListRow,
+} from './session';
 
 export const DASHBOARD_WORKSPACE_TILE_LIMIT = 6;
 export const DASHBOARD_RECENT_LIMIT = 5;
@@ -84,16 +90,6 @@ export type DashboardAssignedTask = {
   updatedAt: string;
 };
 
-export type DashboardData = {
-  workspaces: DashboardWorkspace[];
-  workspaceTotal: number;
-  recent: DashboardRecentItem[];
-  myTasks: DashboardAssignedTask[];
-  primaryWorkspaceId: string | null;
-  displayPrefs: DisplayPrefs;
-  insights: DashboardInsights;
-};
-
 const EMPTY_INSIGHTS: DashboardInsights = {
   tasksByDue: { overdue: 0, dueSoon: 0, later: 0, none: 0 },
   projectHealthRag: { green: 0, amber: 0, red: 0 },
@@ -105,27 +101,6 @@ const EMPTY_INSIGHTS: DashboardInsights = {
     total: 0,
   },
   budgetAttention: [],
-};
-
-type WorkspaceRow = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  color: string | null;
-  updatedAt: string;
-};
-
-type CountedEntity = {
-  id: string;
-  name?: string;
-  title?: string;
-  slug: string;
-  updatedAt: string;
-  status?: string;
-  lifecycleStatus?: string;
-  keyPrefix?: string | null;
-  humanKey?: string | null;
 };
 
 function membershipRole(
@@ -141,127 +116,115 @@ function membershipRole(
   return session.user.isSystemAdmin ? 'system_admin' : null;
 }
 
-async function loadWorkspaceBundle(workspace: WorkspaceRow) {
-  const [projectsRes, systemsRes, recordsRes] = await Promise.all([
-    apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`),
-    apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`),
-    apiFetch(`/api/v1/knowledge-records?workspaceId=${workspace.id}`),
-  ]);
+export const loadDashboardTasks = cache(async (): Promise<DashboardAssignedTask[]> => {
+  const response = await apiFetch('/api/v1/me/tasks');
+  if (!response.ok) return [];
+  const body = (await response.json()) as { tasks?: DashboardAssignedTask[] };
+  return body.tasks ?? [];
+});
 
-  const projects = projectsRes.ok
-    ? ((await projectsRes.json()) as { projects: CountedEntity[] }).projects
-    : [];
-  const systems = systemsRes.ok
-    ? ((await systemsRes.json()) as { systems: CountedEntity[] }).systems
-    : [];
-  const records = recordsRes.ok
-    ? ((await recordsRes.json()) as { knowledgeRecords: CountedEntity[] })
-        .knowledgeRecords
-    : [];
+export const loadDashboardInsights = cache(async (): Promise<DashboardInsights> => {
+  const response = await apiFetch('/api/v1/me/dashboard-insights');
+  if (!response.ok) return EMPTY_INSIGHTS;
+  const body = (await response.json()) as { insights?: DashboardInsights };
+  return body.insights ?? EMPTY_INSIGHTS;
+});
 
-  return { projects, systems, records };
+export const loadDashboardDisplayPrefs = cache(async (): Promise<DisplayPrefs> => {
+  const response = await apiFetch('/api/v1/me');
+  if (!response.ok) return DEFAULT_DISPLAY_PREFS;
+  const body = (await response.json()) as { user?: { displayPrefs?: DisplayPrefs } };
+  return mergeDisplayPrefs(body.user?.displayPrefs);
+});
+
+type WorkspaceCounts = {
+  workspaceId: string;
+  projectCount: number;
+  systemCount: number;
+  recordCount: number;
+};
+
+type RecentApiItem = {
+  kind: DashboardRecentItem['kind'];
+  id: string;
+  humanKey: string | null;
+  title: string;
+  slug: string;
+  workspaceName: string;
+  workspaceSlug: string;
+  status: string;
+  updatedAt: string;
+};
+
+function recentHref(item: RecentApiItem): string {
+  if (item.kind === 'project') {
+    return `/workspaces/${item.workspaceSlug}/projects/${item.slug}`;
+  }
+  if (item.kind === 'system') {
+    return `/workspaces/${item.workspaceSlug}/systems/${item.slug}`;
+  }
+  return `/workspaces/${item.workspaceSlug}/records/${item.slug}`;
 }
 
-export async function loadDashboardData(
+export const loadDashboardWorkspaceSection = cache(async (
   session: SessionPayload,
-): Promise<DashboardData> {
-  const response = await apiFetch('/api/v1/workspaces');
-  const workspaces = response.ok
-    ? ((await response.json()) as { workspaces: WorkspaceRow[] }).workspaces
-    : [];
-
+): Promise<{
+  workspaces: DashboardWorkspace[];
+  workspaceTotal: number;
+  recent: DashboardRecentItem[];
+  primaryWorkspaceId: string | null;
+}> => {
+  const workspaces = await fetchWorkspaceList();
   const sorted = [...workspaces].sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   );
   const tileWorkspaces = sorted.slice(0, DASHBOARD_WORKSPACE_TILE_LIMIT);
-
-  const [bundles, tasksRes, meRes, insightsRes] = await Promise.all([
-    Promise.all(
-      tileWorkspaces.map(async (workspace) => {
-        const bundle = await loadWorkspaceBundle(workspace);
-        return { workspace, ...bundle };
-      }),
-    ),
-    apiFetch('/api/v1/me/tasks'),
-    apiFetch('/api/v1/me'),
-    apiFetch('/api/v1/me/dashboard-insights'),
+  const [countsRes, recentRes] = await Promise.all([
+    apiFetch('/api/v1/me/workspace-counts'),
+    apiFetch(`/api/v1/me/recent?limit=${DASHBOARD_RECENT_LIMIT}`),
   ]);
-
-  const dashboardWorkspaces: DashboardWorkspace[] = bundles.map(
-    ({ workspace, projects, systems, records }) => ({
-      id: workspace.id,
-      name: workspace.name,
-      slug: workspace.slug,
-      description: workspace.description,
-      color: workspace.color ?? null,
-      updatedAt: workspace.updatedAt,
-      role: membershipRole(session, workspace.id),
-      projectCount: projects.length,
-      systemCount: systems.length,
-      recordCount: records.length,
-    }),
-  );
-
-  const recent: DashboardRecentItem[] = bundles
-    .flatMap(({ workspace, projects, systems, records }) => [
-      ...projects.map((project) => ({
-        kind: 'project' as const,
-        id: project.id,
-        humanKey: project.keyPrefix?.trim() ? project.keyPrefix : null,
-        title: project.name ?? project.slug,
-        href: `/workspaces/${workspace.slug}/projects/${project.slug}`,
-        workspaceName: workspace.name,
-        status: project.status ?? '',
-        updatedAt: project.updatedAt,
-      })),
-      ...systems.map((system) => ({
-        kind: 'system' as const,
-        id: system.id,
-        humanKey: null,
-        title: system.name ?? system.slug,
-        href: `/workspaces/${workspace.slug}/systems/${system.slug}`,
-        workspaceName: workspace.name,
-        status: system.status ?? '',
-        updatedAt: system.updatedAt,
-      })),
-      ...records.map((record) => ({
-        kind: 'record' as const,
-        id: record.id,
-        humanKey: record.humanKey?.trim() ? record.humanKey : null,
-        title: record.title ?? record.slug,
-        href: `/workspaces/${workspace.slug}/records/${record.slug}`,
-        workspaceName: workspace.name,
-        status: record.lifecycleStatus ?? '',
-        updatedAt: record.updatedAt,
-      })),
-    ])
-    .sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    )
-    .slice(0, DASHBOARD_RECENT_LIMIT);
-
-  const myTasks = tasksRes.ok
-    ? ((await tasksRes.json()) as { tasks: DashboardAssignedTask[] }).tasks
+  const counts = countsRes.ok
+    ? ((await countsRes.json()) as { counts?: WorkspaceCounts[] }).counts ?? []
+    : [];
+  const countById = new Map(counts.map((row) => [row.workspaceId, row]));
+  const recentRows = recentRes.ok
+    ? ((await recentRes.json()) as { recent?: RecentApiItem[] }).recent ?? []
     : [];
 
-  const displayPrefs = meRes.ok
-    ? mergeDisplayPrefs(
-        ((await meRes.json()) as { user?: { displayPrefs?: DisplayPrefs } })
-          .user?.displayPrefs,
-      )
-    : DEFAULT_DISPLAY_PREFS;
-
-  const insights = insightsRes.ok
-    ? ((await insightsRes.json()) as { insights: DashboardInsights }).insights
-    : EMPTY_INSIGHTS;
-
   return {
-    workspaces: dashboardWorkspaces,
+    workspaces: tileWorkspaces.map((workspace) =>
+      toDashboardWorkspace(session, workspace, countById.get(workspace.id)),
+    ),
     workspaceTotal: workspaces.length,
-    recent,
-    myTasks,
+    recent: recentRows.map((item) => ({
+      kind: item.kind,
+      id: item.id,
+      humanKey: item.humanKey,
+      title: item.title,
+      href: recentHref(item),
+      workspaceName: item.workspaceName,
+      status: item.status,
+      updatedAt: item.updatedAt,
+    })),
     primaryWorkspaceId: tileWorkspaces[0]?.id ?? null,
-    displayPrefs,
-    insights,
+  };
+});
+
+function toDashboardWorkspace(
+  session: SessionPayload,
+  workspace: WorkspaceListRow,
+  counts: WorkspaceCounts | undefined,
+): DashboardWorkspace {
+  return {
+    id: workspace.id,
+    name: workspace.name,
+    slug: workspace.slug,
+    description: workspace.description,
+    color: workspace.color ?? null,
+    updatedAt: workspace.updatedAt,
+    role: membershipRole(session, workspace.id),
+    projectCount: counts?.projectCount ?? 0,
+    systemCount: counts?.systemCount ?? 0,
+    recordCount: counts?.recordCount ?? 0,
   };
 }

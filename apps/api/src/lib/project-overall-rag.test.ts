@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from '@project-knowledge-hub/database';
 
-vi.mock('./project-budget.js', () => ({
-  getProjectBudgetSummary: vi.fn(),
+vi.mock('./project-budget-signals.js', () => ({
+  listProjectBudgetSignals: vi.fn(),
 }));
 
-import { getProjectBudgetSummary } from './project-budget.js';
+import type { ProjectBudgetSignal } from './project-budget.js';
+import { listProjectBudgetSignals } from './project-budget-signals.js';
 import { listProjectHealth } from './project-overall-rag.js';
 
 const TODAY = '2026-10-17';
@@ -52,17 +53,23 @@ function testDatabase(input: { milestones: MilestoneRow[]; tasks: TaskRow[] }) {
   };
 }
 
-const greenBudget = {
-  riskRag: 'green' as const,
-  financialRag: 'green' as const,
-};
+const greenSignal = {
+  riskRag: 'green',
+  financialRag: 'green',
+  riskReasons: [],
+  bac: null,
+  cpi: null,
+  spi: null,
+} as ProjectBudgetSignal;
 
 describe('listProjectHealth', () => {
   beforeEach(() => {
-    vi.mocked(getProjectBudgetSummary).mockReset();
-    vi.mocked(getProjectBudgetSummary).mockResolvedValue(
-      greenBudget as Awaited<ReturnType<typeof getProjectBudgetSummary>>,
-    );
+    vi.mocked(listProjectBudgetSignals).mockReset();
+    vi.mocked(listProjectBudgetSignals).mockImplementation(async (_database, projectIds) => {
+      const signals = new Map<string, ProjectBudgetSignal>();
+      for (const projectId of projectIds) signals.set(projectId, greenSignal);
+      return signals;
+    });
   });
 
   it('marks a task due in 5 days amber for every caller of this function', async () => {
@@ -74,7 +81,12 @@ describe('listProjectHealth', () => {
     const health = await listProjectHealth(database, ['p-1', 'p-2'], TODAY);
 
     expect(selects).toEqual(['milestones', 'tasks']);
-    expect(getProjectBudgetSummary).toHaveBeenCalledTimes(2);
+    expect(listProjectBudgetSignals).toHaveBeenCalledTimes(1);
+    expect(listProjectBudgetSignals).toHaveBeenCalledWith(
+      database,
+      ['p-1', 'p-2'],
+      TODAY,
+    );
     expect(health.get('p-1')).toEqual({
       overall: 'amber',
       timeline: 'amber',
@@ -86,10 +98,9 @@ describe('listProjectHealth', () => {
   });
 
   it('is red when only the budget is red', async () => {
-    vi.mocked(getProjectBudgetSummary).mockResolvedValue({
-      riskRag: 'green',
-      financialRag: 'red',
-    } as Awaited<ReturnType<typeof getProjectBudgetSummary>>);
+    vi.mocked(listProjectBudgetSignals).mockResolvedValue(new Map([
+      ['p-1', { ...greenSignal, financialRag: 'red', bac: 100 }],
+    ]));
     const { database } = testDatabase({
       milestones: [],
       tasks: [{ projectId: 'p-1', status: 'todo', dueDate: '2026-12-01' }],
@@ -107,7 +118,7 @@ describe('listProjectHealth', () => {
   });
 
   it('falls back to timeline only when the budget summary fails', async () => {
-    vi.mocked(getProjectBudgetSummary).mockRejectedValue(new Error('budget down'));
+    vi.mocked(listProjectBudgetSignals).mockRejectedValue(new Error('budget down'));
     const { database } = testDatabase({
       milestones: [{ projectId: 'p-1', status: 'planned', targetDate: '2026-10-20' }],
       tasks: [{ projectId: 'p-1', status: 'done', dueDate: '2026-10-01' }],
@@ -129,6 +140,6 @@ describe('listProjectHealth', () => {
     const health = await listProjectHealth(database, [], TODAY);
     expect(health.size).toBe(0);
     expect(selects).toEqual([]);
-    expect(getProjectBudgetSummary).not.toHaveBeenCalled();
+    expect(listProjectBudgetSignals).not.toHaveBeenCalled();
   });
 });
