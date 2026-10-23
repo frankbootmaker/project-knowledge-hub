@@ -272,6 +272,38 @@ export const projectKeyPrefixHistory = pgTable(
   ],
 );
 
+/**
+ * Slugs this project no longer uses in URLs. Unreleased rows redirect to the
+ * current slug and block reuse in the workspace until a workspace admin
+ * releases them.
+ */
+export const projectSlugHistory = pgTable(
+  'project_slug_history',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    slug: text('slug').notNull(),
+    retiredAt: timestamp('retired_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    retiredBy: uuid('retired_by').references(() => users.id, { onDelete: 'set null' }),
+    releasedAt: timestamp('released_at', { withTimezone: true, mode: 'date' }),
+    releasedBy: uuid('released_by').references(() => users.id, { onDelete: 'set null' }),
+  },
+  (table) => [
+    uniqueIndex('project_slug_history_active_uidx')
+      .on(table.workspaceId, table.slug)
+      .where(sql`${table.releasedAt} IS NULL`),
+    index('project_slug_history_project_idx').on(table.projectId),
+    index('project_slug_history_slug_idx').on(table.slug),
+  ],
+);
+
 /** Dates the project calendar never treats as working days. */
 export const projectNonWorkingDays = pgTable(
   'project_non_working_days',

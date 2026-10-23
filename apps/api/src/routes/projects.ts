@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { and, eq, isNull, ne } from 'drizzle-orm';
 import { z } from 'zod';
-import { slugify } from '@project-knowledge-hub/auth';
 import { projects, syncScheduleSlipRisks, workspaces } from '@project-knowledge-hub/database';
 import {
   AppError,
@@ -55,6 +54,13 @@ import {
   retireProjectKeyPrefix,
 } from '../lib/project-key-prefix-history.js';
 import {
+  assertUniqueProjectSlug,
+  listProjectSlugHistory,
+  releaseProjectSlug,
+  resolveProjectSlug,
+  retireProjectSlug,
+} from '../lib/project-slugs.js';
+import {
   emptyProjectHealth,
   listProjectHealth,
 } from '../lib/project-overall-rag.js';
@@ -94,6 +100,7 @@ const createProjectSchema = z.object({
 
 const updateProjectSchema = z.object({
   name: z.string().min(1).max(160).optional(),
+  slug: z.string().min(1).max(64).optional(),
   summary: z.string().max(500).nullable().optional(),
   description: z.string().max(10000).nullable().optional(),
   status: projectStatusSchema.optional(),
@@ -303,28 +310,10 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       });
     }
 
-    const slug = body.slug ? slugify(body.slug) : slugify(body.name);
-    if (!slug) {
-      throw new AppError({
-        code: 'VALIDATION_ERROR',
-        message: 'Project slug is invalid',
-        statusCode: 400,
-      });
-    }
-
-    const [existing] = await app.database.db
-      .select()
-      .from(projects)
-      .where(and(eq(projects.workspaceId, body.workspaceId), eq(projects.slug, slug)))
-      .limit(1);
-
-    if (existing) {
-      throw new AppError({
-        code: 'PROJECT_SLUG_CONFLICT',
-        message: 'A project with this slug already exists in the workspace',
-        statusCode: 409,
-      });
-    }
+    const slug = await assertUniqueProjectSlug(app.database, {
+      workspaceId: body.workspaceId,
+      slug: body.slug ?? body.name,
+    });
 
     assertDateRange({ start: body.startDate, end: body.endDate, startField: 'startDate', endField: 'endDate' });
 
@@ -611,7 +600,17 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
             checkCrossWorkspace: true,
           })).keyPrefix;
 
+    const nextSlug =
+      body.slug === undefined
+        ? project.slug
+        : await assertUniqueProjectSlug(app.database, {
+            workspaceId: project.workspaceId,
+            slug: body.slug,
+            excludeProjectId: project.id,
+          });
+
     const previousKeyPrefix = project.keyPrefix;
+    const previousSlug = project.slug;
     const [updated] = await app.database.db.transaction(async (tx) => {
       await retireProjectKeyPrefix(tx, {
         projectId: project.id,
@@ -620,10 +619,18 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         nextPrefix: nextKeyPrefix,
         actorUserId: principal.userId,
       });
+      await retireProjectSlug(tx, {
+        projectId: project.id,
+        workspaceId: project.workspaceId,
+        previousSlug,
+        nextSlug,
+        actorUserId: principal.userId,
+      });
       return tx
         .update(projects)
         .set({
         name: body.name ?? project.name,
+        slug: nextSlug,
         summary: body.summary === undefined ? project.summary : body.summary,
         description: body.description === undefined ? project.description : body.description,
         status:
@@ -760,6 +767,18 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
           previousKeyPrefix: previousKeyPrefix.toUpperCase(),
           keyPrefix: nextKeyPrefix,
         },
+        ipAddress: request.ip,
+      });
+    }
+    if (previousSlug !== nextSlug) {
+      await writeAuditEvent(app.database, {
+        organizationId: workspace?.organizationId ?? null,
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'project.slug_changed',
+        entityType: 'project',
+        entityId: updated.id,
+        metadata: { previousSlug, slug: nextSlug },
         ipAddress: request.ip,
       });
     }
@@ -928,6 +947,74 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
         ipAddress: request.ip,
       });
       return { keyPrefix: released.keyPrefix };
+    },
+  );
+
+  app.get('/api/v1/projects/resolve-slug', async (request) => {
+    const principal = requireAuthenticated(request);
+    const query = z
+      .object({
+        workspaceId: z.string().uuid(),
+        slug: z.string().min(1).max(96),
+      })
+      .parse(request.query);
+    requireWorkspaceView(principal, query.workspaceId);
+    const resolved = await resolveProjectSlug(app.database, query);
+    return {
+      project: resolved.project,
+      redirect: resolved.redirect,
+    };
+  });
+
+  app.get('/api/v1/projects/:projectId/slug-history', async (request) => {
+    const principal = requireAuthenticated(request);
+    const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
+    const project = await loadProjectOrThrow(app, params.projectId);
+    requireWorkspaceView(principal, project.workspaceId);
+    const history = await listProjectSlugHistory(app.database, project.id);
+    return {
+      slugs: history.map((row) => ({
+        slug: row.slug,
+        retiredAt: row.retiredAt.toISOString(),
+        releasedAt: row.releasedAt?.toISOString() ?? null,
+      })),
+    };
+  });
+
+  app.post(
+    '/api/v1/projects/:projectId/slug-history/:slug/release',
+    async (request) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({
+          projectId: z.string().uuid(),
+          slug: z.string().min(1).max(96),
+        })
+        .parse(request.params);
+      const project = await loadProjectOrThrow(app, params.projectId);
+      requireWorkspaceAdmin(principal, project.workspaceId);
+      const released = await releaseProjectSlug(app.database, {
+        projectId: project.id,
+        slug: params.slug,
+        actorUserId: principal.userId,
+      });
+      const [workspace] = await app.database.db
+        .select({ organizationId: workspaces.organizationId })
+        .from(workspaces)
+        .where(eq(workspaces.id, project.workspaceId))
+        .limit(1);
+      await writeAuditEvent(app.database, {
+        organizationId: workspace?.organizationId ?? null,
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'project.slug_released',
+        entityType: 'project',
+        entityId: project.id,
+        metadata: { slug: released.slug },
+        ipAddress: request.ip,
+      });
+      return { slug: released.slug };
     },
   );
 

@@ -212,6 +212,7 @@ import {
   retireProjectKeyPrefix,
   sqlProjectOwnsKeyPrefix,
 } from './project-key-prefix-history.js';
+import { sqlProjectMatchesSlug } from './project-slugs.js';
 import {
   getKnowledgeRecordProjectContext,
   listDeliveryDocumentLinksForProject,
@@ -1201,7 +1202,7 @@ async function resolveMcpProject(
       .from(projects)
       .where(
         and(
-          eq(projects.slug, projectSlug),
+          sqlProjectMatchesSlug(projectSlug),
           inArray(projects.workspaceId, allowedIds),
           isNull(projects.archivedAt),
         ),
@@ -1234,7 +1235,7 @@ async function resolveMcpProject(
       .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
       .where(
         and(
-          eq(projects.slug, projectSlug),
+          sqlProjectMatchesSlug(projectSlug),
           eq(workspaces.organizationId, client.organizationId),
           isNull(projects.archivedAt),
         ),

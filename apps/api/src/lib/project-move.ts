@@ -15,6 +15,7 @@ import {
   projectChangeItems,
   projectEpics,
   projectKeyPrefixHistory,
+  projectSlugHistory,
   projectInitialStakeholders,
   projectItemMediaLinks,
   projectMilestones,
@@ -264,18 +265,45 @@ async function findConflicts(
 ): Promise<ProjectMoveConflict[]> {
   const conflicts: ProjectMoveConflict[] = [];
 
-  const [slugTaken] = await database.db
-    .select({ id: projects.id, name: projects.name, slug: projects.slug })
-    .from(projects)
-    .where(and(eq(projects.workspaceId, targetWorkspaceId), eq(projects.slug, project.slug)))
-    .limit(1);
-  if (slugTaken) {
-    conflicts.push({
-      type: 'slug',
-      entity: 'project',
-      name: project.name,
-      slug: project.slug,
-    });
+  const retiredSlugs = await database.db
+    .select({ slug: projectSlugHistory.slug })
+    .from(projectSlugHistory)
+    .where(
+      and(
+        eq(projectSlugHistory.projectId, project.id),
+        isNull(projectSlugHistory.releasedAt),
+      ),
+    );
+  const movingSlugs = [
+    ...new Set([project.slug, ...retiredSlugs.map((row) => row.slug)]),
+  ];
+  for (const slug of movingSlugs) {
+    const [slugTaken] = await database.db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.workspaceId, targetWorkspaceId), eq(projects.slug, slug)))
+      .limit(1);
+    const [slugReserved] = slugTaken
+      ? [slugTaken]
+      : await database.db
+          .select({ id: projectSlugHistory.id })
+          .from(projectSlugHistory)
+          .where(
+            and(
+              eq(projectSlugHistory.workspaceId, targetWorkspaceId),
+              eq(projectSlugHistory.slug, slug),
+              isNull(projectSlugHistory.releasedAt),
+            ),
+          )
+          .limit(1);
+    if (slugTaken || slugReserved) {
+      conflicts.push({
+        type: 'slug',
+        entity: 'project',
+        name: project.name,
+        slug,
+      });
+    }
   }
 
   const retiredPrefixes = await database.db
@@ -894,6 +922,10 @@ export async function moveProjectToWorkspace(
         .update(projectKeyPrefixHistory)
         .set({ workspaceId: targetWorkspace.id })
         .where(eq(projectKeyPrefixHistory.projectId, project.id));
+      await tx
+        .update(projectSlugHistory)
+        .set({ workspaceId: targetWorkspace.id })
+        .where(eq(projectSlugHistory.projectId, project.id));
       if (systemIds.length > 0) {
         await tx
           .update(systems)

@@ -207,7 +207,7 @@ export function buildProjectMetadata(): ProjectAgentMetadata {
           name: 'keyPrefix',
           required: false,
           description:
-            'Issue key prefix, AAA or AA0. Omit to auto-assign. Taken includes a retired prefix reserved in the workspace. If the value is taken, the error includes a suggested available prefix.',
+            'Issue key prefix, AAA or AA0. Omit to auto-assign. Taken includes a retired prefix reserved in the workspace. If the value is taken, the error includes a suggested available prefix. The URL slug is allocated from the name and skips reserved former slugs.',
         },
         {
           name: 'currency',
@@ -247,6 +247,12 @@ export function buildProjectMetadata(): ProjectAgentMetadata {
       fields: [
         { name: 'projectId', required: true, description: 'Project UUID.' },
         { name: 'name', required: false, description: 'New name.' },
+        {
+          name: 'slug',
+          required: false,
+          description:
+            'New URL slug, 1–64 characters. Unique in the workspace, including former slugs reserved by another project. The previous slug redirects to this one until a workspace admin releases it. url in the result uses the new slug.',
+        },
         { name: 'description', required: false, description: 'New description, or null to clear.' },
         {
           name: 'methodology',
@@ -268,6 +274,7 @@ export function buildProjectMetadata(): ProjectAgentMetadata {
         'Idea projects stay idea until a human promotes them.',
         'Each update writes an audit entry.',
         'Renaming into a similar existing name uses the same confirmDuplicateName flag as create.',
+        'Changing slug writes project.slug_changed. Old /projects/<slug>/ URLs redirect to the current slug. The same former slug in another workspace is ambiguous unless workspaceSlug is set.',
       ],
     },
   };

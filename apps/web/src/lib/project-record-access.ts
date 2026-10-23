@@ -1,8 +1,10 @@
+import { headers } from 'next/headers';
 import { permanentRedirect, notFound, redirect } from 'next/navigation';
 import { isUuid, parseHumanKey } from '@project-knowledge-hub/domain';
 import { apiFetch, type SessionPayload } from './session';
 import {
   replaceIssueKeyQuery,
+  replaceProjectSlugInPath,
   type IssueKeyQueryParam,
 } from './project-url-redirect';
 
@@ -53,9 +55,44 @@ export async function requireWorkspaceBySlug(slug: string): Promise<RecordWorksp
   return workspace;
 }
 
+/**
+ * A former project slug redirects to the current one and keeps the rest of
+ * the path and query. Next.js permanentRedirect is 308.
+ */
+export async function redirectRetiredProjectSlug(input: {
+  workspaceId: string;
+  workspaceSlug: string;
+  requestedSlug: string;
+}): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/projects/resolve-slug?workspaceId=${encodeURIComponent(input.workspaceId)}&slug=${encodeURIComponent(input.requestedSlug)}`,
+  );
+  if (!response.ok) return;
+  const payload = (await response.json()) as {
+    redirect?: boolean;
+    project?: { slug: string };
+  };
+  if (!payload.redirect || !payload.project?.slug) return;
+  if (payload.project.slug === input.requestedSlug) return;
+  const headerStore = await headers();
+  const pathname =
+    headerStore.get('x-kh-pathname')
+    ?? `/workspaces/${input.workspaceSlug}/projects/${input.requestedSlug}`;
+  const search = headerStore.get('x-kh-search') ?? '';
+  const nextPath = replaceProjectSlugInPath(
+    pathname,
+    input.workspaceSlug,
+    input.requestedSlug,
+    payload.project.slug,
+  );
+  if (!nextPath) return;
+  permanentRedirect(`${nextPath}${search}`);
+}
+
 export async function requireProjectBySlug(
   workspaceId: string,
   projectSlug: string,
+  workspaceSlug: string,
 ): Promise<RecordProject> {
   const response = await apiFetch(
     `/api/v1/projects?workspaceId=${workspaceId}&includeArchived=true`,
@@ -66,6 +103,11 @@ export async function requireProjectBySlug(
   const payload = (await response.json()) as { projects: RecordProject[] };
   const summary = payload.projects.find((item) => item.slug === projectSlug);
   if (!summary) {
+    await redirectRetiredProjectSlug({
+      workspaceId,
+      workspaceSlug,
+      requestedSlug: projectSlug,
+    });
     notFound();
   }
   const detailResponse = await apiFetch(`/api/v1/projects/${summary.id}`);

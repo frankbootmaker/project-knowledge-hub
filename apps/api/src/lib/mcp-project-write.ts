@@ -25,6 +25,11 @@ import {
   allocateUniqueKeyPrefix,
   assertUniqueKeyPrefix,
 } from './project-issue-keys.js';
+import {
+  assertUniqueProjectSlug,
+  retireProjectSlug,
+  workspaceProjectSlugStatus,
+} from './project-slugs.js';
 
 export type McpCreateProjectInput = {
   workspaceId: string;
@@ -49,6 +54,7 @@ export type McpUpdateProjectInput = {
   scheduleSlipRiskEnabled?: boolean;
   scheduleSlipThresholdDays?: number;
   scheduleSlipItemTypes?: ScheduleSlipItemType[];
+  slug?: string;
 };
 
 type WorkspaceRow = {
@@ -260,12 +266,11 @@ async function uniqueSlug(
   }
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const slug = attempt === 0 ? base : `${base}-${attempt + 1}`.slice(0, 64);
-    const [existing] = await app.database.db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.workspaceId, workspaceId), eq(projects.slug, slug)))
-      .limit(1);
-    if (!existing) return slug;
+    const status = await workspaceProjectSlugStatus(app.database.db, {
+      workspaceId,
+      slug,
+    });
+    if (status === 'free') return slug;
   }
   throw new AppError({
     code: 'PROJECT_SLUG_CONFLICT',
@@ -511,21 +516,38 @@ export async function updateProjectViaMcp(
   const slipTypes = input.scheduleSlipItemTypes === undefined
     ? project.scheduleSlipItemTypes
     : normalizeScheduleSlipItemTypes(input.scheduleSlipItemTypes);
-  const [updated] = await app.database.db
-    .update(projects)
-    .set({
-      name: nextName,
-      description,
-      methodology,
-      currency,
-      status: nextStatus,
-      scheduleSlipRiskEnabled: slipEnabled,
-      scheduleSlipThresholdDays: slipThreshold,
-      scheduleSlipItemTypes: slipTypes,
-      updatedAt: new Date(),
-    })
-    .where(eq(projects.id, project.id))
-    .returning();
+  const nextSlug = input.slug === undefined
+    ? project.slug
+    : await assertUniqueProjectSlug(app.database, {
+        workspaceId: workspace.id,
+        slug: input.slug,
+        excludeProjectId: project.id,
+      });
+  const [updated] = await app.database.db.transaction(async (tx) => {
+    await retireProjectSlug(tx, {
+      projectId: project.id,
+      workspaceId: project.workspaceId,
+      previousSlug: project.slug,
+      nextSlug,
+      actorUserId: actingUserId,
+    });
+    return tx
+      .update(projects)
+      .set({
+        name: nextName,
+        slug: nextSlug,
+        description,
+        methodology,
+        currency,
+        status: nextStatus,
+        scheduleSlipRiskEnabled: slipEnabled,
+        scheduleSlipThresholdDays: slipThreshold,
+        scheduleSlipItemTypes: slipTypes,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, project.id))
+      .returning();
+  });
   if (!updated) {
     throw new AppError({
       code: 'PROJECT_NOT_FOUND',
@@ -547,6 +569,7 @@ export async function updateProjectViaMcp(
         ? { oauthGrantId: provenance.createdByOauthGrantId }
         : { apiClientId: provenance.createdByApiClientId }),
       name: nextName,
+      slug: nextSlug,
       status: nextStatus,
       methodology,
       currency,
@@ -554,6 +577,23 @@ export async function updateProjectViaMcp(
     },
     ipAddress: ipAddress ?? null,
   });
+  if (project.slug !== nextSlug) {
+    await writeAuditEvent(app.database, {
+      organizationId: workspace.organizationId,
+      actorType: provenance.actorType,
+      actorId: provenance.actorId,
+      action: 'project.slug_changed',
+      entityType: 'project',
+      entityId: project.id,
+      metadata: {
+        via: 'mcp',
+        actingUserId,
+        previousSlug: project.slug,
+        slug: nextSlug,
+      },
+      ipAddress: ipAddress ?? null,
+    });
+  }
   if (
     input.scheduleSlipRiskEnabled !== undefined
     || input.scheduleSlipThresholdDays !== undefined

@@ -40,7 +40,10 @@ import {
 } from '../../../../../../components/ProjectStageBadge';
 import type { ProjectSectionStatuses } from '../../../../../../lib/project-sections';
 import { computeChangeRag, formatRiskReasons } from '../../../../../../lib/project-health';
-import { redirectHumanKeyQuery } from '../../../../../../lib/project-record-access';
+import {
+  redirectHumanKeyQuery,
+  redirectRetiredProjectSlug,
+} from '../../../../../../lib/project-record-access';
 import { apiFetch, requireSession } from '../../../../../../lib/session';
 
 function ragBadgeTone(
@@ -202,6 +205,11 @@ export default async function ProjectDetailPage({
   const projectsPayload = (await projectsResponse.json()) as { projects: Project[] };
   const projectSummary = projectsPayload.projects.find((item) => item.slug === projectSlug);
   if (!projectSummary) {
+    await redirectRetiredProjectSlug({
+      workspaceId: workspace.id,
+      workspaceSlug: slug,
+      requestedSlug: projectSlug,
+    });
     notFound();
   }
 

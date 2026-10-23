@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Project slug history (PRO-T-128):** A project maintainer can rename the URL slug from the project menu, the PATCH project API, and MCP `update_project`. The previous slug redirects (308) to the current slug, including nested `/records/...` paths, and stays reserved in the workspace until a workspace admin releases it. `get_project` accepts a previous slug; `url` uses the current one. The same slug in another workspace stays ambiguous unless the caller passes the workspace. A rename writes `project.slug_changed`. Migration `0085_project_slug_history`.
+
 * **Project key prefix history (PRO-T-127):** Changing a project key prefix keeps the previous prefix resolvable in the API and MCP and reserves it in the workspace. Another project cannot reuse it until a workspace admin releases it. Displayed keys still use the current prefix. The same prefix in another workspace, including a retired one, stays ambiguous when the caller does not scope the workspace (PRO-T-3). A prefix change writes `project.key_prefix_changed`. The baseline dialog confirms the change and lists knowledge records whose text mentions the old keys. Human keys in `?task=`, `?raid=`, and `?change=` redirect to the entity id. Migration `0084_project_key_prefix_history`.
 
 ### Fixed

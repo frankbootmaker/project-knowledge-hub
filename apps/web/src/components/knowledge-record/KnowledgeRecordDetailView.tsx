@@ -87,7 +87,7 @@ export async function KnowledgeRecordDetailView({
 
   const workspace = await requireWorkspaceBySlug(workspaceSlug);
   const routeProject = projectContext
-    ? await requireProjectBySlug(workspace.id, projectContext.projectSlug)
+    ? await requireProjectBySlug(workspace.id, projectContext.projectSlug, workspace.slug)
     : null;
 
   const listResponse = await apiFetch(

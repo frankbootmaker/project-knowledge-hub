@@ -1689,7 +1689,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'create_project',
     description:
-      'Create a project in an allowlisted workspace. Always stage idea; a human promotes it to active. keyPrefix uniqueness includes retired prefixes reserved in the workspace. Returns id, keyPrefix, and url. Requires projects:write. Via call_hub_tool on ChatGPT.',
+      'Create a project in an allowlisted workspace. Always stage idea; a human promotes it to active. keyPrefix uniqueness includes retired prefixes reserved in the workspace. The URL slug skips slugs another project still reserves. Returns id, keyPrefix, and url. Requires projects:write. Via call_hub_tool on ChatGPT.',
     scope: 'projects:write',
     write: true,
     body: {
@@ -1722,7 +1722,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'update_project',
     description:
-      'Update name, description, methodology, currency, or schedule-slip risk settings. Stage changes cannot promote idea to active. Requires projects:write. Writes an audit entry. Via call_hub_tool on ChatGPT.',
+      'Update name, slug, description, methodology, currency, or schedule-slip risk settings. A new slug must be unique in the workspace, including reserved former slugs. The previous slug still resolves and url uses the new slug. Stage changes cannot promote idea to active. Requires projects:write. Writes an audit entry. Via call_hub_tool on ChatGPT.',
     scope: 'projects:write',
     write: true,
     body: {
@@ -1732,6 +1732,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
       properties: {
         projectId: uuidProp('Project id'),
         name: stringProp('Project name', { minLength: 1, maxLength: 160 }),
+        slug: stringProp(
+          'URL slug. Former slugs stay reserved and still resolve to this project.',
+          { minLength: 1, maxLength: 64 },
+        ),
         description: { type: 'string', nullable: true, maxLength: 10000 },
         methodology: { ...projectMethodology, nullable: true },
         currency: stringProp('Project currency'),
