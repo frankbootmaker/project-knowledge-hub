@@ -22,8 +22,8 @@ import {
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => {
     const copy: Record<string, string> = {
-      descriptionRaw: 'Raw',
-      descriptionRendered: 'Rendered',
+      descriptionRaw: 'Markdown',
+      descriptionRendered: 'Preview',
       descriptionView: 'Description view',
       diagramRenderFailed: 'Diagram failed',
     };
@@ -157,7 +157,7 @@ describe('DescriptionMarkdownField', () => {
     expect(link?.getAttribute('rel')).toContain('noopener');
     expect(view?.innerHTML.toLowerCase()).not.toContain('<script');
     expect(view?.innerHTML.toLowerCase()).not.toContain('javascript:');
-    expect(buttonNamed(container, 'Rendered').getAttribute('aria-pressed')).toBe('true');
+    expect(buttonNamed(container, 'Preview').getAttribute('aria-pressed')).toBe('true');
     expect(container.querySelector('textarea')).toBeNull();
   });
 
@@ -177,18 +177,18 @@ describe('DescriptionMarkdownField', () => {
   it('switches to a plain textarea and remembers the choice', async () => {
     const container = render(<Harness initial={SAMPLE} />);
     await waitForMarkdown(container);
-    click(buttonNamed(container, 'Raw'));
+    click(buttonNamed(container, 'Markdown'));
     const textarea = container.querySelector('textarea');
     expect(textarea?.value).toBe(SAMPLE);
     expect(textarea?.className).not.toContain('kh-ops-markdown-editor');
     expect(localStorage.getItem(DESCRIPTION_MARKDOWN_MODE_KEY)).toBe('raw');
-    expect(buttonNamed(container, 'Raw').getAttribute('aria-pressed')).toBe('true');
+    expect(buttonNamed(container, 'Markdown').getAttribute('aria-pressed')).toBe('true');
 
     const again = render(<Harness initial="**Stay raw**" />);
     expect(again.querySelector('textarea')?.value).toBe('**Stay raw**');
     expect(again.querySelector('.knowledge-markdown')).toBeNull();
 
-    click(buttonNamed(again, 'Rendered'));
+    click(buttonNamed(again, 'Preview'));
     await waitForMarkdown(again);
     expect(localStorage.getItem(DESCRIPTION_MARKDOWN_MODE_KEY)).toBe('rendered');
     expect(again.querySelector('textarea')).toBeNull();
@@ -217,7 +217,7 @@ describe('DescriptionMarkdownField', () => {
     const container = render(<Harness initial="**Hello**" readOnly />);
     await waitForMarkdown(container);
     expect(container.querySelector('textarea')).toBeNull();
-    click(buttonNamed(container, 'Raw'));
+    click(buttonNamed(container, 'Markdown'));
     const raw = container.querySelector('pre.kh-ops-description-raw');
     expect(raw?.textContent).toBe('**Hello**');
     expect(container.querySelector('textarea')).toBeNull();
@@ -226,14 +226,14 @@ describe('DescriptionMarkdownField', () => {
 
 describe('description markdown copy and wiring', () => {
   it('translates the toggle in English, German, and Hungarian', () => {
-    expect(en.delivery.descriptionRaw).toBe('Raw');
-    expect(en.delivery.descriptionRendered).toBe('Rendered');
+    expect(en.delivery.descriptionRaw).toBe('Markdown');
+    expect(en.delivery.descriptionRendered).toBe('Preview');
     expect(en.delivery.descriptionView).toBe('Description view');
-    expect(de.delivery.descriptionRaw).toBe('Rohtext');
-    expect(de.delivery.descriptionRendered).toBe('Darstellung');
+    expect(de.delivery.descriptionRaw).toBe('Markdown');
+    expect(de.delivery.descriptionRendered).toBe('Vorschau');
     expect(de.delivery.descriptionView).toBe('Beschreibungsansicht');
-    expect(hu.delivery.descriptionRaw).toBe('Nyers');
-    expect(hu.delivery.descriptionRendered).toBe('Megjelenített');
+    expect(hu.delivery.descriptionRaw).toBe('Markdown');
+    expect(hu.delivery.descriptionRendered).toBe('Előnézet');
     expect(hu.delivery.descriptionView).toBe('Leírás nézete');
   });
 
