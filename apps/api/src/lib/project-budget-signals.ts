@@ -10,7 +10,7 @@ import {
 } from '@project-knowledge-hub/database';
 import { todayYmd } from '@project-knowledge-hub/domain';
 import {
-  loadWorkspacePaidAiContext,
+  loadWorkspacePaidAiContexts,
   projectPaidAiFromContext,
 } from './ai-billing.js';
 import { AI_ASSISTANT_SYSTEM_TYPE } from './ai-assistant-systems.js';
@@ -164,19 +164,13 @@ export async function listProjectBudgetSignals(
   const raidByProject = groupBy(raidRows, (row) => row.projectId);
 
   const workspaceIds = [...new Set(projectRows.map((row) => row.workspaceId))];
-  const [completedAt, contexts] = await Promise.all([
+  const [completedAt, contextByWorkspace] = await Promise.all([
     loadCompletedAtByTask(
       database,
       taskRows.map((row) => row.id),
     ),
-    Promise.all(
-      workspaceIds.map(async (workspaceId) => {
-        const context = await loadWorkspacePaidAiContext(database, workspaceId, today);
-        return [workspaceId, context] as const;
-      }),
-    ),
+    loadWorkspacePaidAiContexts(database, workspaceIds, today),
   ]);
-  const contextByWorkspace = new Map(contexts);
 
   for (const project of projectRows) {
     try {

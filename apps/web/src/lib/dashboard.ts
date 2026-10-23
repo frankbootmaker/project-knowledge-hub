@@ -4,12 +4,16 @@ import {
   DEFAULT_DISPLAY_PREFS,
   mergeDisplayPrefs,
 } from '@project-knowledge-hub/domain';
+import { coalesceInflight } from './coalesce';
 import {
   apiFetch,
   fetchWorkspaceList,
+  readSessionToken,
   type SessionPayload,
   type WorkspaceListRow,
 } from './session';
+
+const DASHBOARD_INSIGHTS_COALESCE_MS = 2_000;
 
 export const DASHBOARD_WORKSPACE_TILE_LIMIT = 6;
 export const DASHBOARD_RECENT_LIMIT = 5;
@@ -123,11 +127,20 @@ export const loadDashboardTasks = cache(async (): Promise<DashboardAssignedTask[
   return body.tasks ?? [];
 });
 
-export const loadDashboardInsights = cache(async (): Promise<DashboardInsights> => {
+async function fetchDashboardInsights(): Promise<DashboardInsights> {
   const response = await apiFetch('/api/v1/me/dashboard-insights');
   if (!response.ok) return EMPTY_INSIGHTS;
   const body = (await response.json()) as { insights?: DashboardInsights };
   return body.insights ?? EMPTY_INSIGHTS;
+}
+
+export const loadDashboardInsights = cache(async (): Promise<DashboardInsights> => {
+  const token = await readSessionToken();
+  return coalesceInflight(
+    `me:dashboard-insights:${token ?? ''}`,
+    DASHBOARD_INSIGHTS_COALESCE_MS,
+    fetchDashboardInsights,
+  );
 });
 
 export const loadDashboardDisplayPrefs = cache(async (): Promise<DisplayPrefs> => {

@@ -1031,31 +1031,40 @@ export async function listTaskBudgetCosts(
   database: Database,
   projectId: string,
 ): Promise<BudgetTaskCost[]> {
-  const tasks = await database.db
-    .select({
-      id: projectTasks.id,
-      status: projectTasks.status,
-      userStoryId: projectTasks.userStoryId,
-      currentOwnerUserId: projectTasks.currentOwnerUserId,
-      forecastHours: projectTasks.forecastHours,
-      actualHours: projectTasks.actualHours,
-    })
-    .from(projectTasks)
-    .where(
-      and(eq(projectTasks.projectId, projectId), isNull(projectTasks.archivedAt)),
-    );
+  const [tasks, raciRows, storyRows, rates] = await Promise.all([
+    database.db
+      .select({
+        id: projectTasks.id,
+        status: projectTasks.status,
+        userStoryId: projectTasks.userStoryId,
+        currentOwnerUserId: projectTasks.currentOwnerUserId,
+        forecastHours: projectTasks.forecastHours,
+        actualHours: projectTasks.actualHours,
+      })
+      .from(projectTasks)
+      .where(
+        and(eq(projectTasks.projectId, projectId), isNull(projectTasks.archivedAt)),
+      ),
+    database.db
+      .select({
+        taskId: projectTaskRaci.taskId,
+        userId: projectTaskRaci.userId,
+        role: projectTaskRaci.role,
+      })
+      .from(projectTaskRaci)
+      .innerJoin(projectTasks, eq(projectTaskRaci.taskId, projectTasks.id))
+      .where(eq(projectTasks.projectId, projectId)),
+    database.db
+      .select({
+        id: projectUserStories.id,
+        epicId: projectUserStories.epicId,
+      })
+      .from(projectUserStories)
+      .where(eq(projectUserStories.projectId, projectId)),
+    loadRateMap(database, projectId),
+  ]);
 
   if (tasks.length === 0) return [];
-
-  const raciRows = await database.db
-    .select({
-      taskId: projectTaskRaci.taskId,
-      userId: projectTaskRaci.userId,
-      role: projectTaskRaci.role,
-    })
-    .from(projectTaskRaci)
-    .innerJoin(projectTasks, eq(projectTaskRaci.taskId, projectTasks.id))
-    .where(eq(projectTasks.projectId, projectId));
 
   const raciByTask = new Map<string, Array<{ userId: string; role: string }>>();
   for (const row of raciRows) {
@@ -1064,15 +1073,7 @@ export async function listTaskBudgetCosts(
     raciByTask.set(row.taskId, list);
   }
 
-  const storyRows = await database.db
-    .select({
-      id: projectUserStories.id,
-      epicId: projectUserStories.epicId,
-    })
-    .from(projectUserStories)
-    .where(eq(projectUserStories.projectId, projectId));
   const epicByStory = new Map(storyRows.map((row) => [row.id, row.epicId]));
-  const rates = await loadRateMap(database, projectId);
 
   return budgetTaskCostsFromParts({ tasks, raciByTask, epicByStory, rates });
 }
