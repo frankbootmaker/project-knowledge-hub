@@ -207,7 +207,7 @@ export function buildProjectMetadata(): ProjectAgentMetadata {
           name: 'keyPrefix',
           required: false,
           description:
-            'Issue key prefix, AAA or AA0. Omit to auto-assign. If the value is taken, the error includes a suggested available prefix.',
+            'Issue key prefix, AAA or AA0. Omit to auto-assign. Taken includes a retired prefix reserved in the workspace. If the value is taken, the error includes a suggested available prefix.',
         },
         {
           name: 'currency',

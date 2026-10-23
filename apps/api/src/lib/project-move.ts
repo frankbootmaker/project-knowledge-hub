@@ -14,6 +14,7 @@ import {
   memberships,
   projectChangeItems,
   projectEpics,
+  projectKeyPrefixHistory,
   projectInitialStakeholders,
   projectItemMediaLinks,
   projectMilestones,
@@ -277,19 +278,48 @@ async function findConflicts(
     });
   }
 
-  if (project.keyPrefix) {
+  const retiredPrefixes = await database.db
+    .select({ keyPrefix: projectKeyPrefixHistory.keyPrefix })
+    .from(projectKeyPrefixHistory)
+    .where(
+      and(
+        eq(projectKeyPrefixHistory.projectId, project.id),
+        isNull(projectKeyPrefixHistory.releasedAt),
+      ),
+    );
+  const movingPrefixes = [
+    ...new Set(
+      [project.keyPrefix, ...retiredPrefixes.map((row) => row.keyPrefix)]
+        .filter((value): value is string => Boolean(value))
+        .map((value) => value.toUpperCase()),
+    ),
+  ];
+  for (const keyPrefix of movingPrefixes) {
     const [prefixTaken] = await database.db
       .select({ id: projects.id })
       .from(projects)
       .where(
         and(
           eq(projects.workspaceId, targetWorkspaceId),
-          sql`upper(${projects.keyPrefix}) = ${project.keyPrefix.toUpperCase()}`,
+          sql`upper(${projects.keyPrefix}) = ${keyPrefix}`,
         ),
       )
       .limit(1);
-    if (prefixTaken) {
-      conflicts.push({ type: 'key_prefix', keyPrefix: project.keyPrefix });
+    const [prefixReserved] = prefixTaken
+      ? [prefixTaken]
+      : await database.db
+        .select({ id: projectKeyPrefixHistory.id })
+        .from(projectKeyPrefixHistory)
+        .where(
+          and(
+            eq(projectKeyPrefixHistory.workspaceId, targetWorkspaceId),
+            sql`upper(${projectKeyPrefixHistory.keyPrefix}) = ${keyPrefix}`,
+            isNull(projectKeyPrefixHistory.releasedAt),
+          ),
+        )
+        .limit(1);
+    if (prefixTaken || prefixReserved) {
+      conflicts.push({ type: 'key_prefix', keyPrefix });
     }
   }
 
@@ -860,6 +890,10 @@ export async function moveProjectToWorkspace(
         .update(projects)
         .set({ workspaceId: targetWorkspace.id, updatedAt: new Date() })
         .where(eq(projects.id, project.id));
+      await tx
+        .update(projectKeyPrefixHistory)
+        .set({ workspaceId: targetWorkspace.id })
+        .where(eq(projectKeyPrefixHistory.projectId, project.id));
       if (systemIds.length > 0) {
         await tx
           .update(systems)

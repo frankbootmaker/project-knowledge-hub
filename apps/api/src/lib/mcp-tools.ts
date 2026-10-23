@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import {
   knowledgeRecords,
@@ -42,7 +42,6 @@ import {
   parseAiPricingTier,
   parseBillingPeriod,
   parseUsageOccurredAt,
-  normalizeKeyPrefix,
   parseHumanKey,
   projectCurrencySchema,
   projectStatusSchema,
@@ -209,6 +208,10 @@ import {
   toDocumentKeyFields,
   type ResolvableEntityType,
 } from './project-issue-keys.js';
+import {
+  retireProjectKeyPrefix,
+  sqlProjectOwnsKeyPrefix,
+} from './project-key-prefix-history.js';
 import {
   getKnowledgeRecordProjectContext,
   listDeliveryDocumentLinksForProject,
@@ -806,7 +809,7 @@ export async function resolveFilterEntity(
         .where(
           and(
             eq(projects.workspaceId, requestedProject.workspaceId),
-            sql`upper(${projects.keyPrefix}) = ${normalizeKeyPrefix(parsed.prefix)}`,
+            sqlProjectOwnsKeyPrefix(parsed.prefix),
           ),
         )
         .limit(1);
@@ -1913,9 +1916,18 @@ export function createMcpToolHandlers(
               excludeProjectId: project.id,
               checkCrossWorkspace: true,
             })).keyPrefix;
-      const [updated] = await app.database.db
-        .update(projects)
-        .set({
+      const previousKeyPrefix = project.keyPrefix;
+      const [updated] = await app.database.db.transaction(async (tx) => {
+        await retireProjectKeyPrefix(tx, {
+          projectId: project.id,
+          workspaceId: project.workspaceId,
+          previousPrefix: previousKeyPrefix,
+          nextPrefix: nextKeyPrefix,
+          actorUserId: actingUserId,
+        });
+        return tx
+          .update(projects)
+          .set({
           startDate:
             input.startDate === undefined ? project.startDate : input.startDate,
           endDate:
@@ -1948,8 +1960,9 @@ export function createMcpToolHandlers(
           keyPrefix: nextKeyPrefix,
           updatedAt: new Date(),
         })
-        .where(eq(projects.id, project.id))
-        .returning();
+          .where(eq(projects.id, project.id))
+          .returning();
+      });
       if (!updated) {
         throw new AppError({
           code: 'PROJECT_NOT_FOUND',
@@ -1986,6 +1999,27 @@ export function createMcpToolHandlers(
         metadata: { via: 'mcp', actingUserId },
         ipAddress: ipAddress ?? null,
       });
+      if (
+        previousKeyPrefix
+        && nextKeyPrefix
+        && previousKeyPrefix.toUpperCase() !== nextKeyPrefix.toUpperCase()
+      ) {
+        await writeAuditEvent(app.database, {
+          organizationId: client.organizationId,
+          actorType: 'api_client',
+          actorId: client.id,
+          action: 'project.key_prefix_changed',
+          entityType: 'project',
+          entityId: project.id,
+          metadata: {
+            via: 'mcp',
+            actingUserId,
+            previousKeyPrefix: previousKeyPrefix.toUpperCase(),
+            keyPrefix: nextKeyPrefix,
+          },
+          ipAddress: ipAddress ?? null,
+        });
+      }
       const [pinned, labels, facts, health] = await Promise.all([
         loadPinnedRecords(app.database, [
           updated.charterRecordId,

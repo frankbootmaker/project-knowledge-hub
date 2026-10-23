@@ -24,6 +24,7 @@ import {
   projectRaidDeliveryLinks,
   projectRaidItems,
   projectRaidTaskLinks,
+  projectKeyPrefixHistory,
   projectTasks,
   projectUserStories,
   projects,
@@ -119,7 +120,18 @@ async function allocateRiskKey(
             sql`upper(${projects.keyPrefix}) = ${parsed.data}`,
           ))
           .limit(1);
-        if (!taken) {
+        const [reserved] = taken
+          ? [taken]
+          : await tx
+            .select({ id: projectKeyPrefixHistory.id })
+            .from(projectKeyPrefixHistory)
+            .where(and(
+              eq(projectKeyPrefixHistory.workspaceId, project.workspaceId),
+              sql`upper(${projectKeyPrefixHistory.keyPrefix}) = ${parsed.data}`,
+              isNull(projectKeyPrefixHistory.releasedAt),
+            ))
+            .limit(1);
+        if (!taken && !reserved) {
           keyPrefix = parsed.data;
           break;
         }

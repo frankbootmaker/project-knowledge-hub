@@ -1,5 +1,10 @@
-import { notFound, redirect } from 'next/navigation';
+import { permanentRedirect, notFound, redirect } from 'next/navigation';
+import { isUuid, parseHumanKey } from '@project-knowledge-hub/domain';
 import { apiFetch, type SessionPayload } from './session';
+import {
+  replaceIssueKeyQuery,
+  type IssueKeyQueryParam,
+} from './project-url-redirect';
 
 export type RecordWorkspace = { id: string; slug: string; name: string };
 
@@ -69,6 +74,47 @@ export async function requireProjectBySlug(
   }
   const detail = (await detailResponse.json()) as { project: RecordProject };
   return detail.project;
+}
+
+/**
+ * Human keys in ?task=, ?raid=, and ?change= redirect to the entity id.
+ * A retired prefix still resolves. UUID query values stay as they are.
+ */
+export async function redirectHumanKeyQuery(input: {
+  projectId: string;
+  pathname: string;
+  task: string | null;
+  raid: string | null;
+  change: string | null;
+}): Promise<void> {
+  const candidates: Array<{ param: IssueKeyQueryParam; value: string | null }> = [
+    { param: 'task', value: input.task },
+    { param: 'raid', value: input.raid },
+    { param: 'change', value: input.change },
+  ];
+  for (const candidate of candidates) {
+    const value = candidate.value?.trim() ?? '';
+    if (!value || isUuid(value) || !parseHumanKey(value)) continue;
+    const response = await apiFetch(
+      `/api/v1/projects/${input.projectId}/resolve-issue-key?key=${encodeURIComponent(value)}`,
+    );
+    if (!response.ok) continue;
+    const payload = (await response.json()) as {
+      entityId?: string;
+      queryParam?: IssueKeyQueryParam | null;
+    };
+    if (!payload.entityId || payload.queryParam !== candidate.param) continue;
+    permanentRedirect(
+      replaceIssueKeyQuery({
+        pathname: input.pathname,
+        task: input.task,
+        raid: input.raid,
+        change: input.change,
+        param: candidate.param,
+        entityId: payload.entityId,
+      }),
+    );
+  }
 }
 
 /**

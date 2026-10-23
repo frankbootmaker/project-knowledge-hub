@@ -241,6 +241,37 @@ export const projects = pgTable(
   ],
 );
 
+/**
+ * Prefixes this project no longer displays. Unreleased rows stay resolvable
+ * and block reuse in the workspace until a workspace admin releases them.
+ */
+export const projectKeyPrefixHistory = pgTable(
+  'project_key_prefix_history',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    keyPrefix: text('key_prefix').notNull(),
+    retiredAt: timestamp('retired_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    retiredBy: uuid('retired_by').references(() => users.id, { onDelete: 'set null' }),
+    releasedAt: timestamp('released_at', { withTimezone: true, mode: 'date' }),
+    releasedBy: uuid('released_by').references(() => users.id, { onDelete: 'set null' }),
+  },
+  (table) => [
+    uniqueIndex('project_key_prefix_history_active_uidx')
+      .on(table.workspaceId, sql`upper(${table.keyPrefix})`)
+      .where(sql`${table.releasedAt} IS NULL`),
+    index('project_key_prefix_history_project_idx').on(table.projectId),
+    index('project_key_prefix_history_prefix_idx').on(sql`upper(${table.keyPrefix})`),
+  ],
+);
+
 /** Dates the project calendar never treats as working days. */
 export const projectNonWorkingDays = pgTable(
   'project_non_working_days',

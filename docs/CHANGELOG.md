@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **Project key prefix history (PRO-T-127):** Changing a project key prefix keeps the previous prefix resolvable in the API and MCP and reserves it in the workspace. Another project cannot reuse it until a workspace admin releases it. Displayed keys still use the current prefix. The same prefix in another workspace, including a retired one, stays ambiguous when the caller does not scope the workspace (PRO-T-3). A prefix change writes `project.key_prefix_changed`. The baseline dialog confirms the change and lists knowledge records whose text mentions the old keys. Human keys in `?task=`, `?raid=`, and `?change=` redirect to the entity id. Migration `0084_project_key_prefix_history`.
+
 ### Fixed
 
 * **Shared cloud agents (PRO-T-117):** One Cursor cloud agent can be linked to several tasks. Migration `0082_task_cloud_agent_links` copies existing `project_tasks.cloud_agent_id` values into `project_task_cloud_agent_links` and drops the unique index. The column stays as the first sorted id. Imported usage stays one row per run. When several tasks in the workspace link that agent, each task stores an equal share of the token buckets. The earliest task id receives any remainder, and the shares sum to the run, so project allocation counts the run once. Task reads return `cloudAgentIds` and `cloudAgentLinks` (the tasks that share each agent). `cloudAgentIds` on create, update, and report replaces the set; null or empty clears it. `cloudAgentId` still sets a single link when the list is omitted. The task dialog lists each agent in IBM Plex Sans with tabular figures. English, German, and Hungarian. OpenAPI schema version is `0.4.1`.

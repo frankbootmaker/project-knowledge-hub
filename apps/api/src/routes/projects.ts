@@ -8,7 +8,9 @@ import {
   assertDateRange,
   coerceProjectCalendar,
   effectiveDateRange,
+  isUuid,
   keyPrefixSchema,
+  parseHumanKey,
   projectCurrencySchema,
   projectStakeholderRoleSchema,
   projectStatusSchema,
@@ -44,7 +46,14 @@ import {
 import {
   allocateUniqueKeyPrefix,
   assertUniqueKeyPrefix,
+  resolveScopedIssueKey,
 } from '../lib/project-issue-keys.js';
+import {
+  listKeyPrefixMentions,
+  listProjectKeyPrefixHistory,
+  releaseProjectKeyPrefix,
+  retireProjectKeyPrefix,
+} from '../lib/project-key-prefix-history.js';
 import {
   emptyProjectHealth,
   listProjectHealth,
@@ -202,6 +211,22 @@ async function toPublicProject(
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
   };
+}
+
+async function loadProjectOrThrow(app: FastifyInstance, projectId: string) {
+  const [project] = await app.database.db
+    .select()
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  if (!project) {
+    throw new AppError({
+      code: 'PROJECT_NOT_FOUND',
+      message: 'Project not found',
+      statusCode: 404,
+    });
+  }
+  return project;
 }
 
 export async function registerProjectRoutes(app: FastifyInstance): Promise<void> {
@@ -586,9 +611,18 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
             checkCrossWorkspace: true,
           })).keyPrefix;
 
-    const [updated] = await app.database.db
-      .update(projects)
-      .set({
+    const previousKeyPrefix = project.keyPrefix;
+    const [updated] = await app.database.db.transaction(async (tx) => {
+      await retireProjectKeyPrefix(tx, {
+        projectId: project.id,
+        workspaceId: project.workspaceId,
+        previousPrefix: previousKeyPrefix,
+        nextPrefix: nextKeyPrefix,
+        actorUserId: principal.userId,
+      });
+      return tx
+        .update(projects)
+        .set({
         name: body.name ?? project.name,
         summary: body.summary === undefined ? project.summary : body.summary,
         description: body.description === undefined ? project.description : body.description,
@@ -648,8 +682,9 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
               : null,
         updatedAt: new Date(),
       })
-      .where(eq(projects.id, params.projectId))
-      .returning();
+        .where(eq(projects.id, params.projectId))
+        .returning();
+    });
 
     if (!updated) {
       throw new AppError({
@@ -709,6 +744,25 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       metadata: body,
       ipAddress: request.ip,
     });
+    if (
+      previousKeyPrefix
+      && nextKeyPrefix
+      && previousKeyPrefix.toUpperCase() !== nextKeyPrefix.toUpperCase()
+    ) {
+      await writeAuditEvent(app.database, {
+        organizationId: workspace?.organizationId ?? null,
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'project.key_prefix_changed',
+        entityType: 'project',
+        entityId: updated.id,
+        metadata: {
+          previousKeyPrefix: previousKeyPrefix.toUpperCase(),
+          keyPrefix: nextKeyPrefix,
+        },
+        ipAddress: request.ip,
+      });
+    }
 
     return {
       project: await toPublicProject(app.database, updated, tagList),
@@ -810,6 +864,92 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
       blobStore,
     });
     return { move };
+  });
+
+  app.get('/api/v1/projects/:projectId/key-prefix-history', async (request) => {
+    const principal = requireAuthenticated(request);
+    const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
+    const project = await loadProjectOrThrow(app, params.projectId);
+    requireWorkspaceView(principal, project.workspaceId);
+    const history = await listProjectKeyPrefixHistory(app.database, project.id);
+    return {
+      prefixes: history.map((row) => ({
+        keyPrefix: row.keyPrefix,
+        retiredAt: row.retiredAt.toISOString(),
+        releasedAt: row.releasedAt?.toISOString() ?? null,
+      })),
+    };
+  });
+
+  app.get('/api/v1/projects/:projectId/key-prefix-mentions', async (request) => {
+    const principal = requireAuthenticated(request);
+    const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
+    const query = z.object({ prefix: keyPrefixSchema }).parse(request.query);
+    const project = await loadProjectOrThrow(app, params.projectId);
+    requireWorkspaceMaintainer(principal, project.workspaceId);
+    const mentions = await listKeyPrefixMentions(app.database, {
+      workspaceId: project.workspaceId,
+      keyPrefix: query.prefix,
+    });
+    return { mentions };
+  });
+
+  app.post(
+    '/api/v1/projects/:projectId/key-prefix-history/:prefix/release',
+    async (request) => {
+      assertMutatingOrigin(app, request);
+      const principal = requireAuthenticated(request);
+      const params = z
+        .object({
+          projectId: z.string().uuid(),
+          prefix: keyPrefixSchema,
+        })
+        .parse(request.params);
+      const project = await loadProjectOrThrow(app, params.projectId);
+      requireWorkspaceAdmin(principal, project.workspaceId);
+      const released = await releaseProjectKeyPrefix(app.database, {
+        projectId: project.id,
+        keyPrefix: params.prefix,
+        actorUserId: principal.userId,
+      });
+      const [workspace] = await app.database.db
+        .select({ organizationId: workspaces.organizationId })
+        .from(workspaces)
+        .where(eq(workspaces.id, project.workspaceId))
+        .limit(1);
+      await writeAuditEvent(app.database, {
+        organizationId: workspace?.organizationId ?? null,
+        actorType: 'user',
+        actorId: principal.userId,
+        action: 'project.key_prefix_released',
+        entityType: 'project',
+        entityId: project.id,
+        metadata: { keyPrefix: released.keyPrefix },
+        ipAddress: request.ip,
+      });
+      return { keyPrefix: released.keyPrefix };
+    },
+  );
+
+  app.get('/api/v1/projects/:projectId/resolve-issue-key', async (request) => {
+    const principal = requireAuthenticated(request);
+    const params = z.object({ projectId: z.string().uuid() }).parse(request.params);
+    const query = z.object({ key: z.string().min(1).max(80) }).parse(request.query);
+    const project = await loadProjectOrThrow(app, params.projectId);
+    requireWorkspaceView(principal, project.workspaceId);
+    if (isUuid(query.key) || !parseHumanKey(query.key)) {
+      throw new AppError({
+        code: 'ISSUE_KEY_INVALID',
+        message: `Invalid human key: ${query.key}`,
+        statusCode: 400,
+      });
+    }
+    const resolved = await resolveScopedIssueKey(app.database, {
+      projectId: project.id,
+      workspaceId: project.workspaceId,
+      key: query.key,
+    });
+    return resolved;
   });
 
   /** Permanent delete — linked systems/records/git keep their rows but lose projectId. */

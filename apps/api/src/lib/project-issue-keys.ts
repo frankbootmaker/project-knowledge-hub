@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   knowledgeRecords,
@@ -12,6 +12,11 @@ import {
   projects,
 } from '@project-knowledge-hub/database';
 import {
+  listCrossWorkspacePrefixUses,
+  sqlProjectOwnsKeyPrefix,
+  workspaceKeyPrefixStatus,
+} from './project-key-prefix-history.js';
+import {
   AppError,
   formatHumanKey,
   isDeliveryIssueKeyType,
@@ -20,7 +25,6 @@ import {
   isValidHumanKeyType,
   issueKeyTypeToRaidKind,
   keyPrefixSchema,
-  normalizeKeyPrefix,
   parseHumanKey,
   readIssueCounter,
   suggestKeyPrefix,
@@ -104,55 +108,45 @@ export async function assertUniqueKeyPrefix(
     });
   }
   const keyPrefix = parsed.data;
-  
-  // Check within same workspace (strict requirement)
-  const conditions = [
-    eq(projects.workspaceId, input.workspaceId),
-    sql`upper(${projects.keyPrefix}) = ${keyPrefix}`,
-  ];
-  if (input.excludeProjectId) {
-    conditions.push(ne(projects.id, input.excludeProjectId));
-  }
-  const [existing] = await database.db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(...conditions))
-    .limit(1);
-  if (existing) {
+  const status = await workspaceKeyPrefixStatus(database.db, {
+    workspaceId: input.workspaceId,
+    keyPrefix,
+    excludeProjectId: input.excludeProjectId,
+  });
+  if (status !== 'free') {
     throw new AppError({
       code: 'KEY_PREFIX_TAKEN',
-      message: `Issue key prefix ${keyPrefix} is already used by another project in this workspace`,
+      message:
+        status === 'retired'
+          ? `Issue key prefix ${keyPrefix} is reserved in this workspace by a retired prefix. A workspace admin can release it.`
+          : `Issue key prefix ${keyPrefix} is already used by another project in this workspace`,
       statusCode: 409,
     });
   }
-  
-  // Check across other workspaces (warning only)
+
+  // Same prefix in another workspace is a warning. Resolution without a
+  // workspace scope stays ambiguous when the key exists in more than one
+  // project (PRO-T-3). A retired prefix is a candidate the same way a
+  // current prefix is.
   let warning: string | undefined;
   if (input.checkCrossWorkspace) {
-    const crossWorkspaceConditions = [
-      ne(projects.workspaceId, input.workspaceId),
-      sql`upper(${projects.keyPrefix}) = ${keyPrefix}`,
-    ];
-    if (input.excludeProjectId) {
-      crossWorkspaceConditions.push(ne(projects.id, input.excludeProjectId));
-    }
-    const crossWorkspaceProjects = await database.db
-      .select({
-        id: projects.id,
-        name: projects.name,
-        workspaceId: projects.workspaceId,
-      })
-      .from(projects)
-      .where(and(...crossWorkspaceConditions))
-      .limit(3);
-    
-    if (crossWorkspaceProjects.length > 0) {
-      const projectNames = crossWorkspaceProjects.map((p) => p.name).join(', ');
-      const more = crossWorkspaceProjects.length === 3 ? ' and possibly more' : '';
-      warning = `Key prefix ${keyPrefix} is also used by project(s) in other workspace(s): ${projectNames}${more}. This may cause ambiguous key resolution when accessing multiple workspaces.`;
+    const uses = await listCrossWorkspacePrefixUses(database, {
+      workspaceId: input.workspaceId,
+      keyPrefix,
+      excludeProjectId: input.excludeProjectId,
+    });
+    if (uses.length > 0) {
+      const projectNames = uses
+        .map((row) => (row.retired ? `${row.name} (retired prefix)` : row.name))
+        .join(', ');
+      const more = uses.length >= 3 ? ' and possibly more' : '';
+      warning =
+        `Key prefix ${keyPrefix} is also used by project(s) in other workspace(s): ${projectNames}${more}. ` +
+        'This may cause ambiguous key resolution when accessing multiple workspaces. ' +
+        'A retired prefix counts the same as a current prefix when the caller does not scope the workspace (PRO-T-3).';
     }
   }
-  
+
   return { keyPrefix, warning };
 }
 
@@ -237,17 +231,12 @@ export async function allocateIssueNumber(
         }
         const parsed = keyPrefixSchema.safeParse(candidate);
         if (!parsed.success) continue;
-        const [taken] = await dbTx
-          .select({ id: projects.id })
-          .from(projects)
-          .where(
-            and(
-              eq(projects.workspaceId, project.workspaceId),
-              sql`upper(${projects.keyPrefix}) = ${parsed.data}`,
-            ),
-          )
-          .limit(1);
-        if (!taken) {
+        const status = await workspaceKeyPrefixStatus(dbTx, {
+          workspaceId: project.workspaceId,
+          keyPrefix: parsed.data,
+          excludeProjectId: project.id,
+        });
+        if (status === 'free') {
           keyPrefix = parsed.data;
           break;
         }
@@ -388,7 +377,7 @@ async function rejectKeyOutsideProject(
     .where(
       and(
         eq(projects.workspaceId, requested.workspaceId),
-        sql`upper(${projects.keyPrefix}) = ${normalizeKeyPrefix(input.parsed.prefix)}`,
+        sqlProjectOwnsKeyPrefix(input.parsed.prefix),
         ne(projects.id, requested.id),
       ),
     )
@@ -588,9 +577,10 @@ export async function resolveEntityId(
     });
   }
 
-  const projectConditions = [
-    sql`upper(${projects.keyPrefix}) = ${normalizeKeyPrefix(parsed.prefix)}`,
-  ];
+  // Current prefix and unreleased history both identify the project.
+  // Two workspaces can still share a prefix; that stays ambiguous unless
+  // the caller passes projectId or workspaceIds (PRO-T-3).
+  const projectConditions = [sqlProjectOwnsKeyPrefix(parsed.prefix)];
   if (input.projectId) {
     projectConditions.push(eq(projects.id, input.projectId));
   }
@@ -790,9 +780,7 @@ export async function resolveKnowledgeRecordId(
     });
   }
 
-  const projectConditions = [
-    sql`upper(${projects.keyPrefix}) = ${normalizeKeyPrefix(parsed.prefix)}`,
-  ];
+  const projectConditions = [sqlProjectOwnsKeyPrefix(parsed.prefix)];
   if (input.projectId) {
     projectConditions.push(eq(projects.id, input.projectId));
   }
@@ -892,4 +880,78 @@ export async function resolveKnowledgeRecordId(
     });
   }
   return row.id;
+}
+
+function entityTypeForHumanKey(
+  issueKeyType: string,
+): ResolvableEntityType | 'knowledge_record' | null {
+  if (isDocKeyCode(issueKeyType)) return 'knowledge_record';
+  switch (issueKeyType) {
+    case 'E':
+      return 'epic';
+    case 'S':
+      return 'user_story';
+    case 'M':
+      return 'milestone';
+    case 'T':
+    case 'B':
+      return 'task';
+    case 'SP':
+      return 'sprint';
+    case 'C':
+      return 'change';
+    case 'RR':
+    case 'RI':
+    case 'RA':
+    case 'RD':
+      return 'raid';
+    default:
+      return null;
+  }
+}
+
+/** Resolve a human key inside one project, including a retired prefix. */
+export async function resolveScopedIssueKey(
+  database: Database,
+  input: { projectId: string; key: string; workspaceId?: string },
+): Promise<{
+  entityType: ResolvableEntityType | 'knowledge_record';
+  entityId: string;
+  queryParam: 'task' | 'raid' | 'change' | null;
+}> {
+  const parsed = parseHumanKey(input.key);
+  if (!parsed) {
+    throw new AppError({
+      code: 'ISSUE_KEY_INVALID',
+      message: `Invalid human key: ${input.key}`,
+      statusCode: 400,
+    });
+  }
+  const entityType = entityTypeForHumanKey(parsed.issueKeyType);
+  if (!entityType) {
+    throw new AppError({
+      code: 'ISSUE_KEY_INVALID',
+      message: `Unsupported human key type in ${input.key}`,
+      statusCode: 400,
+    });
+  }
+  if (entityType === 'knowledge_record') {
+    const entityId = await resolveKnowledgeRecordId(database, {
+      idOrKey: input.key,
+      projectId: input.projectId,
+      workspaceId: input.workspaceId,
+    });
+    return { entityType, entityId, queryParam: null };
+  }
+  const entityId = await resolveEntityId(database, {
+    entityType,
+    idOrKey: input.key,
+    projectId: input.projectId,
+    workspaceIds: input.workspaceId ? [input.workspaceId] : undefined,
+  });
+  const queryParam =
+    entityType === 'task' || entityType === 'raid' || entityType === 'change'
+      ? entityType
+      : null;
+  return { entityType, entityId, queryParam };
 }
