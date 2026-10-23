@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
@@ -18,7 +19,16 @@ export type SessionPayload = {
   memberships: Array<{ workspaceId: string; role: string }>;
 };
 
-export async function getSession(): Promise<SessionPayload | null> {
+export type WorkspaceListRow = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  color: string | null;
+  updatedAt: string;
+};
+
+export const getSession = cache(async (): Promise<SessionPayload | null> => {
   const cookieStore = await cookies();
   const token = cookieStore.get(cookieName)?.value;
   if (!token) {
@@ -42,7 +52,15 @@ export async function getSession(): Promise<SessionPayload | null> {
   }
 
   return payload as SessionPayload;
-}
+});
+
+/** One workspace list per navigation. Layout and pages share this. */
+export const fetchWorkspaceList = cache(async (): Promise<WorkspaceListRow[]> => {
+  const response = await apiFetch('/api/v1/workspaces');
+  if (!response.ok) return [];
+  const body = (await response.json()) as { workspaces?: WorkspaceListRow[] };
+  return body.workspaces ?? [];
+});
 
 export async function requireSession(): Promise<SessionPayload> {
   const session = await getSession();

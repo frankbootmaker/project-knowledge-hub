@@ -156,7 +156,7 @@ Append-only `project_task_activities`: `created`, `status_changed`, `comment`, `
 | `POST` | `/api/v1/project-stakeholders/:id/unassign` | Reopen seat |
 | `DELETE` | `/api/v1/project-stakeholders/:id` | Remove roster row only |
 | `GET` | `/api/v1/workspaces/:workspaceId/members` | Active members (view) for pickers |
-| `GET` | `/api/v1/me/tasks` | Cross-project tasks where the caller holds a RACI role (`?role=`, `?includeArchived=`) |
+| `GET` | `/api/v1/me/tasks` | Cross-project tasks where the caller holds a RACI role (`?role=`, `?includeArchived=`). Optional `?limit=` (1–100) and `?cursor=` page the list and add `nextCursor` / `hasMore`. Omitting `limit` still returns the full list. |
 
 Auth: workspace **view** for reads; **maintainer** (or admin) for writes. Archived projects are read-only, except **move**, which an archived project may still use.
 

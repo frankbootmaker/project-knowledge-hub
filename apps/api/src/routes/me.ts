@@ -45,7 +45,14 @@ import { closeUserAccount } from '../lib/close-user.js';
 import { getDefaultOrganization, writeAuditEvent } from '../lib/identity.js';
 import { shouldSendOptionalEmail } from '../lib/notification-prefs.js';
 import { getDashboardInsights } from '../lib/dashboard-insights.js';
-import { listAssignedTasksForUser } from '../lib/project-delivery.js';
+import {
+  listRecentWorkspaceItems,
+  listWorkspaceEntityCounts,
+} from '../lib/dashboard-home.js';
+import {
+  listAssignedTasksForUser,
+  pageAssignedTasksForUser,
+} from '../lib/project-delivery.js';
 import { toPublicUser } from '../lib/public-user.js';
 
 const updateMeSchema = z.object({
@@ -108,19 +115,64 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
           .enum(['true', 'false'])
           .optional()
           .transform((value) => value === 'true'),
+        limit: z.coerce.number().int().min(1).max(100).optional(),
+        cursor: z.string().min(1).max(500).optional(),
       })
       .parse(request.query ?? {});
 
-    const tasks = await listAssignedTasksForUser(
+    if (query.limit == null) {
+      const tasks = await listAssignedTasksForUser(
+        app.database,
+        principal.userId,
+        {
+          isSystemAdmin: principal.isSystemAdmin,
+          includeArchived: query.includeArchived,
+          role: query.role,
+        },
+      );
+      return { tasks };
+    }
+
+    const page = await pageAssignedTasksForUser(
       app.database,
       principal.userId,
       {
         isSystemAdmin: principal.isSystemAdmin,
         includeArchived: query.includeArchived,
         role: query.role,
+        limit: query.limit,
+        cursor: query.cursor,
       },
     );
-    return { tasks };
+    return {
+      tasks: page.tasks,
+      nextCursor: page.nextCursor,
+      hasMore: page.nextCursor != null,
+    };
+  });
+
+  app.get('/api/v1/me/workspace-counts', async (request) => {
+    const principal = requireAuthenticated(request);
+    const counts = await listWorkspaceEntityCounts(app.database, {
+      userId: principal.userId,
+      isSystemAdmin: principal.isSystemAdmin,
+    });
+    return { counts };
+  });
+
+  app.get('/api/v1/me/recent', async (request) => {
+    const principal = requireAuthenticated(request);
+    const query = z
+      .object({
+        limit: z.coerce.number().int().min(1).max(20).optional(),
+      })
+      .parse(request.query ?? {});
+    const recent = await listRecentWorkspaceItems(app.database, {
+      userId: principal.userId,
+      isSystemAdmin: principal.isSystemAdmin,
+      limit: query.limit ?? 5,
+    });
+    return { recent };
   });
 
   app.get('/api/v1/me/dashboard-insights', async (request) => {
