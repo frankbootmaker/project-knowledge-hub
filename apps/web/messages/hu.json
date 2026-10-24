@@ -1161,6 +1161,7 @@
     "relatedRecordsType": "Kapcsolat típusa",
     "relatedRecordsSearch": "Bejegyzések keresése",
     "relatedRecordsRemove": "Eltávolítás",
+    "relatedEntriesToggle": "Kapcsolódó bejegyzések ({count})",
     "relationTypes": {
       "relates_to": "Kapcsolódik",
       "depends_on": "Függ tőle",
@@ -1175,7 +1176,7 @@
     "verifying": "Jóváhagyás…",
     "markCurrentAction": "Aktuálisnak jelölés",
     "updating": "Frissítés…",
-    "contents": "Tartalom",
+    "contents": "Tartalomjegyzék",
     "tocExpand": "Tartalom megjelenítése",
     "tocCollapse": "Tartalom elrejtése",
     "openWideViewer": "Széles nézet",
