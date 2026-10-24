@@ -88,6 +88,75 @@ export function normalizeCriticalityInput(
   return systemCriticalitySchema.parse(value.trim().toLowerCase());
 }
 
+/** Catalogue rows skip description, inventory JSON, and cost notes. */
+export const systemCatalogueColumns = {
+  id: systems.id,
+  workspaceId: systems.workspaceId,
+  projectId: systems.projectId,
+  name: systems.name,
+  slug: systems.slug,
+  summary: systems.summary,
+  status: systems.status,
+  systemType: systems.systemType,
+  archivedAt: systems.archivedAt,
+  createdAt: systems.createdAt,
+  updatedAt: systems.updatedAt,
+};
+
+export function toCatalogueSystem(
+  row: {
+    id: string;
+    workspaceId: string;
+    projectId: string | null;
+    name: string;
+    slug: string;
+    summary: string | null;
+    status: string;
+    systemType: string | null;
+    archivedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  },
+  tagList: PublicSystemTag[],
+): PublicSystem {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    projectId: row.projectId,
+    name: row.name,
+    slug: row.slug,
+    summary: row.summary,
+    description: null,
+    systemType: row.systemType,
+    status: row.status,
+    ownerUserId: null,
+    environment: null,
+    version: null,
+    criticality: null,
+    itDetails: {},
+    itCostMode: null,
+    itFlatMonthlyFee: null,
+    itOneTimeCost: null,
+    itBudgetAllocation: null,
+    aiCostMode: null,
+    aiFlatMonthlyFee: null,
+    aiTokenRatePer1k: null,
+    aiTokenRateInputPer1k: null,
+    aiTokenRateOutputPer1k: null,
+    aiTokenRateCachePer1k: null,
+    aiTokenRateCacheWritePer1k: null,
+    aiTokenRateCurrency: null,
+    aiCostNotes: null,
+    aiBudgetAllocation: null,
+    metadata: null,
+    tags: tagList,
+    lastValidatedAt: null,
+    archivedAt: row.archivedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
 export function toPublicSystem(
   system: typeof systems.$inferSelect,
   tagList: PublicSystemTag[],

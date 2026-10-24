@@ -127,22 +127,18 @@ export async function KnowledgeRecordDetailView({
   const isArchived = Boolean(record.archivedAt);
   const canMutate = canMutateWorkspace(session, workspace.id);
   const canPurge = canPurgeWorkspace(session, workspace.id);
-  const needsProjectOptions =
-    canMutate && !isArchived && record.sourceOfTruthMode !== 'git_managed';
 
   const linkedProjectId = routeProject ? null : record.projectId;
   const [
-    systemsResponse,
-    projectsResponse,
+    systemResponse,
     llmCapabilitiesResponse,
     linkedProjectResponse,
     translationsResponse,
     relationsResponse,
     linksResponse,
   ] = await Promise.all([
-    apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`),
-    needsProjectOptions
-      ? apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`)
+    record.systemId
+      ? apiFetch(`/api/v1/systems/${record.systemId}`)
       : Promise.resolve(null),
     apiFetch('/api/v1/llm/capabilities'),
     linkedProjectId
@@ -152,16 +148,13 @@ export async function KnowledgeRecordDetailView({
     apiFetch(`/api/v1/knowledge-records/${record.id}/relations`),
     apiFetch(`/api/v1/knowledge-records/${record.id}/linked-items`),
   ]);
-  const projects = projectsResponse?.ok
-    ? ((await projectsResponse.json()) as { projects: Project[] }).projects
-    : [];
   const linkedProject = linkedProjectResponse?.ok
     ? ((await linkedProjectResponse.json()) as { project: Project }).project
     : null;
   const project = routeProject ?? linkedProject;
-  const systems = systemsResponse.ok
-    ? ((await systemsResponse.json()) as { systems: System[] }).systems
-    : [];
+  const system = systemResponse?.ok
+    ? ((await systemResponse.json()) as { system: System }).system
+    : null;
   const translationConfigured = llmCapabilitiesResponse.ok
     ? Boolean(
         (
@@ -171,7 +164,6 @@ export async function KnowledgeRecordDetailView({
         ).translationConfigured,
       )
     : false;
-  const system = systems.find((item) => item.id === record.systemId);
 
   const gitManaged = record.sourceOfTruthMode === 'git_managed';
   const recordBasePath = recordHref({
@@ -347,8 +339,6 @@ export async function KnowledgeRecordDetailView({
                   tags: record.tags,
                   source: record.source,
                 }}
-                projects={projects}
-                systems={systems}
                 canMutate={canMutate}
                 canPurge={canPurge}
                 visionConfigured={translationConfigured}

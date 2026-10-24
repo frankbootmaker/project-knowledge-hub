@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import type { ThemePreference } from '../../lib/theme';
 import type { SessionPayload } from '../../lib/session';
 import { AppRail, useRailChromeState, type ShellWorkspace } from './AppRail';
@@ -29,21 +29,25 @@ export function OpsAppShell({
           data-rail-compact={compact ? 'true' : 'false'}
           data-rail-open={open ? 'true' : 'false'}
         >
-          <AppRail
-            session={session}
-            workspaces={workspaces}
-            compact={compact}
-            onCompactChange={setCompact}
-            open={open}
-            onOpenChange={setOpen}
-          />
-          <div className="kh-ops-content">
-            <AppTopBar
+          <Suspense fallback={<div className="kh-ops-rail" aria-hidden />}>
+            <AppRail
+              session={session}
               workspaces={workspaces}
-              isAdmin={session.user.isSystemAdmin}
-              themePreference={themePreference}
-              onOpenRail={() => setOpen(true)}
+              compact={compact}
+              onCompactChange={setCompact}
+              open={open}
+              onOpenChange={setOpen}
             />
+          </Suspense>
+          <div className="kh-ops-content">
+            <Suspense fallback={<header className="kh-ops-subhead" aria-hidden />}>
+              <AppTopBar
+                workspaces={workspaces}
+                isAdmin={session.user.isSystemAdmin}
+                themePreference={themePreference}
+                onOpenRail={() => setOpen(true)}
+              />
+            </Suspense>
             <div className="kh-ops-view">{children}</div>
           </div>
         </div>
