@@ -25,6 +25,8 @@ import { getSystemTags } from '../lib/tags.js';
 import {
   createSystem,
   getSystemRow,
+  systemCatalogueColumns,
+  toCatalogueSystem,
   toPublicSystem,
   updateSystem,
 } from '../lib/systems.js';
@@ -96,6 +98,10 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
           .enum(['true', 'false'])
           .optional()
           .transform((value) => value === 'true'),
+        summary: z
+          .enum(['true', 'false'])
+          .optional()
+          .transform((value) => value === 'true'),
       })
       .parse(request.query);
 
@@ -108,6 +114,20 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
     }
     if (query.projectId) {
       filters.push(eq(systems.projectId, query.projectId));
+    }
+
+    if (query.summary) {
+      const rows = await app.database.db
+        .select(systemCatalogueColumns)
+        .from(systems)
+        .where(and(...filters));
+      const tagMap = await getSystemTags(
+        app.database,
+        rows.map((row) => row.id),
+      );
+      return {
+        systems: rows.map((row) => toCatalogueSystem(row, tagMap.get(row.id) ?? [])),
+      };
     }
 
     const rows = await app.database.db

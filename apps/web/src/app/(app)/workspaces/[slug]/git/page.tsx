@@ -45,8 +45,8 @@ export default async function WorkspaceGitPage({
 
   const [detailResponse, projectsResponse, connectionsResponse] = await Promise.all([
     apiFetch(`/api/v1/workspaces/${summary.id}`),
-    apiFetch(`/api/v1/projects?workspaceId=${summary.id}`),
-    apiFetch(`/api/v1/workspaces/${summary.id}/git-connections?checkRemote=true`),
+    apiFetch(`/api/v1/projects?workspaceId=${summary.id}&view=picker`),
+    apiFetch(`/api/v1/workspaces/${summary.id}/git-connections?checkRemote=false`),
   ]);
   if (!detailResponse.ok) notFound();
 

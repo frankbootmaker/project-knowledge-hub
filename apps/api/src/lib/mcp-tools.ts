@@ -91,6 +91,7 @@ import {
   createRecordTranslation,
   listRecordTranslations,
   listTranslationSiblingLinks,
+  knowledgeRecordListSelect,
   loadProjectKeyPrefixMap,
   resolveReviewedByUser,
   updateKnowledgeRecord,
@@ -2471,7 +2472,7 @@ export function createMcpToolHandlers(
         conditions.push(eq(knowledgeRecords.language, language));
       }
       const rows = await app.database.db
-        .select()
+        .select(knowledgeRecordListSelect)
         .from(knowledgeRecords)
         .where(and(...conditions))
         .orderBy(asc(knowledgeRecords.id));

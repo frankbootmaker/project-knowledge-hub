@@ -96,7 +96,9 @@ export default async function SystemDetailPage({
         membership.role === 'workspace_admin',
     );
 
-  const projectsResponse = await apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`);
+  const projectsResponse = await apiFetch(
+    `/api/v1/projects?workspaceId=${workspace.id}&view=picker`,
+  );
   const projects = projectsResponse.ok
     ? ((await projectsResponse.json()) as { projects: Project[] }).projects
     : [];

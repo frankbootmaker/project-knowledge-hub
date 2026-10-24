@@ -237,6 +237,38 @@ export function toPublicSource(source: SourceRow | null) {
   };
 }
 
+/**
+ * List rows skip the markdown body and the HTML cache. Those columns are
+ * TOAST and dominate a workspace catalogue read. The detail route still
+ * loads them.
+ */
+export const knowledgeRecordListSelect = {
+  id: knowledgeRecords.id,
+  workspaceId: knowledgeRecords.workspaceId,
+  projectId: knowledgeRecords.projectId,
+  systemId: knowledgeRecords.systemId,
+  title: knowledgeRecords.title,
+  slug: knowledgeRecords.slug,
+  summary: knowledgeRecords.summary,
+  recordType: knowledgeRecords.recordType,
+  lifecycleStatus: knowledgeRecords.lifecycleStatus,
+  sourceOfTruthMode: knowledgeRecords.sourceOfTruthMode,
+  language: knowledgeRecords.language,
+  translationGroupId: knowledgeRecords.translationGroupId,
+  documentKeyType: knowledgeRecords.documentKeyType,
+  documentNumber: knowledgeRecords.documentNumber,
+  metadataJson: knowledgeRecords.metadataJson,
+  currentVersionNumber: knowledgeRecords.currentVersionNumber,
+  supersedesRecordId: knowledgeRecords.supersedesRecordId,
+  createdBy: knowledgeRecords.createdBy,
+  reviewedBy: knowledgeRecords.reviewedBy,
+  verifiedAt: knowledgeRecords.verifiedAt,
+  lastValidatedAt: knowledgeRecords.lastValidatedAt,
+  archivedAt: knowledgeRecords.archivedAt,
+  createdAt: knowledgeRecords.createdAt,
+  updatedAt: knowledgeRecords.updatedAt,
+};
+
 export function toPublicRecord(
   record: RecordRow,
   tagList: Array<{ id: string; name: string; slug: string }>,
@@ -249,6 +281,8 @@ export function toPublicRecord(
     toc?: Array<{ id: string; text: string; depth: number }>;
     reviewedByUser?: ReviewedByUser | null;
     keyPrefix?: string | null;
+    /** List responses omit the body. Detail responses keep it. */
+    includeContent?: boolean;
   },
 ) {
   const documentKeys = toDocumentKeyFields(
@@ -270,10 +304,14 @@ export function toPublicRecord(
     humanKey: documentKeys.humanKey,
     lifecycleStatus: record.lifecycleStatus,
     sourceOfTruthMode: record.sourceOfTruthMode,
-    contentMarkdown: record.contentMarkdown,
-    contentHtml: options?.includeHtml
-      ? (options.html ?? record.contentHtmlCache)
-      : undefined,
+    ...(options?.includeContent === false
+      ? {}
+      : {
+          contentMarkdown: record.contentMarkdown,
+          contentHtml: options?.includeHtml
+            ? (options.html ?? record.contentHtmlCache)
+            : undefined,
+        }),
     toc: options?.includeToc ? (options.toc ?? []) : undefined,
     language: record.language,
     translationGroupId: record.translationGroupId,

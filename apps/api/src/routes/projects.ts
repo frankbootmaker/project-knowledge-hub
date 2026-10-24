@@ -141,6 +141,21 @@ const initialStakeholdersSchema = z.object({
     .max(200),
 });
 
+/** Dropdowns need identity only. Health and schedule stay on the full list. */
+export function toProjectPickerRow(row: {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+}): { id: string; name: string; slug: string; status: string } {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    status: row.status,
+  };
+}
+
 function scheduleFields(
   project: typeof projects.$inferSelect,
   facts: ProjectScheduleFacts | undefined,
@@ -249,10 +264,32 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
           .enum(['true', 'false'])
           .optional()
           .transform((value) => value === 'true'),
+        view: z.enum(['picker']).optional(),
       })
       .parse(request.query);
 
     requireWorkspaceView(principal, query.workspaceId);
+
+    const liveFilter = query.includeArchived
+      ? eq(projects.workspaceId, query.workspaceId)
+      : and(
+          eq(projects.workspaceId, query.workspaceId),
+          isNull(projects.archivedAt),
+          ne(projects.status, 'archived'),
+        );
+
+    if (query.view === 'picker') {
+      const rows = await app.database.db
+        .select({
+          id: projects.id,
+          name: projects.name,
+          slug: projects.slug,
+          status: projects.status,
+        })
+        .from(projects)
+        .where(liveFilter);
+      return { projects: rows.map((row) => toProjectPickerRow(row)) };
+    }
 
     const warmPaidAi = loadWorkspacePaidAiContext(
       app.database,
@@ -264,15 +301,7 @@ export async function registerProjectRoutes(app: FastifyInstance): Promise<void>
     const rows = await app.database.db
       .select()
       .from(projects)
-      .where(
-        query.includeArchived
-          ? eq(projects.workspaceId, query.workspaceId)
-          : and(
-              eq(projects.workspaceId, query.workspaceId),
-              isNull(projects.archivedAt),
-              ne(projects.status, 'archived'),
-            ),
-      );
+      .where(liveFilter);
 
     const projectIds = rows.map((row) => row.id);
     const pinnedIds = rows.flatMap((row) => [

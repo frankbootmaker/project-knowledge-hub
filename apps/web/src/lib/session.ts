@@ -1,6 +1,10 @@
 import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { coalesceInflight } from './coalesce';
+
+/** Shell and resumed RSC renders do not share React cache(). */
+const SESSION_COALESCE_MS = 2_000;
 
 const apiUrl = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3101';
 const cookieName = process.env.SESSION_COOKIE_NAME ?? 'kh_session';
@@ -35,12 +39,7 @@ export async function readSessionToken(): Promise<string | null> {
   return cookieStore.get(cookieName)?.value ?? null;
 }
 
-export const getSession = cache(async (): Promise<SessionPayload | null> => {
-  const token = await readSessionToken();
-  if (!token) {
-    return null;
-  }
-
+async function fetchSession(token: string): Promise<SessionPayload | null> {
   const response = await fetch(`${apiUrl}/api/v1/auth/session`, {
     headers: {
       Cookie: `${cookieName}=${token}`,
@@ -58,14 +57,31 @@ export const getSession = cache(async (): Promise<SessionPayload | null> => {
   }
 
   return payload as SessionPayload;
+}
+
+export const getSession = cache(async (): Promise<SessionPayload | null> => {
+  const token = await readSessionToken();
+  if (!token) {
+    return null;
+  }
+  return coalesceInflight(`auth-session:${token}`, SESSION_COALESCE_MS, () => fetchSession(token));
 });
 
-/** One workspace list per navigation. Layout and pages share this. */
-export const fetchWorkspaceList = cache(async (): Promise<WorkspaceListRow[]> => {
+async function fetchWorkspaceRows(): Promise<WorkspaceListRow[]> {
   const response = await apiFetch('/api/v1/workspaces');
   if (!response.ok) return [];
   const body = (await response.json()) as { workspaces?: WorkspaceListRow[] };
   return body.workspaces ?? [];
+}
+
+/** One workspace list per navigation. Layout and pages share this. */
+export const fetchWorkspaceList = cache(async (): Promise<WorkspaceListRow[]> => {
+  const token = await readSessionToken();
+  return coalesceInflight(
+    `workspaces:${token ?? ''}`,
+    SESSION_COALESCE_MS,
+    fetchWorkspaceRows,
+  );
 });
 
 export async function requireSession(): Promise<SessionPayload> {

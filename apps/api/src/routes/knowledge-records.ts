@@ -37,6 +37,7 @@ import {
   listRecordTranslations,
   listTranslationSiblingLinks,
   loadApproverSnapshot,
+  knowledgeRecordListSelect,
   loadPrimarySource,
   loadProjectKeyPrefixMap,
   resolveReviewedByUser,
@@ -116,18 +117,18 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
     }
 
     const rows = await app.database.db
-      .select()
+      .select(knowledgeRecordListSelect)
       .from(knowledgeRecords)
       .where(and(...conditions));
 
-    const tagMap = await getKnowledgeRecordTags(
-      app.database,
-      rows.map((row) => row.id),
-    );
-    const keyPrefixMap = await loadProjectKeyPrefixMap(
-      app.database,
-      rows.map((row) => row.projectId),
-    );
+    const recordIds = rows.map((row) => row.id);
+    const [tagMap, keyPrefixMap] = await Promise.all([
+      getKnowledgeRecordTags(app.database, recordIds),
+      loadProjectKeyPrefixMap(
+        app.database,
+        rows.map((row) => row.projectId),
+      ),
+    ]);
     const relationMap = query.includeRecordRelations
       ? await compactRecordRelationsForRecords(
           app.database,
@@ -137,9 +138,15 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
 
     return {
       knowledgeRecords: rows.map((row) => ({
-        ...toPublicRecord(row, tagMap.get(row.id) ?? [], null, {
-          keyPrefix: row.projectId ? keyPrefixMap.get(row.projectId) ?? null : null,
-        }),
+        ...toPublicRecord(
+          { ...row, contentMarkdown: '', contentHtmlCache: null },
+          tagMap.get(row.id) ?? [],
+          null,
+          {
+            includeContent: false,
+            keyPrefix: row.projectId ? keyPrefixMap.get(row.projectId) ?? null : null,
+          },
+        ),
         ...(relationMap
           ? { recordRelations: relationMap.get(row.id) }
           : {}),
