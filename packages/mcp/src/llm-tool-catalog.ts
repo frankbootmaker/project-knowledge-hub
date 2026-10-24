@@ -18,7 +18,7 @@ import {
   finalizeRecordContentUploadInputSchema,
   updateKnowledgeRecordInputSchema,
 } from '@project-knowledge-hub/domain';
-import { MCP_KNOWLEDGE_LIST_LIMIT } from './limits.js';
+import { MCP_KNOWLEDGE_LIST_LIMIT } from './list-limits.js';
 import { hasMcpScope, type McpScope } from './scopes.js';
 import {
   annotateRequiredFieldDescriptions,
