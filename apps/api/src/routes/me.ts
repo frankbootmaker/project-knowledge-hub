@@ -49,6 +49,7 @@ import {
   listRecentWorkspaceItems,
   listWorkspaceEntityCounts,
 } from '../lib/dashboard-home.js';
+import { coalesceRead, liveReadTtl } from '../lib/read-cache.js';
 import {
   listAssignedTasksForUser,
   pageAssignedTasksForUser,
@@ -153,10 +154,15 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/v1/me/workspace-counts', async (request) => {
     const principal = requireAuthenticated(request);
-    const counts = await listWorkspaceEntityCounts(app.database, {
-      userId: principal.userId,
-      isSystemAdmin: principal.isSystemAdmin,
-    });
+    const counts = await coalesceRead(
+      app.database,
+      `workspace-counts:${principal.userId}:${principal.isSystemAdmin ? '1' : '0'}`,
+      liveReadTtl(2_000),
+      () => listWorkspaceEntityCounts(app.database, {
+        userId: principal.userId,
+        isSystemAdmin: principal.isSystemAdmin,
+      }),
+    );
     return { counts };
   });
 
@@ -167,11 +173,17 @@ export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
         limit: z.coerce.number().int().min(1).max(20).optional(),
       })
       .parse(request.query ?? {});
-    const recent = await listRecentWorkspaceItems(app.database, {
-      userId: principal.userId,
-      isSystemAdmin: principal.isSystemAdmin,
-      limit: query.limit ?? 5,
-    });
+    const limit = query.limit ?? 5;
+    const recent = await coalesceRead(
+      app.database,
+      `recent:${principal.userId}:${principal.isSystemAdmin ? '1' : '0'}:${limit}`,
+      liveReadTtl(2_000),
+      () => listRecentWorkspaceItems(app.database, {
+        userId: principal.userId,
+        isSystemAdmin: principal.isSystemAdmin,
+        limit,
+      }),
+    );
     return { recent };
   });
 
