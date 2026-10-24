@@ -1,22 +1,25 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { hashPassword } from '@project-knowledge-hub/auth';
 import { loadEnv } from '@project-knowledge-hub/config';
 import {
+  auditEvents,
   createDatabase,
+  knowledgeRecords,
   memberships,
   organizations,
   users,
   workspaces,
+  type Database,
 } from '@project-knowledge-hub/database';
-import { DEFAULT_MCP_SCOPES } from '@project-knowledge-hub/mcp';
+import { contentSha256, DEFAULT_MCP_SCOPES } from '@project-knowledge-hub/mcp';
 import { allocateGlobalIntegrationKeyPrefix } from '../integration-test/unique-key-prefix.js';
 import { buildApp } from '../app.js';
 import type { FastifyInstance } from 'fastify';
 
-const hasIntegrationEnv =
-  Boolean(process.env.DATABASE_URL) && Boolean(process.env.REDIS_URL);
+const hasIntegrationEnv = Boolean(process.env.DATABASE_URL) && Boolean(process.env.REDIS_URL);
 
 function testEnv() {
   return loadEnv({
@@ -24,8 +27,7 @@ function testEnv() {
     NODE_ENV: 'test',
     APP_ENV: 'test',
     LOG_LEVEL: 'silent',
-    SESSION_SECRET:
-      process.env.SESSION_SECRET ?? 'test-session-secret-at-least-32-chars',
+    SESSION_SECRET: process.env.SESSION_SECRET ?? 'test-session-secret-at-least-32-chars',
     WEB_URL: process.env.WEB_URL ?? 'http://localhost:3100',
   });
 }
@@ -74,6 +76,7 @@ function toolText(response: { json: () => unknown }): {
 
 describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
   let app: FastifyInstance | undefined;
+  let database: Database | undefined;
   let redis: Redis | undefined;
   let closeDatabase: (() => Promise<void>) | undefined;
   let adminCookie = '';
@@ -86,13 +89,16 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
   let narrowToken = '';
   let wideToken = '';
   let validationToken = '';
+  /** Separate client so the knowledge-record cases do not share the suite rate-limit bucket. */
+  let recordToken = '';
   let callId = 1;
   const origin = 'http://localhost:3100';
 
   beforeAll(async () => {
     const env = testEnv();
-    const database = createDatabase(env.DATABASE_URL);
-    closeDatabase = () => database.close();
+    database = createDatabase(env.DATABASE_URL);
+    const opened = database;
+    closeDatabase = () => opened.close();
     redis = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: 1,
       lazyConnect: true,
@@ -229,6 +235,21 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     });
     expect(validation.statusCode).toBe(200);
     validationToken = (validation.json() as { token: string }).token;
+
+    const records = await app.inject({
+      method: 'POST',
+      url: '/api/v1/api-clients',
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        organizationId: org!.id,
+        name: 'Record token',
+        scopes,
+        allowedWorkspaceIds: [workspaceA, workspaceB],
+        actingUserId: admin!.id,
+      },
+    });
+    expect(records.statusCode).toBe(200);
+    recordToken = (records.json() as { token: string }).token;
   });
 
   afterAll(async () => {
@@ -246,11 +267,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     if (closeDatabase) await closeDatabase();
   });
 
-  async function call(
-    token: string,
-    name: string,
-    args: Record<string, unknown>,
-  ) {
+  async function call(token: string, name: string, args: Record<string, unknown>) {
     const response = await mcpCall(app!, token, callId, name, args);
     callId += 1;
     expect(response.statusCode).toBe(200);
@@ -592,9 +609,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     expect(rewritten.isError).toBe(false);
 
     const again = await call(wideToken, 'get_project_sprint_burndown', { sprintId });
-    expect(
-      (again.data.burndown as { committedPoints: number }).committedPoints,
-    ).toBe(13);
+    expect((again.data.burndown as { committedPoints: number }).committedPoints).toBe(13);
     const listed = await call(wideToken, 'list_project_sprints', { projectId: projectA });
     const rows = listed.data.sprints as Array<{ id: string; committedPoints: number }>;
     expect(rows.find((row) => row.id === sprintId)?.committedPoints).toBe(13);
@@ -651,10 +666,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
       title: string;
       issueNumber: number;
     }>;
-    const beforeMax = beforeItems.reduce(
-      (max, item) => Math.max(max, item.issueNumber),
-      0,
-    );
+    const beforeMax = beforeItems.reduce((max, item) => Math.max(max, item.issueNumber), 0);
 
     const attempts = [
       {
@@ -809,8 +821,8 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
       expect(result.text).toContain(prefix);
       expect(result.text).not.toContain('No project found for key prefix');
       expect(
-        result.text.includes('does not belong to project')
-        || result.text.includes('not found in project'),
+        result.text.includes('does not belong to project') ||
+          result.text.includes('not found in project'),
       ).toBe(true);
     }
 
@@ -990,9 +1002,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     ).outbound.map((edge) => edge.relationType);
     expect(outbound).toContain('relates_to');
     expect(outbound).toContain('derived_from');
-    expect(
-      (set.data.relations as { inbound: unknown[] }).inbound,
-    ).toEqual([]);
+    expect((set.data.relations as { inbound: unknown[] }).inbound).toEqual([]);
 
     const cleared = await call(validationToken, 'set_knowledge_record_relations', {
       recordId: higher.id,
@@ -1028,5 +1038,153 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     });
     expect(still.isError).toBe(false);
     expect(still.data.relations).toMatchObject({ outbound: [], inbound: [] });
+  });
+
+  it('PRO-B-47 rejects a stale expectSha256 with 409 conflict', async () => {
+    const created = await call(recordToken, 'create_knowledge_record', {
+      workspaceId: workspaceA,
+      projectId: projectA,
+      title: 'Concurrency',
+      recordType: 'note',
+      contentMarkdown: '# Live\n',
+    });
+    expect(created.isError, created.text).toBe(false);
+    const record = created.data.knowledgeRecord as { id: string };
+    const stale = await call(recordToken, 'update_knowledge_record', {
+      recordId: record.id,
+      changeMessage: 'stale',
+      contentMarkdown: '# Next\n',
+      expectSha256: 'a'.repeat(64),
+    });
+    expect(stale.isError).toBe(true);
+    expect(stale.text).toContain('409');
+    expect(stale.text).toContain('conflict');
+    const unchanged = await call(recordToken, 'get_knowledge_record', { recordId: record.id });
+    expect(unchanged.isError).toBe(false);
+    expect(unchanged.text).toContain('# Live');
+  });
+
+  it('PRO-B-48 keeps an approved record live and returns a draft revision', async () => {
+    const created = await call(recordToken, 'create_knowledge_record', {
+      workspaceId: workspaceA,
+      projectId: projectA,
+      title: 'Approved',
+      recordType: 'note',
+      contentMarkdown: '# Current\n',
+    });
+    expect(created.isError, created.text).toBe(false);
+    const record = created.data.knowledgeRecord as { id: string };
+    await database!.db
+      .update(knowledgeRecords)
+      .set({ lifecycleStatus: 'current', sourceOfTruthMode: 'hub_managed' })
+      .where(eq(knowledgeRecords.id, record.id));
+    const hash = contentSha256('# Current\n');
+    const updated = await call(recordToken, 'update_knowledge_record', {
+      recordId: record.id,
+      changeMessage: 'draft the next revision',
+      contentMarkdown: '# Draft revision\n',
+      expectSha256: hash,
+      expectedVersion: 1,
+    });
+    expect(updated.isError, updated.text).toBe(false);
+    const body = updated.data as {
+      knowledgeRecord: { id: string; lifecycleStatus: string; contentMarkdown?: string };
+      preservedLiveRecord: { id: string; lifecycleStatus: string };
+      warning: string;
+    };
+    expect(body.knowledgeRecord.id).not.toBe(record.id);
+    expect(body.knowledgeRecord.lifecycleStatus).toBe('draft');
+    expect(body.preservedLiveRecord).toMatchObject({
+      id: record.id,
+      lifecycleStatus: 'current',
+    });
+    expect(body.warning).toContain('left live');
+    const live = await call(recordToken, 'get_knowledge_record', { recordId: record.id });
+    expect(live.isError).toBe(false);
+    expect(live.text).toContain('# Current');
+    expect(live.text).toContain('"lifecycleStatus": "current"');
+  });
+
+  it('PRO-B-49 pages knowledge records past 25', async () => {
+    for (let index = 0; index < 26; index += 1) {
+      const created = await call(recordToken, 'create_knowledge_record', {
+        workspaceId: workspaceA,
+        projectId: projectA,
+        title: `Page ${index}`,
+        recordType: 'note',
+        contentMarkdown: `# Page ${index}\n`,
+      });
+      expect(created.isError, created.text).toBe(false);
+    }
+    const first = await call(recordToken, 'list_knowledge_records', {
+      workspaceId: workspaceA,
+      limit: 25,
+    });
+    expect(first.isError, first.text).toBe(false);
+    const page = first.data as {
+      knowledgeRecords: unknown[];
+      total: number;
+      hasMore: boolean;
+      nextCursor: string | null;
+      limit: number;
+    };
+    expect(page.knowledgeRecords).toHaveLength(25);
+    expect(page.limit).toBe(25);
+    expect(page.hasMore).toBe(true);
+    expect(page.total).toBeGreaterThan(25);
+    expect(page.nextCursor).toBeTruthy();
+    const second = await call(recordToken, 'list_knowledge_records', {
+      workspaceId: workspaceA,
+      limit: 25,
+      cursor: page.nextCursor,
+    });
+    expect(second.isError, second.text).toBe(false);
+    const rest = second.data as { knowledgeRecords: unknown[]; hasMore: boolean };
+    expect(rest.knowledgeRecords.length).toBeGreaterThan(0);
+    const wide = await call(recordToken, 'list_knowledge_records', {
+      workspaceId: workspaceA,
+      limit: 50,
+    });
+    expect(wide.isError, wide.text).toBe(false);
+    expect((wide.data.knowledgeRecords as unknown[]).length).toBeGreaterThan(25);
+  });
+
+  it('PRO-B-39 updates and begins an upload by a non-canonical UUID', async () => {
+    const created = await call(recordToken, 'create_knowledge_record', {
+      workspaceId: workspaceA,
+      projectId: projectA,
+      title: 'UUID lookup',
+      recordType: 'note',
+      contentMarkdown: '# UUID\n',
+    });
+    expect(created.isError, created.text).toBe(false);
+    const record = created.data.knowledgeRecord as { id: string };
+    const compact = record.id.replace(/-/g, '').toUpperCase();
+    const updated = await call(recordToken, 'update_knowledge_record', {
+      recordId: `urn:uuid:${record.id.toUpperCase()}`,
+      changeMessage: 'uppercase uuid',
+      title: 'UUID lookup renamed',
+    });
+    expect(updated.isError, updated.text).toBe(false);
+    const begun = await call(recordToken, 'begin_record_content_upload', {
+      recordId: compact,
+      changeMessage: 'chunked from compact uuid',
+    });
+    expect(begun.isError, begun.text).toBe(false);
+    const uploadId = (begun.data as { uploadId: string }).uploadId;
+    const appended = await call(recordToken, 'append_record_content', {
+      uploadId,
+      chunk: '# From chunks\n',
+    });
+    expect(appended.isError, appended.text).toBe(false);
+    const finalized = await call(recordToken, 'finalize_record_content_upload', { uploadId });
+    expect(finalized.isError, finalized.text).toBe(false);
+
+    const audits = await database!.db
+      .select({ actorType: auditEvents.actorType })
+      .from(auditEvents)
+      .where(eq(auditEvents.entityId, record.id));
+    expect(audits.length).toBeGreaterThan(0);
+    expect(audits.every((event) => event.actorType === 'api_client')).toBe(true);
   });
 });

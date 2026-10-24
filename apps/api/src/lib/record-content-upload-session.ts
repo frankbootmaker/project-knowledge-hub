@@ -17,6 +17,8 @@ export type RecordContentUploadSession = {
   workspaceId: string;
   /** SHA-256 hex of the stored body at begin. */
   contentSha256: string;
+  /** Stored when begin_record_content_upload includes changeMessage. */
+  changeMessage?: string;
   chunks: string[];
   totalChars: number;
   createdAt: string;
@@ -42,6 +44,7 @@ export async function beginRecordContentUploadSession(
     recordId: string;
     workspaceId: string;
     contentSha256: string;
+    changeMessage?: string;
   },
 ): Promise<{
   uploadId: string;
@@ -55,6 +58,7 @@ export async function beginRecordContentUploadSession(
     recordId: input.recordId,
     workspaceId: input.workspaceId,
     contentSha256: input.contentSha256,
+    ...(input.changeMessage ? { changeMessage: input.changeMessage } : {}),
     chunks: [],
     totalChars: 0,
     createdAt: new Date().toISOString(),
@@ -102,12 +106,7 @@ async function saveRecordContentUploadSession(
 ): Promise<void> {
   const ttl = await redis.ttl(recordContentUploadKey(session.uploadId));
   const seconds = ttl > 0 ? ttl : RECORD_CONTENT_UPLOAD_TTL_SECONDS;
-  await redis.set(
-    recordContentUploadKey(session.uploadId),
-    JSON.stringify(session),
-    'EX',
-    seconds,
-  );
+  await redis.set(recordContentUploadKey(session.uploadId), JSON.stringify(session), 'EX', seconds);
 }
 
 export async function appendRecordContentChunk(

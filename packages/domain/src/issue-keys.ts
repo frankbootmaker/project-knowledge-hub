@@ -27,8 +27,7 @@ export const KEY_PREFIX_PATTERN = /^([A-Z]{3}|[A-Z]{2}[0-9])$/;
 /** Type segment: delivery (1–2) or document codes (2–4). */
 export const HUMAN_KEY_TYPE_PATTERN = /^[A-Z]{1,4}$/;
 
-export const HUMAN_KEY_PATTERN =
-  /^([A-Z]{3}|[A-Z]{2}[0-9])-([A-Z]{1,4})-([1-9][0-9]*)$/;
+export const HUMAN_KEY_PATTERN = /^([A-Z]{3}|[A-Z]{2}[0-9])-([A-Z]{1,4})-([1-9][0-9]*)$/;
 
 export const keyPrefixSchema = z
   .string()
@@ -44,11 +43,29 @@ export type ParsedHumanKey = {
   issueNumber: number;
 };
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_CANONICAL = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_HEX = /^[0-9a-f]{32}$/i;
+
+/**
+ * Lowercase hyphenated UUID, or null.
+ * Accepts a canonical UUID, `urn:uuid:`, braces, and 32 hex digits.
+ */
+export function canonicalUuid(value: string): string | null {
+  let raw = value.trim();
+  if (raw.toLowerCase().startsWith('urn:uuid:')) {
+    raw = raw.slice('urn:uuid:'.length).trim();
+  }
+  if (raw.startsWith('{') && raw.endsWith('}')) {
+    raw = raw.slice(1, -1).trim();
+  }
+  if (UUID_CANONICAL.test(raw)) return raw.toLowerCase();
+  if (!UUID_HEX.test(raw)) return null;
+  const hex = raw.toLowerCase();
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 export function isUuid(value: string): boolean {
-  return UUID_PATTERN.test(value.trim());
+  return canonicalUuid(value) !== null;
 }
 
 export function normalizeKeyPrefix(raw: string): string {
@@ -98,7 +115,10 @@ export function suggestKeyPrefix(nameOrSlug: string): string {
   if (alnum.length >= 3) {
     const candidate = alnum.slice(0, 3);
     if (KEY_PREFIX_PATTERN.test(candidate)) return candidate;
-    const onlyLetters = candidate.replace(/[^A-Z]/g, '').padEnd(2, 'X').slice(0, 2);
+    const onlyLetters = candidate
+      .replace(/[^A-Z]/g, '')
+      .padEnd(2, 'X')
+      .slice(0, 2);
     const digit = candidate.match(/[0-9]/)?.[0] ?? '1';
     return `${onlyLetters}${digit}`;
   }
@@ -165,13 +185,8 @@ export function issueKeyTypeToRaidKind(type: IssueKeyType): RaidKind | null {
 
 export type IssueCounters = Partial<Record<string, number>>;
 
-export function readIssueCounter(
-  counters: unknown,
-  type: string,
-): number {
+export function readIssueCounter(counters: unknown, type: string): number {
   if (!counters || typeof counters !== 'object') return 0;
   const value = (counters as Record<string, unknown>)[type];
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0
-    ? Math.floor(value)
-    : 0;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
 }

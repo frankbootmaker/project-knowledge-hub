@@ -9,6 +9,7 @@ export {
   MCP_MAX_CONTENT_CHARS,
   MCP_MAX_CONTENT_BYTES,
   MCP_MAX_LIST_LIMIT,
+  MCP_KNOWLEDGE_LIST_LIMIT,
   MCP_MAX_RESPONSE_BYTES,
   MCP_CONTENT_TRUNCATION_SUFFIX,
   ContentOffsetError,
@@ -17,11 +18,11 @@ export {
   sliceContentToFit,
   serializedResponseBytes,
   isTruncatedReadback,
-  contentSha256,
   enforceResponseSize,
   type ContentBoundary,
   type ContentPage,
 } from './limits.js';
+export { contentSha256 } from './content-hash.js';
 export {
   createKnowledgeHubMcpServer,
   type McpClientContext,

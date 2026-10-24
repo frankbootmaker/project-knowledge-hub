@@ -1,4 +1,14 @@
-import { createHash } from 'node:crypto';
+/**
+ * Content paging helpers with no Node builtins.
+ * SHA-256 lives in content-hash.ts. The web app must not import that module.
+ */
+export { MCP_KNOWLEDGE_LIST_LIMIT, MCP_MAX_LIST_LIMIT } from './list-limits.js';
+
+const utf8Encoder = new TextEncoder();
+
+function utf8ByteLength(text: string): number {
+  return utf8Encoder.encode(text).byteLength;
+}
 
 /** Max tool calls per API client per minute. */
 export const MCP_RATE_LIMIT_PER_MINUTE = 60;
@@ -17,9 +27,6 @@ export const MCP_MIN_CONTENT_CHARS = 1_000;
  * tool JSON under MCP_MAX_RESPONSE_BYTES.
  */
 export const MCP_MAX_CONTENT_BYTES = 100_000;
-
-/** Max items returned by list/search tools. */
-export const MCP_MAX_LIST_LIMIT = 25;
 
 /** Soft cap on serialized JSON tool result size (bytes). */
 export const MCP_MAX_RESPONSE_BYTES = 200_000;
@@ -56,19 +63,14 @@ export function isTruncatedReadback(content: string): boolean {
   return content.endsWith(MCP_CONTENT_TRUNCATION_SUFFIX);
 }
 
-/** SHA-256 hex of the full markdown body. Stable across pages of one version. */
-export function contentSha256(content: string): string {
-  return createHash('sha256').update(content, 'utf8').digest('hex');
-}
-
 function fitUtf8(text: string, maxBytes: number): string {
   if (maxBytes <= 0 || text.length === 0) return '';
-  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text;
+  if (utf8ByteLength(text) <= maxBytes) return text;
   let low = 0;
   let high = text.length;
   while (low < high) {
     const mid = Math.ceil((low + high) / 2);
-    if (Buffer.byteLength(text.slice(0, mid), 'utf8') <= maxBytes) low = mid;
+    if (utf8ByteLength(text.slice(0, mid)) <= maxBytes) low = mid;
     else high = mid - 1;
   }
   if (low > 0) {
@@ -175,7 +177,7 @@ export function sliceContent(
     start === 0 &&
     start + slice.length < contentLength
   ) {
-    const suffixBytes = Buffer.byteLength(MCP_CONTENT_TRUNCATION_SUFFIX, 'utf8');
+    const suffixBytes = utf8ByteLength(MCP_CONTENT_TRUNCATION_SUFFIX);
     slice = fitUtf8(
       content.slice(start, start + limit),
       MCP_MAX_CONTENT_BYTES - suffixBytes,
@@ -214,7 +216,7 @@ export function sliceContent(
 
 /** Pretty-printed tool JSON size, matching the MCP text result. */
 export function serializedResponseBytes(payload: unknown): number {
-  return Buffer.byteLength(JSON.stringify(payload, null, 2), 'utf8');
+  return utf8ByteLength(JSON.stringify(payload, null, 2));
 }
 
 /**
@@ -259,7 +261,7 @@ export function truncateContent(content: string, max = MCP_MAX_CONTENT_CHARS): {
 
 export function enforceResponseSize<T>(payload: T): T {
   const serialized = JSON.stringify(payload);
-  if (Buffer.byteLength(serialized, 'utf8') <= MCP_MAX_RESPONSE_BYTES) {
+  if (utf8ByteLength(serialized) <= MCP_MAX_RESPONSE_BYTES) {
     return payload;
   }
   let suggestedLimit = 10;

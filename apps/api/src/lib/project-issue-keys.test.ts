@@ -28,8 +28,7 @@ function testEnv() {
     NODE_ENV: 'test',
     APP_ENV: 'test',
     LOG_LEVEL: 'silent',
-    SESSION_SECRET:
-      process.env.SESSION_SECRET ?? 'test-session-secret-at-least-32-chars',
+    SESSION_SECRET: process.env.SESSION_SECRET ?? 'test-session-secret-at-least-32-chars',
   });
 }
 
@@ -246,6 +245,36 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
       expect(resolved).toBe(record1Id);
     });
 
+    it('should resolve uppercase, urn, and compact UUIDs to the stored id', async () => {
+      const compact = record1Id.replace(/-/g, '').toUpperCase();
+      await expect(
+        resolveKnowledgeRecordId(database, {
+          idOrKey: record1Id.toUpperCase(),
+        }),
+      ).resolves.toBe(record1Id);
+      await expect(
+        resolveKnowledgeRecordId(database, {
+          idOrKey: `urn:uuid:${record1Id.toUpperCase()}`,
+        }),
+      ).resolves.toBe(record1Id);
+      await expect(
+        resolveKnowledgeRecordId(database, {
+          idOrKey: compact,
+        }),
+      ).resolves.toBe(record1Id);
+    });
+
+    it('should 404 when a UUID matches no knowledge record', async () => {
+      await expect(
+        resolveKnowledgeRecordId(database, {
+          idOrKey: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        }),
+      ).rejects.toMatchObject({
+        code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+        statusCode: 404,
+      });
+    });
+
     it('should resolve unique prefix without workspace scoping', async () => {
       const resolved = await resolveKnowledgeRecordId(database, {
         idOrKey: 'PNZ-CONV-1',
@@ -257,7 +286,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
       await expect(
         resolveKnowledgeRecordId(database, {
           idOrKey: 'CSA-CONV-1',
-        })
+        }),
       ).rejects.toThrow(/exists in multiple projects/i);
     });
 
@@ -282,7 +311,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
         resolveKnowledgeRecordId(database, {
           idOrKey: 'CSA-CONV-1',
           workspaceIds: [workspace1Id, workspace2Id],
-        })
+        }),
       ).rejects.toThrow(/exists in multiple projects/i);
     });
 
@@ -291,17 +320,15 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
         resolveKnowledgeRecordId(database, {
           idOrKey: 'CSA-CONV-1',
           workspaceIds: [randomUUID()],
-        })
+        }),
       ).rejects.toThrow(/no project found/i);
     });
-    
+
     it('should resolve when prefix matches multiple projects but key exists in only one', async () => {
       // Prefix is unique per workspace, so a second CSA project in workspace1
       // is rejected. Drop the workspace1 record instead: CSA remains on both
       // projects, but CONV-1 exists only in workspace2.
-      await database.db
-        .delete(knowledgeRecords)
-        .where(eq(knowledgeRecords.id, record1Id));
+      await database.db.delete(knowledgeRecords).where(eq(knowledgeRecords.id, record1Id));
 
       const resolved = await resolveKnowledgeRecordId(database, {
         idOrKey: 'CSA-CONV-1',
@@ -327,25 +354,23 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           createdBy: authorId,
         })
         .returning();
-      
+
       // Now CSA-CONV-1 exists in both projects
       await expect(
         resolveKnowledgeRecordId(database, {
           idOrKey: 'CSA-CONV-1',
           workspaceIds: [workspace1Id, workspace2Id],
-        })
+        }),
       ).rejects.toThrow(/exists in multiple projects/i);
-      
+
       await expect(
         resolveKnowledgeRecordId(database, {
           idOrKey: 'CSA-CONV-1',
-        })
+        }),
       ).rejects.toThrow(/exists in multiple projects/i);
-      
+
       // Clean up
-      await database.db
-        .delete(knowledgeRecords)
-        .where(eq(knowledgeRecords.id, rec3.id));
+      await database.db.delete(knowledgeRecords).where(eq(knowledgeRecords.id, rec3.id));
     });
 
     it('should resolve with projectId scoping', async () => {
@@ -371,7 +396,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
         resolveEntityId(database, {
           entityType: 'task',
           idOrKey: 'CSA-T-1',
-        })
+        }),
       ).rejects.toThrow(/exists in multiple projects/i);
     });
 
@@ -440,7 +465,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
           entityType: 'task',
           idOrKey: 'CSA-T-1',
           workspaceIds: [workspace1Id, workspace2Id],
-        })
+        }),
       ).rejects.toThrow(/exists in multiple projects/i);
     });
   });
@@ -459,7 +484,7 @@ describe.skipIf(!hasTestDb)('PRO-T-3: Key prefix resolution scoping', () => {
         resolveEntityId(database, {
           entityType: 'raid',
           idOrKey: 'CSA-RR-1',
-        })
+        }),
       ).rejects.toThrow(/exists in multiple projects/i);
     });
 
@@ -578,10 +603,10 @@ describe('allocateIssueNumber transactional behavior', () => {
     expect(result.issueNumber).toBe(6);
     expect(result.keyPrefix).toBe('TST');
     expect(result.humanKey).toBe('TST-T-6');
-    
+
     // The transaction callback should not be called since we passed tx
     expect(mockDatabase.db.transaction).not.toHaveBeenCalled();
-    
+
     // The transaction operations should use the passed tx
     expect(mockTx.select).toHaveBeenCalled();
     expect(mockTx.update).toHaveBeenCalled();
@@ -621,14 +646,14 @@ describe('allocateIssueNumber transactional behavior', () => {
 
     expect(result.issueKeyType).toBe('T');
     expect(result.issueNumber).toBe(6);
-    
+
     // The transaction callback should be called since no tx was passed
     expect(mockDatabase.db.transaction).toHaveBeenCalled();
   });
 
   test('error in transaction propagates and rolls back', async () => {
     const errorToThrow = new Error('Insert failed');
-    
+
     const mockTx = {
       select: vi.fn().mockReturnThis(),
       from: vi.fn().mockReturnThis(),

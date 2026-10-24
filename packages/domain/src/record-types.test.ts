@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AppError, assertKnowledgeRecordConcurrency } from './index.js';
 import {
   RECORD_TYPES,
   RECORD_TYPE_CATALOG,
@@ -11,9 +12,7 @@ import {
 
 describe('knowledge record slug format', () => {
   it('accepts lowercase slugs and rejects other characters', () => {
-    expect(isKnowledgeRecordSlug('ai-lawyer-nyitott-kerdesek-jogi-atnezese')).toBe(
-      true,
-    );
+    expect(isKnowledgeRecordSlug('ai-lawyer-nyitott-kerdesek-jogi-atnezese')).toBe(true);
     expect(isKnowledgeRecordSlug('a')).toBe(true);
     expect(isKnowledgeRecordSlug('AI-Lawyer')).toBe(false);
     expect(isKnowledgeRecordSlug('kerdesek átnézése')).toBe(false);
@@ -43,13 +42,7 @@ describe('knowledge record slug format', () => {
 
 describe('record types catalog', () => {
   it('includes ledger planning types', () => {
-    for (const value of [
-      'business-idea',
-      'vision',
-      'plan',
-      'initiative',
-      'note',
-    ] as const) {
+    for (const value of ['business-idea', 'vision', 'plan', 'initiative', 'note'] as const) {
       expect(RECORD_TYPES).toContain(value);
       expect(recordTypeSchema.parse(value)).toBe(value);
     }
@@ -64,11 +57,7 @@ describe('record types catalog', () => {
   });
 
   it('includes project charter, meeting minutes, and decision-making', () => {
-    for (const value of [
-      'project-charter',
-      'meeting-minutes',
-      'decision',
-    ] as const) {
+    for (const value of ['project-charter', 'meeting-minutes', 'decision'] as const) {
       expect(RECORD_TYPES).toContain(value);
       expect(recordTypeSchema.parse(value)).toBe(value);
       expect(RECORD_TYPE_CATALOG.some((entry) => entry.value === value)).toBe(true);
@@ -77,9 +66,7 @@ describe('record types catalog', () => {
 
   it('includes invoice', () => {
     expect(recordTypeSchema.parse('invoice')).toBe('invoice');
-    expect(RECORD_TYPE_CATALOG.some((entry) => entry.value === 'invoice')).toBe(
-      true,
-    );
+    expect(RECORD_TYPE_CATALOG.some((entry) => entry.value === 'invoice')).toBe(true);
   });
 
   it('keeps catalog values aligned with the enum', () => {
@@ -104,54 +91,48 @@ describe('record types catalog', () => {
     expect(meta.workspaceMedia.tools).toContain('begin_workspace_media_upload');
     expect(meta.workspaceMedia.preferredPath).toContain('begin_workspace_media_upload');
     expect(meta.workspaceMedia.workflow[0]).toMatch(/begin_workspace_media_upload/);
-    expect(meta.workspaceMedia.workflow.some((line) => line.includes('omits upload_workspace_media'))).toBe(
+    expect(
+      meta.workspaceMedia.workflow.some((line) => line.includes('omits upload_workspace_media')),
+    ).toBe(true);
+    expect(meta.workspaceMedia.contentTypes).toContain('image/png');
+    expect(meta.guidance.some((line) => line.includes('finalize_workspace_media_upload'))).toBe(
       true,
     );
-    expect(meta.workspaceMedia.contentTypes).toContain('image/png');
-    expect(
-      meta.guidance.some((line) => line.includes('finalize_workspace_media_upload')),
-    ).toBe(true);
   });
 
   it('buildKnowledgeRecordMetadata update guide matches update schema', () => {
     const meta = buildKnowledgeRecordMetadata();
-    
+
     // PRO-T-4: update guide required fields should match update_knowledge_record schema
-    expect(meta.updateKnowledgeRecord.requiredFields).toEqual([
-      'recordId',
-      'changeMessage',
-    ]);
-    
+    expect(meta.updateKnowledgeRecord.requiredFields).toEqual(['recordId', 'changeMessage']);
+
     // PRO-T-4: update guide should include archived in optional fields
+    expect(meta.version).toBe(2);
     expect(meta.updateKnowledgeRecord.optionalFields).toContain('archived');
     expect(meta.updateKnowledgeRecord.optionalFields).toContain('slug');
-    
+    expect(meta.updateKnowledgeRecord.optionalFields).toContain('expectSha256');
+    expect(meta.updateKnowledgeRecord.optionalFields).toContain('expectedVersion');
+
     // PRO-T-4: recordId should be documented in fields
-    const recordIdField = meta.updateKnowledgeRecord.fields.find(
-      (f) => f.name === 'recordId',
-    );
+    const recordIdField = meta.updateKnowledgeRecord.fields.find((f) => f.name === 'recordId');
     expect(recordIdField).toBeDefined();
     expect(recordIdField?.requirement).toBe('required');
     expect(recordIdField?.appliesTo).toContain('update');
-    
+
     // PRO-T-4: archived should be documented in fields
-    const archivedField = meta.updateKnowledgeRecord.fields.find(
-      (f) => f.name === 'archived',
-    );
+    const archivedField = meta.updateKnowledgeRecord.fields.find((f) => f.name === 'archived');
     expect(archivedField).toBeDefined();
     expect(archivedField?.requirement).toBe('optional');
     expect(archivedField?.appliesTo).toContain('update');
-    
+
     // PRO-T-4: title, recordType, contentMarkdown should be optional on update
     for (const fieldName of ['title', 'recordType', 'contentMarkdown']) {
-      const field = meta.updateKnowledgeRecord.fields.find(
-        (f) => f.name === fieldName,
-      );
+      const field = meta.updateKnowledgeRecord.fields.find((f) => f.name === fieldName);
       expect(field).toBeDefined();
       expect(field?.requirement).toBe('optional');
       expect(field?.appliesTo).toContain('update');
     }
-    
+
     // PRO-T-4: field requirements should match requiredFields/optionalFields lists
     for (const field of meta.updateKnowledgeRecord.fields) {
       if (field.requirement === 'required') {
@@ -160,14 +141,14 @@ describe('record types catalog', () => {
         expect(meta.updateKnowledgeRecord.optionalFields).toContain(field.name);
       }
     }
-    
+
     // PRO-T-4: update guide should include ignored_on_mcp_write fields
     const lifecycleStatusField = meta.updateKnowledgeRecord.fields.find(
       (f) => f.name === 'lifecycleStatus',
     );
     expect(lifecycleStatusField).toBeDefined();
     expect(lifecycleStatusField?.requirement).toBe('ignored_on_mcp_write');
-    
+
     const sourceOfTruthModeField = meta.updateKnowledgeRecord.fields.find(
       (f) => f.name === 'sourceOfTruthMode',
     );
@@ -177,17 +158,15 @@ describe('record types catalog', () => {
 
   it('buildKnowledgeRecordMetadata create guide requirement values are correct', () => {
     const meta = buildKnowledgeRecordMetadata();
-    
+
     // Create guide: title, recordType, contentMarkdown should be required
     for (const fieldName of ['title', 'recordType', 'contentMarkdown']) {
-      const field = meta.createKnowledgeRecord.fields.find(
-        (f) => f.name === fieldName,
-      );
+      const field = meta.createKnowledgeRecord.fields.find((f) => f.name === fieldName);
       expect(field).toBeDefined();
       expect(field?.requirement).toBe('required');
       expect(field?.appliesTo).toContain('create');
     }
-    
+
     // Field requirements should match requiredFields/optionalFields lists
     for (const field of meta.createKnowledgeRecord.fields) {
       if (field.requirement === 'required') {
@@ -201,30 +180,25 @@ describe('record types catalog', () => {
   it('PRO-T-4: create guide matches createKnowledgeRecordInputSchema', () => {
     const meta = buildKnowledgeRecordMetadata();
     const schemaShape = createKnowledgeRecordInputSchema.shape;
-    
+
     // Fields that are deliberately excluded from the guide
     const excludedFromGuide = new Set<string>([
       // None currently excluded for create
     ]);
-    
+
     // Fields that MCP ignores (documented but not in the tool schema)
-    const ignoredOnMcpWrite = new Set<string>([
-      'lifecycleStatus',
-      'sourceOfTruthMode',
-    ]);
-    
+    const ignoredOnMcpWrite = new Set<string>(['lifecycleStatus', 'sourceOfTruthMode']);
+
     // Every schema property should appear in the guide (except excluded or ignored)
     for (const fieldName of Object.keys(schemaShape)) {
       if (excludedFromGuide.has(fieldName)) continue;
-      const field = meta.createKnowledgeRecord.fields.find(
-        (f) => f.name === fieldName,
-      );
+      const field = meta.createKnowledgeRecord.fields.find((f) => f.name === fieldName);
       expect(field, `Schema field "${fieldName}" should be in guide fields`).toBeDefined();
-      
+
       // Check required/optional status matches
       const zodField = schemaShape[fieldName as keyof typeof schemaShape];
       const isOptional = zodField.isOptional();
-      
+
       if (isOptional) {
         expect(field?.requirement, `Field "${fieldName}" should be optional`).toBe('optional');
         expect(
@@ -239,7 +213,7 @@ describe('record types catalog', () => {
         ).toContain(fieldName);
       }
     }
-    
+
     // Every guide field with requirement required/optional should exist in schema or be ignored
     for (const field of meta.createKnowledgeRecord.fields) {
       if (field.requirement === 'ignored_on_mcp_write') {
@@ -249,41 +223,35 @@ describe('record types catalog', () => {
         ).toBe(true);
         continue;
       }
-      
-      expect(
-        schemaShape,
-        `Guide field "${field.name}" should exist in schema`,
-      ).toHaveProperty(field.name);
+
+      expect(schemaShape, `Guide field "${field.name}" should exist in schema`).toHaveProperty(
+        field.name,
+      );
     }
   });
 
   it('PRO-T-4: update guide matches updateKnowledgeRecordInputSchema', () => {
     const meta = buildKnowledgeRecordMetadata();
     const schemaShape = updateKnowledgeRecordInputSchema.shape;
-    
+
     // Fields that are deliberately excluded from the guide
     const excludedFromGuide = new Set<string>([
       // None currently excluded for update
     ]);
-    
+
     // Fields that MCP ignores (documented but not in the tool schema)
-    const ignoredOnMcpWrite = new Set<string>([
-      'lifecycleStatus',
-      'sourceOfTruthMode',
-    ]);
-    
+    const ignoredOnMcpWrite = new Set<string>(['lifecycleStatus', 'sourceOfTruthMode']);
+
     // Every schema property should appear in the guide (except excluded or ignored)
     for (const fieldName of Object.keys(schemaShape)) {
       if (excludedFromGuide.has(fieldName)) continue;
-      const field = meta.updateKnowledgeRecord.fields.find(
-        (f) => f.name === fieldName,
-      );
+      const field = meta.updateKnowledgeRecord.fields.find((f) => f.name === fieldName);
       expect(field, `Schema field "${fieldName}" should be in guide fields`).toBeDefined();
-      
+
       // Check required/optional status matches
       const zodField = schemaShape[fieldName as keyof typeof schemaShape];
       const isOptional = zodField.isOptional();
-      
+
       if (isOptional) {
         expect(field?.requirement, `Field "${fieldName}" should be optional`).toBe('optional');
         expect(
@@ -298,7 +266,7 @@ describe('record types catalog', () => {
         ).toContain(fieldName);
       }
     }
-    
+
     // Every guide field with requirement required/optional should exist in schema or be ignored
     for (const field of meta.updateKnowledgeRecord.fields) {
       if (field.requirement === 'ignored_on_mcp_write') {
@@ -308,11 +276,62 @@ describe('record types catalog', () => {
         ).toBe(true);
         continue;
       }
-      
-      expect(
-        schemaShape,
-        `Guide field "${field.name}" should exist in schema`,
-      ).toHaveProperty(field.name);
+
+      expect(schemaShape, `Guide field "${field.name}" should exist in schema`).toHaveProperty(
+        field.name,
+      );
     }
+  });
+});
+
+describe('assertKnowledgeRecordConcurrency', () => {
+  const current = {
+    contentSha256: 'a'.repeat(64),
+    currentVersionNumber: 3,
+  };
+
+  it('rejects a stale expectSha256 as 409 conflict and writes nothing', () => {
+    expect(() =>
+      assertKnowledgeRecordConcurrency({
+        ...current,
+        expectSha256: 'b'.repeat(64),
+      }),
+    ).toThrow(AppError);
+    try {
+      assertKnowledgeRecordConcurrency({
+        ...current,
+        expectSha256: 'B'.repeat(64),
+      });
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppError);
+      const appError = error as AppError;
+      expect(appError.statusCode).toBe(409);
+      expect(appError.code).toBe('CONTENT_CHANGED');
+      expect(appError.message).toContain('409');
+      expect(appError.message).toContain('conflict');
+      expect(appError.details).toMatchObject({ errorType: 'conflict' });
+    }
+  });
+
+  it('rejects a stale expectedVersion as 409 conflict', () => {
+    let thrown: AppError | undefined;
+    try {
+      assertKnowledgeRecordConcurrency({ ...current, expectedVersion: 2 });
+    } catch (error) {
+      thrown = error as AppError;
+    }
+    expect(thrown?.statusCode).toBe(409);
+    expect(thrown?.message).toContain('conflict');
+    expect(thrown?.details).toMatchObject({ errorType: 'conflict' });
+  });
+
+  it('accepts a matching hash in any case and the current version', () => {
+    expect(() =>
+      assertKnowledgeRecordConcurrency({
+        ...current,
+        expectSha256: 'A'.repeat(64),
+        expectedVersion: 3,
+      }),
+    ).not.toThrow();
   });
 });

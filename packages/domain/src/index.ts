@@ -18,7 +18,15 @@ export {
   KNOWLEDGE_RECORD_SLUG_MAX,
   KNOWLEDGE_RECORD_SLUG_PATTERN,
   isKnowledgeRecordSlug,
+  APPEND_RECORD_CONTENT_TOOL_DESCRIPTION,
+  BEGIN_RECORD_CONTENT_UPLOAD_TOOL_DESCRIPTION,
+  FINALIZE_RECORD_CONTENT_UPLOAD_TOOL_DESCRIPTION,
+  LIST_KNOWLEDGE_RECORDS_TOOL_DESCRIPTION,
+  UPDATE_KNOWLEDGE_RECORD_TOOL_DESCRIPTION,
+  appendRecordContentInputSchema,
+  beginRecordContentUploadInputSchema,
   createKnowledgeRecordInputSchema,
+  finalizeRecordContentUploadInputSchema,
   updateKnowledgeRecordInputSchema,
   type RecordType,
   type RecordTypeCategory,
@@ -29,7 +37,10 @@ export {
   type FieldRequirement,
   type KnowledgeRecordFieldGuide,
   type KnowledgeRecordMetadata,
+  type AppendRecordContentInput,
+  type BeginRecordContentUploadInput,
   type CreateKnowledgeRecordInput,
+  type FinalizeRecordContentUploadInput,
   type UpdateKnowledgeRecordInput,
 } from './record-types.js';
 
@@ -1292,6 +1303,7 @@ export {
   HUMAN_KEY_PATTERN,
   HUMAN_KEY_TYPE_PATTERN,
   keyPrefixSchema,
+  canonicalUuid,
   isUuid,
   normalizeKeyPrefix,
   isValidKeyPrefix,
@@ -1372,6 +1384,7 @@ export {
 export {
   CYCLE_CHECKED_KNOWLEDGE_RECORD_RELATION_TYPES,
   KNOWLEDGE_RECORD_RELATION_INVERSE,
+  KNOWLEDGE_RECORD_RELATION_INVERSE_GUIDE,
   KNOWLEDGE_RECORD_RELATION_TYPES,
   MAX_KNOWLEDGE_RECORD_RELATIONS,
   RECORD_RELATIONS_COMPACT_CAP,
@@ -1747,6 +1760,8 @@ export function parseReportingCurrency(value: string | null | undefined): Projec
   }
   return parsed.data;
 }
+
+export { assertKnowledgeRecordConcurrency } from './record-concurrency.js';
 
 export class AppError extends Error {
   readonly code: string;
