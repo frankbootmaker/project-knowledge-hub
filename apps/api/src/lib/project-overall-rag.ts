@@ -3,6 +3,7 @@ import type { Database } from '@project-knowledge-hub/database';
 import {
   projectMilestones,
   projectTasks,
+  projects,
 } from '@project-knowledge-hub/database';
 import {
   emptyProjectHealth,
@@ -13,6 +14,7 @@ import {
   type ProjectRagStatus,
 } from '@project-knowledge-hub/domain';
 import { listProjectBudgetSignals } from './project-budget-signals.js';
+import { coalesceRead, liveReadTtl } from './read-cache.js';
 
 export { emptyProjectHealth, type ProjectHealth };
 
@@ -32,13 +34,52 @@ export type ProjectHealthSnapshot = {
  * If that signal throws or a project is missing from it, overall is the
  * timeline RAG only and financial is null.
  *
- * Schedule rows are two queries. Budget signals are one batched load, not
- * one getProjectBudgetSummary per project.
+ * Schedule rows are two indexed reads (`project_id`, plus `archived_at`
+ * filtered on that index). The fixed cost is the workspace paid-AI context
+ * inside the budget signals, not the milestone or task scan. That context
+ * and these snapshots are reused for a short time per workspace and day so
+ * the project list, the project page, and budget-summary do not rebuild them.
  */
-export async function listProjectHealthSnapshots(
+const HEALTH_TTL_MS = 20_000;
+
+type CachedSnapshot = {
+  expiresAt: number;
+  snapshot: ProjectHealthSnapshot;
+};
+
+const healthByDatabase = new WeakMap<Database, Map<string, CachedSnapshot>>();
+
+function snapshotCache(database: Database): Map<string, CachedSnapshot> {
+  let cache = healthByDatabase.get(database);
+  if (!cache) {
+    cache = new Map();
+    healthByDatabase.set(database, cache);
+  }
+  return cache;
+}
+
+function healthCacheKey(workspaceId: string, today: string, projectId: string): string {
+  return `${workspaceId}:${today}:${projectId}`;
+}
+
+async function loadProjectWorkspaces(
   database: Database,
   projectIds: string[],
-  today = todayYmd(),
+): Promise<Map<string, string>> {
+  const rows = await database.db
+    .select({
+      id: projects.id,
+      workspaceId: projects.workspaceId,
+    })
+    .from(projects)
+    .where(inArray(projects.id, projectIds));
+  return new Map(rows.map((row) => [row.id, row.workspaceId]));
+}
+
+async function computeProjectHealthSnapshots(
+  database: Database,
+  projectIds: string[],
+  today: string,
 ): Promise<Map<string, ProjectHealthSnapshot>> {
   const result = new Map<string, ProjectHealthSnapshot>();
   if (projectIds.length === 0) return result;
@@ -114,6 +155,58 @@ export async function listProjectHealthSnapshots(
       spi: signal.spi,
     });
   }
+
+  return result;
+}
+
+export async function listProjectHealthSnapshots(
+  database: Database,
+  projectIds: string[],
+  today = todayYmd(),
+): Promise<Map<string, ProjectHealthSnapshot>> {
+  const ids = [...new Set(projectIds)];
+  const result = new Map<string, ProjectHealthSnapshot>();
+  if (ids.length === 0) return result;
+
+  const now = Date.now();
+  const ttl = liveReadTtl(HEALTH_TTL_MS);
+  const cache = snapshotCache(database);
+  const workspaceOf = await loadProjectWorkspaces(database, ids);
+  const missingByWorkspace = new Map<string, string[]>();
+
+  for (const projectId of ids) {
+    const workspaceId = workspaceOf.get(projectId) ?? '_';
+    const hit = cache.get(healthCacheKey(workspaceId, today, projectId));
+    if (hit && hit.expiresAt > now) {
+      result.set(projectId, hit.snapshot);
+      continue;
+    }
+    const missing = missingByWorkspace.get(workspaceId) ?? [];
+    missing.push(projectId);
+    missingByWorkspace.set(workspaceId, missing);
+  }
+
+  await Promise.all([...missingByWorkspace].map(async ([workspaceId, missing]) => {
+    const sorted = [...missing].sort();
+    const computed = await coalesceRead(
+      database,
+      `health-batch:${workspaceId}:${today}:${sorted.join(',')}`,
+      ttl,
+      () => computeProjectHealthSnapshots(database, sorted, today),
+    );
+    const expiresAt = now + ttl;
+    for (const projectId of sorted) {
+      const snapshot = computed.get(projectId);
+      if (!snapshot) continue;
+      if (ttl > 0) {
+        cache.set(healthCacheKey(workspaceId, today, projectId), {
+          expiresAt,
+          snapshot,
+        });
+      }
+      result.set(projectId, snapshot);
+    }
+  }));
 
   return result;
 }

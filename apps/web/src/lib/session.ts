@@ -25,6 +25,8 @@ export type WorkspaceListRow = {
   slug: string;
   description: string | null;
   color: string | null;
+  organizationId: string;
+  organizationName: string;
   updatedAt: string;
 };
 

@@ -86,13 +86,14 @@ export async function KnowledgeRecordDetailView({
   const tCommon = await getTranslations('common');
 
   const workspace = await requireWorkspaceBySlug(workspaceSlug);
-  const routeProject = projectContext
-    ? await requireProjectBySlug(workspace.id, projectContext.projectSlug, workspace.slug)
-    : null;
-
-  const listResponse = await apiFetch(
-    `/api/v1/knowledge-records?workspaceId=${workspace.id}&includeArchived=true`,
-  );
+  const [routeProject, listResponse] = await Promise.all([
+    projectContext
+      ? requireProjectBySlug(workspace.id, projectContext.projectSlug, workspace.slug)
+      : Promise.resolve(null),
+    apiFetch(
+      `/api/v1/knowledge-records?workspaceId=${workspace.id}&slug=${encodeURIComponent(recordSlug)}&includeArchived=true`,
+    ),
+  ]);
   if (!listResponse.ok) {
     notFound();
   }
@@ -127,15 +128,40 @@ export async function KnowledgeRecordDetailView({
     });
   }
   const isArchived = Boolean(record.archivedAt);
+  const canMutate = canMutateWorkspace(session, workspace.id);
+  const canPurge = canPurgeWorkspace(session, workspace.id);
+  const needsProjectOptions =
+    canMutate && !isArchived && record.sourceOfTruthMode !== 'git_managed';
 
-  const [projectsResponse, systemsResponse, llmCapabilitiesResponse] = await Promise.all([
-    apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`),
+  const linkedProjectId = routeProject ? null : record.projectId;
+  const [
+    systemsResponse,
+    projectsResponse,
+    llmCapabilitiesResponse,
+    linkedProjectResponse,
+    translationsResponse,
+    relationsResponse,
+    linksResponse,
+  ] = await Promise.all([
     apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`),
+    needsProjectOptions
+      ? apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`)
+      : Promise.resolve(null),
     apiFetch('/api/v1/llm/capabilities'),
+    linkedProjectId
+      ? apiFetch(`/api/v1/projects/${linkedProjectId}`)
+      : Promise.resolve(null),
+    apiFetch(`/api/v1/knowledge-records/${record.id}/translations`),
+    apiFetch(`/api/v1/knowledge-records/${record.id}/relations`),
+    apiFetch(`/api/v1/knowledge-records/${record.id}/linked-items`),
   ]);
-  const projects = projectsResponse.ok
+  const projects = projectsResponse?.ok
     ? ((await projectsResponse.json()) as { projects: Project[] }).projects
     : [];
+  const linkedProject = linkedProjectResponse?.ok
+    ? ((await linkedProjectResponse.json()) as { project: Project }).project
+    : null;
+  const project = routeProject ?? linkedProject;
   const systems = systemsResponse.ok
     ? ((await systemsResponse.json()) as { systems: System[] }).systems
     : [];
@@ -148,11 +174,8 @@ export async function KnowledgeRecordDetailView({
         ).translationConfigured,
       )
     : false;
-  const project = projects.find((item) => item.id === record.projectId);
   const system = systems.find((item) => item.id === record.systemId);
 
-  const canMutate = canMutateWorkspace(session, workspace.id);
-  const canPurge = canPurgeWorkspace(session, workspace.id);
   const gitManaged = record.sourceOfTruthMode === 'git_managed';
   const recordBasePath = recordHref({
     workspaceSlug: workspace.slug,
@@ -165,11 +188,6 @@ export async function KnowledgeRecordDetailView({
     : `/workspaces/${workspace.slug}`;
   const knowledgeListLabel = knowledgeProject?.name ?? t('eyebrow');
 
-  const [translationsResponse, relationsResponse, linksResponse] = await Promise.all([
-    apiFetch(`/api/v1/knowledge-records/${record.id}/translations`),
-    apiFetch(`/api/v1/knowledge-records/${record.id}/relations`),
-    apiFetch(`/api/v1/knowledge-records/${record.id}/linked-items`),
-  ]);
   const linkedItems: KnowledgeRecordLinkedItemsPayload = linksResponse.ok
     ? (
         (await linksResponse.json()) as {

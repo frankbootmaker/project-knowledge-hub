@@ -153,4 +153,29 @@ describe('dashboard project health', () => {
       },
     ]);
   });
+
+  it('reuses the insights payload for the same user until the ttl expires', async () => {
+    vi.mocked(listProjectHealthSnapshots).mockResolvedValue(
+      new Map([
+        [
+          'p-1',
+          snapshot({
+            overall: 'green',
+            timeline: 'green',
+            risk: 'green',
+            financial: 'green',
+            riskReasons: [],
+          }),
+        ],
+      ]),
+    );
+    const db = database([[{ id: 'ws-1' }], [projectRow], []]);
+    const input = { userId: 'user-cache', isSystemAdmin: true };
+    const first = await getDashboardInsights(db, input);
+    const second = await getDashboardInsights(db, input);
+
+    expect(second).toEqual(first);
+    expect(second.projectHealthRag).toEqual({ green: 1, amber: 0, red: 0 });
+    expect(listProjectHealthSnapshots).toHaveBeenCalledTimes(1);
+  });
 });

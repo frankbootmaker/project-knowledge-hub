@@ -14,6 +14,7 @@ import {
 } from './session';
 
 const DASHBOARD_INSIGHTS_COALESCE_MS = 2_000;
+const DASHBOARD_HOME_COALESCE_MS = 2_000;
 
 export const DASHBOARD_WORKSPACE_TILE_LIMIT = 6;
 export const DASHBOARD_RECENT_LIMIT = 5;
@@ -179,6 +180,20 @@ function recentHref(item: RecentApiItem): string {
   return `/workspaces/${item.workspaceSlug}/records/${item.slug}`;
 }
 
+async function fetchWorkspaceCounts(): Promise<WorkspaceCounts[]> {
+  const response = await apiFetch('/api/v1/me/workspace-counts');
+  if (!response.ok) return [];
+  const body = (await response.json()) as { counts?: WorkspaceCounts[] };
+  return body.counts ?? [];
+}
+
+async function fetchRecentItems(limit: number): Promise<RecentApiItem[]> {
+  const response = await apiFetch(`/api/v1/me/recent?limit=${limit}`);
+  if (!response.ok) return [];
+  const body = (await response.json()) as { recent?: RecentApiItem[] };
+  return body.recent ?? [];
+}
+
 export const loadDashboardWorkspaceSection = cache(async (
   session: SessionPayload,
 ): Promise<{
@@ -187,22 +202,25 @@ export const loadDashboardWorkspaceSection = cache(async (
   recent: DashboardRecentItem[];
   primaryWorkspaceId: string | null;
 }> => {
+  const token = await readSessionToken();
   const workspaces = await fetchWorkspaceList();
   const sorted = [...workspaces].sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   );
   const tileWorkspaces = sorted.slice(0, DASHBOARD_WORKSPACE_TILE_LIMIT);
-  const [countsRes, recentRes] = await Promise.all([
-    apiFetch('/api/v1/me/workspace-counts'),
-    apiFetch(`/api/v1/me/recent?limit=${DASHBOARD_RECENT_LIMIT}`),
+  const [counts, recentRows] = await Promise.all([
+    coalesceInflight(
+      `me:workspace-counts:${token ?? ''}`,
+      DASHBOARD_HOME_COALESCE_MS,
+      fetchWorkspaceCounts,
+    ),
+    coalesceInflight(
+      `me:recent:${token ?? ''}:${DASHBOARD_RECENT_LIMIT}`,
+      DASHBOARD_HOME_COALESCE_MS,
+      () => fetchRecentItems(DASHBOARD_RECENT_LIMIT),
+    ),
   ]);
-  const counts = countsRes.ok
-    ? ((await countsRes.json()) as { counts?: WorkspaceCounts[] }).counts ?? []
-    : [];
   const countById = new Map(counts.map((row) => [row.workspaceId, row]));
-  const recentRows = recentRes.ok
-    ? ((await recentRes.json()) as { recent?: RecentApiItem[] }).recent ?? []
-    : [];
 
   return {
     workspaces: tileWorkspaces.map((workspace) =>
