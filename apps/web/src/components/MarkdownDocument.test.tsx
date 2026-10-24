@@ -111,6 +111,51 @@ describe('MarkdownDocument', () => {
     ).toBe(false);
   });
 
+  it('shows toolbar trailing only while related entries are open', () => {
+    const container = render(
+      <MarkdownDocument
+        html="<p>Hi</p>"
+        toc={[]}
+        title="Doc"
+        relatedEntries={{
+          count: 2,
+          open: false,
+          onOpenChange: () => undefined,
+          toolbarTrailing: <button type="button">Add relation</button>,
+          panel: <div data-testid="related-panel">Related</div>,
+        }}
+      />,
+    );
+    expect(
+      container.querySelector('[data-testid="related-entries-toolbar-trailing"]'),
+    ).toBeNull();
+
+    act(() => {
+      mounted[0]?.root.render(
+        <MarkdownDocument
+          html="<p>Hi</p>"
+          toc={[]}
+          title="Doc"
+          relatedEntries={{
+            count: 2,
+            open: true,
+            onOpenChange: () => undefined,
+            toolbarTrailing: <button type="button">Add relation</button>,
+            panel: <div data-testid="related-panel">Related</div>,
+          }}
+        />,
+      );
+    });
+
+    const trailing = container.querySelector(
+      '[data-testid="related-entries-toolbar-trailing"]',
+    );
+    expect(trailing).not.toBeNull();
+    expect(trailing?.className).toContain('ml-auto');
+    expect(trailing?.textContent).toContain('Add relation');
+    expect(container.querySelector('.kh-ops-related-records-shell')).not.toBeNull();
+  });
+
   it('toggles related entries panel and persists open state', () => {
     let open = false;
     const onOpenChange = vi.fn((next: boolean) => {

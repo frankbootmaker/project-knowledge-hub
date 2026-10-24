@@ -253,13 +253,9 @@ Record durable UI / design-system changes here (newest first).
 
 ### 2026-10-24
 
-<<<<<<< Updated upstream
-* **Related entries toolbar (PRO-T-130)** — Knowledge record document view collapses related entries by default. The markdown manage strip adds a secondary `Button` after Contents and wide view (`Related entries (N)`), with `aria-expanded` and `localStorage` persistence (`kh-record-related-entries-open`). Open state renders `.kh-ops-related-records.is-compact` and `.kh-ops-related-records-scroll` (~200px) above the body. The Contents toggle label is `records.contents` (EN Contents, HU Tartalomjegyzék, DE Inhaltsverzeichnis); `records.tocLabel` is the tooltip/aria-label. Copy is in English, German, and Hungarian.
-=======
 * **Workspace Documents rail (PRO-T-131)** — The Knowledge section icon, tooltip, and group header use `nav.sectionKnowledge` (EN Documents, HU Dokumentumok, DE Dokumente). The first item keeps `nav.knowledgeLibrary` (Knowledge / Tudás / Wissen). A **Systems** item (`nav.workspaceSystems`) sits under it and scrolls to `#workspace-systems`; Knowledge scrolls to `#workspace-knowledge`. `WorkspaceSectionSpy` pins the active rail item while scrolling the workspace catalogue. Copy is in English, German, and Hungarian.
 
 * **Related entries toolbar (PRO-T-130)** — Knowledge record document view collapses related entries by default. The markdown manage strip adds a secondary `Button` after Contents and wide view (`Related entries (N)`), with `aria-expanded` and `localStorage` persistence (`kh-record-related-entries-open`). While open, maintainers see **Add relation** right-aligned in the same strip; the list sits in `.kh-ops-related-records-shell` (9px inset, line border, `--kh-bg`) wrapping `.kh-ops-related-records.is-compact` and `.kh-ops-related-records-scroll` (~200px), separated from the markdown body. The Contents toggle label is `records.contents` (EN Contents, HU Tartalomjegyzék, DE Inhaltsverzeichnis); `records.tocLabel` is the tooltip/aria-label. Copy is in English, German, and Hungarian.
->>>>>>> Stashed changes
 
 ### 2026-10-23
 

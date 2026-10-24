@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { MarkdownDocument } from '../MarkdownDocument';
 import {
   countRelatedEntries,
@@ -44,9 +44,14 @@ export function KnowledgeRecordDetailMarkdown({
 }) {
   const relatedCount = countRelatedEntries(relations);
   const [relatedOpen, setRelatedOpen] = useState(false);
+  const [addRelationButton, setAddRelationButton] = useState<ReactNode>(null);
 
   useEffect(() => {
     setRelatedOpen(readRelatedEntriesOpen());
+  }, []);
+
+  const supplyAddButton = useCallback((button: ReactNode) => {
+    setAddRelationButton(button);
   }, []);
 
   function onRelatedOpenChange(open: boolean) {
@@ -65,6 +70,7 @@ export function KnowledgeRecordDetailMarkdown({
               count: relatedCount,
               open: relatedOpen,
               onOpenChange: onRelatedOpenChange,
+              toolbarTrailing: addRelationButton,
               panel: (
                 <KnowledgeRecordRelationsPanel
                   recordId={recordId}
@@ -73,6 +79,7 @@ export function KnowledgeRecordDetailMarkdown({
                   initial={relations}
                   catalogue={catalogue}
                   embedded
+                  supplyAddButton={supplyAddButton}
                 />
               ),
             }
