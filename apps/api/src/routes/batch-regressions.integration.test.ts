@@ -89,6 +89,8 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
   let narrowToken = '';
   let wideToken = '';
   let validationToken = '';
+  /** Separate client so the knowledge-record cases do not share the suite rate-limit bucket. */
+  let recordToken = '';
   let callId = 1;
   const origin = 'http://localhost:3100';
 
@@ -233,6 +235,21 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     });
     expect(validation.statusCode).toBe(200);
     validationToken = (validation.json() as { token: string }).token;
+
+    const records = await app.inject({
+      method: 'POST',
+      url: '/api/v1/api-clients',
+      headers: { cookie: adminCookie, origin },
+      payload: {
+        organizationId: org!.id,
+        name: 'Record token',
+        scopes,
+        allowedWorkspaceIds: [workspaceA, workspaceB],
+        actingUserId: admin!.id,
+      },
+    });
+    expect(records.statusCode).toBe(200);
+    recordToken = (records.json() as { token: string }).token;
   });
 
   afterAll(async () => {
@@ -1024,7 +1041,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
   });
 
   it('PRO-B-47 rejects a stale expectSha256 with 409 conflict', async () => {
-    const created = await call(wideToken, 'create_knowledge_record', {
+    const created = await call(recordToken, 'create_knowledge_record', {
       workspaceId: workspaceA,
       projectId: projectA,
       title: 'Concurrency',
@@ -1033,7 +1050,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     });
     expect(created.isError, created.text).toBe(false);
     const record = created.data.knowledgeRecord as { id: string };
-    const stale = await call(wideToken, 'update_knowledge_record', {
+    const stale = await call(recordToken, 'update_knowledge_record', {
       recordId: record.id,
       changeMessage: 'stale',
       contentMarkdown: '# Next\n',
@@ -1042,13 +1059,13 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     expect(stale.isError).toBe(true);
     expect(stale.text).toContain('409');
     expect(stale.text).toContain('conflict');
-    const unchanged = await call(wideToken, 'get_knowledge_record', { recordId: record.id });
+    const unchanged = await call(recordToken, 'get_knowledge_record', { recordId: record.id });
     expect(unchanged.isError).toBe(false);
     expect(unchanged.text).toContain('# Live');
   });
 
   it('PRO-B-48 keeps an approved record live and returns a draft revision', async () => {
-    const created = await call(wideToken, 'create_knowledge_record', {
+    const created = await call(recordToken, 'create_knowledge_record', {
       workspaceId: workspaceA,
       projectId: projectA,
       title: 'Approved',
@@ -1062,7 +1079,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
       .set({ lifecycleStatus: 'current', sourceOfTruthMode: 'hub_managed' })
       .where(eq(knowledgeRecords.id, record.id));
     const hash = contentSha256('# Current\n');
-    const updated = await call(wideToken, 'update_knowledge_record', {
+    const updated = await call(recordToken, 'update_knowledge_record', {
       recordId: record.id,
       changeMessage: 'draft the next revision',
       contentMarkdown: '# Draft revision\n',
@@ -1082,7 +1099,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
       lifecycleStatus: 'current',
     });
     expect(body.warning).toContain('left live');
-    const live = await call(wideToken, 'get_knowledge_record', { recordId: record.id });
+    const live = await call(recordToken, 'get_knowledge_record', { recordId: record.id });
     expect(live.isError).toBe(false);
     expect(live.text).toContain('# Current');
     expect(live.text).toContain('"lifecycleStatus": "current"');
@@ -1090,7 +1107,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
 
   it('PRO-B-49 pages knowledge records past 25', async () => {
     for (let index = 0; index < 26; index += 1) {
-      const created = await call(wideToken, 'create_knowledge_record', {
+      const created = await call(recordToken, 'create_knowledge_record', {
         workspaceId: workspaceA,
         projectId: projectA,
         title: `Page ${index}`,
@@ -1099,7 +1116,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
       });
       expect(created.isError, created.text).toBe(false);
     }
-    const first = await call(wideToken, 'list_knowledge_records', {
+    const first = await call(recordToken, 'list_knowledge_records', {
       workspaceId: workspaceA,
       limit: 25,
     });
@@ -1116,7 +1133,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     expect(page.hasMore).toBe(true);
     expect(page.total).toBeGreaterThan(25);
     expect(page.nextCursor).toBeTruthy();
-    const second = await call(wideToken, 'list_knowledge_records', {
+    const second = await call(recordToken, 'list_knowledge_records', {
       workspaceId: workspaceA,
       limit: 25,
       cursor: page.nextCursor,
@@ -1124,7 +1141,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     expect(second.isError, second.text).toBe(false);
     const rest = second.data as { knowledgeRecords: unknown[]; hasMore: boolean };
     expect(rest.knowledgeRecords.length).toBeGreaterThan(0);
-    const wide = await call(wideToken, 'list_knowledge_records', {
+    const wide = await call(recordToken, 'list_knowledge_records', {
       workspaceId: workspaceA,
       limit: 50,
     });
@@ -1133,7 +1150,7 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
   });
 
   it('PRO-B-39 updates and begins an upload by a non-canonical UUID', async () => {
-    const created = await call(wideToken, 'create_knowledge_record', {
+    const created = await call(recordToken, 'create_knowledge_record', {
       workspaceId: workspaceA,
       projectId: projectA,
       title: 'UUID lookup',
@@ -1143,24 +1160,24 @@ describe.skipIf(!hasIntegrationEnv)('batch MCP regressions', () => {
     expect(created.isError, created.text).toBe(false);
     const record = created.data.knowledgeRecord as { id: string };
     const compact = record.id.replace(/-/g, '').toUpperCase();
-    const updated = await call(wideToken, 'update_knowledge_record', {
+    const updated = await call(recordToken, 'update_knowledge_record', {
       recordId: `urn:uuid:${record.id.toUpperCase()}`,
       changeMessage: 'uppercase uuid',
       title: 'UUID lookup renamed',
     });
     expect(updated.isError, updated.text).toBe(false);
-    const begun = await call(wideToken, 'begin_record_content_upload', {
+    const begun = await call(recordToken, 'begin_record_content_upload', {
       recordId: compact,
       changeMessage: 'chunked from compact uuid',
     });
     expect(begun.isError, begun.text).toBe(false);
     const uploadId = (begun.data as { uploadId: string }).uploadId;
-    const appended = await call(wideToken, 'append_record_content', {
+    const appended = await call(recordToken, 'append_record_content', {
       uploadId,
       chunk: '# From chunks\n',
     });
     expect(appended.isError, appended.text).toBe(false);
-    const finalized = await call(wideToken, 'finalize_record_content_upload', { uploadId });
+    const finalized = await call(recordToken, 'finalize_record_content_upload', { uploadId });
     expect(finalized.isError, finalized.text).toBe(false);
 
     const audits = await database!.db

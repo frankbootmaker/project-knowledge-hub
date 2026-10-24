@@ -37,6 +37,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
   let closeDatabase: (() => Promise<void>) | undefined;
   let database: ReturnType<typeof createDatabase> | undefined;
   let cookie = '';
+  let sessionCookieName = '';
   let userId = '';
   let workspaceId = '';
   let organizationId = '';
@@ -118,7 +119,8 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
       url: '/api/v1/auth/login',
       payload: { email: user!.email, password: 'test-password-123' },
     });
-    cookie = `${env.SESSION_COOKIE_NAME}=${login.cookies.find((item) => item.name === env.SESSION_COOKIE_NAME)?.value}`;
+    sessionCookieName = env.SESSION_COOKIE_NAME;
+    cookie = `${sessionCookieName}=${login.cookies.find((item) => item.name === sessionCookieName)?.value}`;
   });
 
   afterAll(async () => {
@@ -139,12 +141,12 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
     await closeDatabase?.();
   });
 
-  async function authorize(scope: string) {
+  async function authorize(scope: string, sessionCookie = cookie) {
     const verifier = `verifier-${randomUUID()}`;
     const response = await app!.inject({
       method: 'GET',
       url: '/oauth/authorize',
-      headers: { cookie },
+      headers: { cookie: sessionCookie },
       query: {
         response_type: 'code',
         client_id: CLIENT_ID,
@@ -159,6 +161,36 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
     expect(response.statusCode).toBe(302);
     const location = new URL(response.headers.location!);
     return { verifier, txn: location.searchParams.get('txn')! };
+  }
+
+  /** Own system admin so this suite can close the shared user without logging later tests out. */
+  async function loginFreshAdmin(): Promise<string> {
+    const suffix = randomUUID();
+    const password = 'test-password-123';
+    const [admin] = await database!.db
+      .insert(users)
+      .values({
+        email: `oauth-admin-${suffix}@example.com`,
+        displayName: 'OAuth Admin',
+        passwordHash: await hashPassword(password),
+        isSystemAdmin: true,
+        status: 'active',
+      })
+      .returning();
+    await database!.db.insert(memberships).values({
+      userId: admin!.id,
+      workspaceId,
+      role: 'reader',
+    });
+    const login = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { email: admin!.email, password },
+    });
+    expect(login.statusCode).toBe(200);
+    const value = login.cookies.find((item) => item.name === sessionCookieName)?.value;
+    expect(value).toBeTruthy();
+    return `${sessionCookieName}=${value}`;
   }
 
   it('keeps root OAuth discovery unpublished and serves the path-scoped document', async () => {
@@ -710,10 +742,11 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
   });
 
   it('PRO-B-52 discovers upload fields and audits the grant as oauth_grant', async () => {
+    const adminCookie = await loginFreshAdmin();
     const enabled = await app!.inject({
       method: 'PUT',
       url: '/api/v1/admin/oauth-mcp-settings',
-      headers: { cookie, origin: 'http://localhost:3100' },
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
       payload: {
         enabled: true,
         redirectUris: [REDIRECT],
@@ -723,11 +756,14 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
     });
     expect(enabled.statusCode).toBe(200);
 
-    const { verifier, txn } = await authorize('projects:read knowledge:read knowledge:write');
+    const { verifier, txn } = await authorize(
+      'projects:read knowledge:read knowledge:write',
+      adminCookie,
+    );
     const consent = await app!.inject({
       method: 'POST',
       url: '/api/v1/oauth/consent',
-      headers: { cookie, origin: 'http://localhost:3100' },
+      headers: { cookie: adminCookie, origin: 'http://localhost:3100' },
       payload: {
         txn,
         scopes: ['projects:read', 'knowledge:read', 'knowledge:write'],
@@ -756,7 +792,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
     const grants = await app!.inject({
       method: 'GET',
       url: '/api/v1/oauth/grants',
-      headers: { cookie },
+      headers: { cookie: adminCookie },
     });
     const grant = (
       grants.json() as { grants: Array<{ id: string; status: string; scopes: string[] }> }
