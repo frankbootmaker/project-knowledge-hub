@@ -2,7 +2,16 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
+  APPEND_RECORD_CONTENT_TOOL_DESCRIPTION,
+  BEGIN_RECORD_CONTENT_UPLOAD_TOOL_DESCRIPTION,
+  FINALIZE_RECORD_CONTENT_UPLOAD_TOOL_DESCRIPTION,
+  KNOWLEDGE_RECORD_RELATION_INVERSE_GUIDE,
+  LIST_KNOWLEDGE_RECORDS_TOOL_DESCRIPTION,
+  UPDATE_KNOWLEDGE_RECORD_TOOL_DESCRIPTION,
+  appendRecordContentInputSchema,
+  beginRecordContentUploadInputSchema,
   createKnowledgeRecordInputSchema,
+  finalizeRecordContentUploadInputSchema,
   tokenCountSchema,
   updateKnowledgeRecordInputSchema,
 } from '@project-knowledge-hub/domain';
@@ -10,6 +19,7 @@ import { invokeNamedHubTool } from './llm-tool-catalog.js';
 import { hasMcpScope, type McpScope } from './scopes.js';
 import {
   enforceResponseSize,
+  MCP_KNOWLEDGE_LIST_LIMIT,
   MCP_MAX_CONTENT_CHARS,
   MCP_MAX_LIST_LIMIT,
 } from './limits.js';
@@ -187,6 +197,7 @@ export type McpToolHandlers = {
     systemId?: string;
     language?: string;
     limit: number;
+    cursor?: string;
   }) => Promise<unknown>;
   searchKnowledge: (input: {
     workspaceId: string;
@@ -266,6 +277,10 @@ export type McpToolHandlers = {
     slug?: string;
     /** Soft-archive (true) or restore (false). */
     archived?: boolean;
+    /** SHA-256 hex. Mismatch is a 409 conflict and writes nothing. */
+    expectSha256?: string;
+    /** currentVersionNumber. Mismatch is a 409 conflict and writes nothing. */
+    expectedVersion?: number;
   }) => Promise<unknown>;
   uploadWorkspaceMedia: (input: {
     workspaceId: string;
@@ -296,7 +311,12 @@ export type McpToolHandlers = {
     index?: number;
   }) => Promise<unknown>;
   finalizeWorkspaceMediaUpload: (input: { uploadId: string }) => Promise<unknown>;
-  beginRecordContentUpload: (input: { recordId: string }) => Promise<unknown>;
+  beginRecordContentUpload: (input: {
+    recordId: string;
+    changeMessage?: string;
+    expectSha256?: string;
+    expectedVersion?: number;
+  }) => Promise<unknown>;
   appendRecordContent: (input: {
     uploadId: string;
     chunk: string;
@@ -304,8 +324,10 @@ export type McpToolHandlers = {
   }) => Promise<unknown>;
   finalizeRecordContentUpload: (input: {
     uploadId: string;
-    changeMessage: string;
+    changeMessage?: string;
     expectedLength?: number;
+    expectSha256?: string;
+    expectedVersion?: number;
   }) => Promise<unknown>;
   listWorkspaceMedia: (input: {
     workspaceId: string;
@@ -1952,13 +1974,14 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'list_knowledge_records',
-    'List knowledge records in a workspace (excludes archived by default). Each record includes tags as a string array of tag names, the same shape as search_knowledge. Prefer language: "en" unless the user asks for another locale.',
+    LIST_KNOWLEDGE_RECORDS_TOOL_DESCRIPTION,
     {
       workspaceId: z.string().uuid(),
       projectId: z.string().uuid().optional(),
       systemId: z.string().uuid().optional(),
       language: z.string().min(2).max(16).optional(),
-      limit: z.number().int().min(1).max(MCP_MAX_LIST_LIMIT).optional(),
+      limit: z.number().int().min(1).max(MCP_KNOWLEDGE_LIST_LIMIT).optional(),
+      cursor: z.string().min(1).max(500).optional(),
     },
     async (args) =>
       wrap(
@@ -1967,7 +1990,7 @@ export function createKnowledgeHubMcpServer(
         () =>
           handlers.listKnowledgeRecords({
             ...args,
-            limit: args.limit ?? MCP_MAX_LIST_LIMIT,
+            limit: args.limit ?? MCP_KNOWLEDGE_LIST_LIMIT,
           }),
         {
           workspaceId: args.workspaceId,
@@ -2279,7 +2302,7 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'update_knowledge_record',
-    'Update a knowledge record as draft (requires knowledge:write and a changeMessage). Send the full markdown body: a value ending in the get_knowledge_record truncation marker is rejected. Page that read until nextOffset is null before rewriting. Set archived=true to soft-archive (or false to restore). Optional slug renames the URL (lowercase a-z, 0-9, hyphens). For images: begin → append → finalize_workspace_media_upload (not upload_workspace_media); paste media.markdownSnippet or use insertIntoRecord on begin. Never data:image URIs. recordId may be a UUID or project document key (e.g. HL1-VIS-2).',
+    UPDATE_KNOWLEDGE_RECORD_TOOL_DESCRIPTION,
     updateKnowledgeRecordInputSchema.shape,
     async (args) =>
       wrap('update_knowledge_record', 'knowledge:write', () =>
@@ -2289,8 +2312,8 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'begin_record_content_upload',
-    'Start a chunked markdown update for a knowledge record (knowledge:write). Returns uploadId, maxChunkChars (40000), contentSha256, contentLength, and currentVersionNumber. Then append_record_content and finalize_record_content_upload. One version per session. The session expires in 15 minutes. recordId may be a UUID or project document key.',
-    { recordId: z.string().min(1).max(80) },
+    BEGIN_RECORD_CONTENT_UPLOAD_TOOL_DESCRIPTION,
+    beginRecordContentUploadInputSchema.shape,
     async (args) =>
       wrap('begin_record_content_upload', 'knowledge:write', () =>
         handlers.beginRecordContentUpload(args),
@@ -2299,12 +2322,8 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'append_record_content',
-    'Append one markdown chunk (max 40000 characters) to a begin_record_content_upload session. index, when set, must be the next chunk index. The joined body cannot exceed 500000 characters. Requires knowledge:write.',
-    {
-      uploadId: z.string().uuid(),
-      chunk: z.string().min(1).max(40_000),
-      index: z.number().int().min(0).optional(),
-    },
+    APPEND_RECORD_CONTENT_TOOL_DESCRIPTION,
+    appendRecordContentInputSchema.shape,
     async (args) =>
       wrap('append_record_content', 'knowledge:write', () =>
         handlers.appendRecordContent(args),
@@ -2313,12 +2332,8 @@ export function createKnowledgeHubMcpServer(
 
   server.tool(
     'finalize_record_content_upload',
-    'Join the appended chunks and save them as one draft version (knowledge:write). Requires changeMessage. expectedLength, when set, must match the joined body. Rejects a body that ends with the truncation marker, and returns 409 CONTENT_CHANGED when the record changed after begin. The session is deleted on success.',
-    {
-      uploadId: z.string().uuid(),
-      changeMessage: z.string().min(1).max(500),
-      expectedLength: z.number().int().min(0).max(500_000).optional(),
-    },
+    FINALIZE_RECORD_CONTENT_UPLOAD_TOOL_DESCRIPTION,
+    finalizeRecordContentUploadInputSchema.shape,
     async (args) =>
       wrap('finalize_record_content_upload', 'knowledge:write', () =>
         handlers.finalizeRecordContentUpload(args),
@@ -4374,6 +4389,8 @@ export function createKnowledgeHubMcpServer(
   const relationEdgeOutput = () =>
     z.object({
       relationType: z.string(),
+      canonicalType: z.string(),
+      direction: z.enum(['outbound', 'inbound']),
       record: relationRecordOutput(),
     });
   const knowledgeRecordRelationsOutput = {
@@ -4389,7 +4406,7 @@ export function createKnowledgeHubMcpServer(
     'get_knowledge_record_relations',
     {
       description:
-        'List typed relations for a knowledge record (relates_to, depends_on, refines, derived_from, contradicts) plus the lifecycle successor and predecessor from supersedes_record_id. Inbound edges use inverse labels (required_by, refined_by, source_for). relates_to and contradicts are symmetric and listed as outbound on both records, regardless of uuid order. recordId may be a UUID or document key. Requires knowledge:read.',
+        `List typed relations for a knowledge record (relates_to, depends_on, refines, derived_from, contradicts) plus the lifecycle successor and predecessor from supersedes_record_id. Inbound edges use inverse labels (required_by, refined_by, source_for). relates_to and contradicts are symmetric and listed as outbound on both records, regardless of uuid order. recordId may be a UUID or document key. Requires knowledge:read. ${KNOWLEDGE_RECORD_RELATION_INVERSE_GUIDE}`,
       inputSchema: { recordId: entityRef },
       outputSchema: knowledgeRecordRelationsOutput,
     },
@@ -4407,7 +4424,7 @@ export function createKnowledgeHubMcpServer(
     'set_knowledge_record_relations',
     {
       description:
-        'Replace relations for this record. Directed types are depends_on, refines, and derived_from. Inbound directed edges owned by the other record are kept. relates_to and contradicts are stored once with canonical uuid order and can be added or removed from either record. Responses list those symmetric relations as outbound on both records. Rejects self-links, cross-workspace or cross-project targets, cycles for depends_on and refines, and changes that touch an archived record. recordId and targetRecordId may be UUID or document key. Does not change lifecycle. Requires knowledge:write.',
+        `Replace relations for this record. Directed types are depends_on, refines, and derived_from. Inbound directed edges owned by the other record are kept. relates_to and contradicts are stored once with canonical uuid order and can be added or removed from either record. Responses list those symmetric relations as outbound on both records. Rejects self-links, cross-workspace or cross-project targets, cycles for depends_on and refines, and changes that touch an archived record. recordId and targetRecordId may be UUID or document key. Does not change lifecycle. Requires knowledge:write. ${KNOWLEDGE_RECORD_RELATION_INVERSE_GUIDE}`,
       inputSchema: {
         recordId: entityRef,
         links: z
@@ -4477,6 +4494,16 @@ export function createKnowledgeHubMcpServer(
         'pm:write',
         () => handlers.setDeliveryMediaLinks(args),
         { projectId: args.projectId },
+      )(),
+  );
+
+  server.tool(
+    'describe_hub_tool',
+    'Return the JSON input schema, allowed fields, and required fields for one hub tool. Pass name from list_hub_tools. Write-tool schemas are hidden without a write scope. Requires projects:read.',
+    { name: z.string().min(1).max(80) },
+    async (args) =>
+      wrap('describe_hub_tool', 'projects:read', () =>
+        invokeNamedHubTool(handlers, client.scopes, 'describe_hub_tool', { name: args.name }),
       )(),
   );
 

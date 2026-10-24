@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { Database } from '@project-knowledge-hub/database';
 import {
   knowledgeRecords,
@@ -20,6 +20,7 @@ import {
   AppError,
   formatHumanKey,
   isDeliveryIssueKeyType,
+  canonicalUuid,
   isDocKeyCode,
   isUuid,
   isValidHumanKeyType,
@@ -554,7 +555,7 @@ export async function resolveEntityId(
 ): Promise<string> {
   const raw = input.idOrKey.trim();
   if (isUuid(raw)) {
-    return raw;
+    return canonicalUuid(raw) ?? raw;
   }
 
   const parsed = parseHumanKey(raw);
@@ -767,8 +768,21 @@ export async function resolveKnowledgeRecordId(
   },
 ): Promise<string> {
   const raw = input.idOrKey.trim();
-  if (isUuid(raw)) {
-    return raw;
+  const canonical = canonicalUuid(raw);
+  if (canonical) {
+    const [row] = await database.db
+      .select({ id: knowledgeRecords.id })
+      .from(knowledgeRecords)
+      .where(sql`lower(cast(${knowledgeRecords.id} as text)) = ${canonical}`)
+      .limit(1);
+    if (!row) {
+      throw new AppError({
+        code: 'KNOWLEDGE_RECORD_NOT_FOUND',
+        message: 'Knowledge record not found',
+        statusCode: 404,
+      });
+    }
+    return row.id;
   }
 
   const parsed = parseHumanKey(raw);

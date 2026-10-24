@@ -101,7 +101,7 @@ type SourceRow = typeof knowledgeSources.$inferSelect;
 type RecordRow = typeof knowledgeRecords.$inferSelect;
 
 export type KnowledgeActor = {
-  actorType: 'user' | 'api_client';
+  actorType: 'user' | 'api_client' | 'oauth_grant';
   actorId: string;
   userId: string;
 };

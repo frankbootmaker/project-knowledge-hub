@@ -42,9 +42,9 @@ import type { ProjectSectionStatuses } from '../../../../../../lib/project-secti
 import { computeChangeRag, formatRiskReasons } from '../../../../../../lib/project-health';
 import {
   redirectHumanKeyQuery,
-  redirectRetiredProjectSlug,
+  resolveProjectInWorkspace,
 } from '../../../../../../lib/project-record-access';
-import { apiFetch, requireSession } from '../../../../../../lib/session';
+import { apiFetch, fetchWorkspaceList, requireSession } from '../../../../../../lib/session';
 
 function ragBadgeTone(
   rag: ProjectRagStatus,
@@ -56,13 +56,6 @@ function ragBadgeTone(
 
 export const dynamic = 'force-dynamic';
 
-type Workspace = {
-  id: string;
-  slug: string;
-  name: string;
-  organizationId: string;
-  organizationName: string;
-};
 type Project = {
   id: string;
   name: string;
@@ -176,17 +169,13 @@ export default async function ProjectDetailPage({
         ? (openChangeRaw[0] ?? null)
         : null;
 
-  const workspacesResponse = await apiFetch('/api/v1/workspaces');
-  if (!workspacesResponse.ok) {
-    notFound();
-  }
-  const workspacesPayload = (await workspacesResponse.json()) as { workspaces: Workspace[] };
-  const workspace = workspacesPayload.workspaces.find((item) => item.slug === slug);
+  const workspaces = await fetchWorkspaceList();
+  const workspace = workspaces.find((item) => item.slug === slug);
   if (!workspace) {
     notFound();
   }
 
-  const moveTargets = workspacesPayload.workspaces.filter((item) => {
+  const moveTargets = workspaces.filter((item) => {
     if (item.id === workspace.id) return false;
     if (session.user.isSystemAdmin) return true;
     return session.memberships.some(
@@ -196,37 +185,11 @@ export default async function ProjectDetailPage({
     );
   });
 
-  const projectsResponse = await apiFetch(
-    `/api/v1/projects?workspaceId=${workspace.id}&includeArchived=true`,
-  );
-  if (!projectsResponse.ok) {
-    notFound();
-  }
-  const projectsPayload = (await projectsResponse.json()) as { projects: Project[] };
-  const projectSummary = projectsPayload.projects.find((item) => item.slug === projectSlug);
-  if (!projectSummary) {
-    await redirectRetiredProjectSlug({
-      workspaceId: workspace.id,
-      workspaceSlug: slug,
-      requestedSlug: projectSlug,
-    });
-    notFound();
-  }
-
-  const detailResponse = await apiFetch(`/api/v1/projects/${projectSummary.id}`);
-  if (!detailResponse.ok) {
-    notFound();
-  }
-  const detailPayload = (await detailResponse.json()) as { project: Project };
-  const project = detailPayload.project;
-  await redirectHumanKeyQuery({
-    projectId: project.id,
-    pathname: `/workspaces/${slug}/projects/${project.slug}`,
-    task: initialOpenTaskId,
-    raid: initialOpenRaidId,
-    change: initialOpenChangeId,
+  const resolved = await resolveProjectInWorkspace({
+    workspaceId: workspace.id,
+    workspaceSlug: slug,
+    requestedSlug: projectSlug,
   });
-  const isArchived = Boolean(project.archivedAt);
 
   const canMutate =
     session.user.isSystemAdmin ||
@@ -243,7 +206,34 @@ export default async function ProjectDetailPage({
         membership.role === 'workspace_admin',
     );
 
+  const [responses] = await Promise.all([
+    Promise.all([
+      apiFetch(`/api/v1/projects/${resolved.id}`),
+      apiFetch(`/api/v1/systems?workspaceId=${workspace.id}&projectId=${resolved.id}`),
+      apiFetch(
+        `/api/v1/knowledge-records?workspaceId=${workspace.id}&projectId=${resolved.id}`,
+      ),
+      apiFetch(`/api/v1/projects/${resolved.id}/milestones`),
+      apiFetch(`/api/v1/projects/${resolved.id}/tasks`),
+      apiFetch(`/api/v1/projects/${resolved.id}/epics`),
+      apiFetch(`/api/v1/projects/${resolved.id}/user-stories`),
+      apiFetch(`/api/v1/workspaces/${workspace.id}/members`),
+      apiFetch(`/api/v1/projects/${resolved.id}/stakeholders`),
+      apiFetch(`/api/v1/projects/${resolved.id}/raid-items`),
+      apiFetch(`/api/v1/projects/${resolved.id}/initial-stakeholders`),
+      apiFetch(`/api/v1/projects/${resolved.id}/change-items`),
+      apiFetch(`/api/v1/projects/${resolved.id}/budget-summary`),
+    ]),
+    redirectHumanKeyQuery({
+      projectId: resolved.id,
+      pathname: `/workspaces/${slug}/projects/${resolved.slug}`,
+      task: initialOpenTaskId,
+      raid: initialOpenRaidId,
+      change: initialOpenChangeId,
+    }),
+  ]);
   const [
+    detailResponse,
     systemsResponse,
     recordsResponse,
     milestonesResponse,
@@ -256,22 +246,13 @@ export default async function ProjectDetailPage({
     initialStakeholdersResponse,
     changesResponse,
     budgetResponse,
-  ] = await Promise.all([
-    apiFetch(`/api/v1/systems?workspaceId=${workspace.id}&projectId=${project.id}`),
-    apiFetch(
-      `/api/v1/knowledge-records?workspaceId=${workspace.id}&projectId=${project.id}`,
-    ),
-    apiFetch(`/api/v1/projects/${project.id}/milestones`),
-    apiFetch(`/api/v1/projects/${project.id}/tasks`),
-    apiFetch(`/api/v1/projects/${project.id}/epics`),
-    apiFetch(`/api/v1/projects/${project.id}/user-stories`),
-    apiFetch(`/api/v1/workspaces/${workspace.id}/members`),
-    apiFetch(`/api/v1/projects/${project.id}/stakeholders`),
-    apiFetch(`/api/v1/projects/${project.id}/raid-items`),
-    apiFetch(`/api/v1/projects/${project.id}/initial-stakeholders`),
-    apiFetch(`/api/v1/projects/${project.id}/change-items`),
-    apiFetch(`/api/v1/projects/${project.id}/budget-summary`),
-  ]);
+  ] = responses;
+  if (!detailResponse.ok) {
+    notFound();
+  }
+  const detailPayload = (await detailResponse.json()) as { project: Project };
+  const project = detailPayload.project;
+  const isArchived = Boolean(project.archivedAt);
   const systems = systemsResponse.ok
     ? ((await systemsResponse.json()) as { systems: System[] }).systems
     : [];

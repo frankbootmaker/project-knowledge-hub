@@ -32,6 +32,16 @@ function testDatabase(input: { milestones: MilestoneRow[]; tasks: TaskRow[] }) {
         from() {
           return {
             where: async () => {
+              if (keys.includes('workspaceId')) {
+                selects.push('workspaces');
+                const ids = new Set([
+                  ...input.milestones.map((row) => row.projectId),
+                  ...input.tasks.map((row) => row.projectId),
+                  'p-1',
+                  'p-2',
+                ]);
+                return [...ids].map((id) => ({ id, workspaceId: 'ws-1' }));
+              }
               if (keys.includes('targetDate')) {
                 selects.push('milestones');
                 return input.milestones;
@@ -80,7 +90,7 @@ describe('listProjectHealth', () => {
 
     const health = await listProjectHealth(database, ['p-1', 'p-2'], TODAY);
 
-    expect(selects).toEqual(['milestones', 'tasks']);
+    expect(selects).toEqual(['workspaces', 'milestones', 'tasks']);
     expect(listProjectBudgetSignals).toHaveBeenCalledTimes(1);
     expect(listProjectBudgetSignals).toHaveBeenCalledWith(
       database,

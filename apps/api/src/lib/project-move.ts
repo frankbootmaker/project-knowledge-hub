@@ -700,7 +700,7 @@ export async function moveProjectToWorkspace(
     targetWorkspaceId: string;
     dryRun?: boolean;
     confirmCrossOrganization?: boolean;
-    actorType: 'user' | 'api_client';
+    actorType: 'user' | 'api_client' | 'oauth_grant';
     actorId: string;
     ipAddress?: string | null;
     uploadDir: string;

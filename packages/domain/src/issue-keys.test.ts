@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canonicalUuid,
   formatHumanKey,
+  isUuid,
   isValidKeyPrefix,
   parseHumanKey,
   raidKindToIssueKeyType,
@@ -53,5 +55,23 @@ describe('key prefix / human key', () => {
   it('maps raid kinds', () => {
     expect(raidKindToIssueKeyType('risk')).toBe('RR');
     expect(raidKindToIssueKeyType('issue')).toBe('RI');
+  });
+});
+
+describe('canonicalUuid', () => {
+  const id = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+
+  it('lowercases and accepts urn, braces, and 32 hex', () => {
+    expect(canonicalUuid(id.toUpperCase())).toBe(id);
+    expect(canonicalUuid(`urn:uuid:${id.toUpperCase()}`)).toBe(id);
+    expect(canonicalUuid(`{${id}}`)).toBe(id);
+    expect(canonicalUuid('AAAAAAAABBBB4CCC8DDDEEEEEEEEEEEE')).toBe(id);
+    expect(isUuid(`urn:uuid:${id}`)).toBe(true);
+  });
+
+  it('rejects human keys and short hex', () => {
+    expect(canonicalUuid('HL1-VIS-2')).toBeNull();
+    expect(canonicalUuid('aaaa')).toBeNull();
+    expect(isUuid('HL1-VIS-2')).toBe(false);
   });
 });

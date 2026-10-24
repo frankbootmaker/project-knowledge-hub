@@ -45,17 +45,19 @@ export async function KnowledgeRecordEditView({
 }) {
   const session = await requireSession();
   const workspace = await requireWorkspaceBySlug(workspaceSlug);
-  const routeProject = projectContext
-    ? await requireProjectBySlug(workspace.id, projectContext.projectSlug, workspace.slug)
-    : null;
+  const [routeProject, listResponse] = await Promise.all([
+    projectContext
+      ? requireProjectBySlug(workspace.id, projectContext.projectSlug, workspace.slug)
+      : Promise.resolve(null),
+    apiFetch(
+      `/api/v1/knowledge-records?workspaceId=${workspace.id}&slug=${encodeURIComponent(recordSlug)}&includeArchived=true`,
+    ),
+  ]);
 
   if (!canMutateWorkspace(session, workspace.id)) {
     notFound();
   }
 
-  const listResponse = await apiFetch(
-    `/api/v1/knowledge-records?workspaceId=${workspace.id}&includeArchived=true`,
-  );
   if (!listResponse.ok) {
     notFound();
   }

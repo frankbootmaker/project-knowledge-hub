@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import { permanentRedirect, notFound, redirect } from 'next/navigation';
 import { isUuid, parseHumanKey } from '@project-knowledge-hub/domain';
-import { apiFetch, type SessionPayload } from './session';
+import { apiFetch, fetchWorkspaceList, type SessionPayload } from './session';
 import {
   replaceIssueKeyQuery,
   replaceProjectSlugInPath,
@@ -43,12 +43,8 @@ export function canPurgeWorkspace(session: SessionPayload, workspaceId: string):
 
 /** Same resolution as the project page: missing or inaccessible is 404. */
 export async function requireWorkspaceBySlug(slug: string): Promise<RecordWorkspace> {
-  const response = await apiFetch('/api/v1/workspaces');
-  if (!response.ok) {
-    notFound();
-  }
-  const payload = (await response.json()) as { workspaces: RecordWorkspace[] };
-  const workspace = payload.workspaces.find((item) => item.slug === slug);
+  const workspaces = await fetchWorkspaceList();
+  const workspace = workspaces.find((item) => item.slug === slug);
   if (!workspace) {
     notFound();
   }
@@ -56,37 +52,41 @@ export async function requireWorkspaceBySlug(slug: string): Promise<RecordWorksp
 }
 
 /**
- * A former project slug redirects to the current one and keeps the rest of
- * the path and query. Next.js permanentRedirect is 308.
+ * Resolve a project by slug without listing the workspace. A former slug
+ * redirects to the current one and keeps the rest of the path and query.
+ * Next.js permanentRedirect is 308.
  */
-export async function redirectRetiredProjectSlug(input: {
+export async function resolveProjectInWorkspace(input: {
   workspaceId: string;
   workspaceSlug: string;
   requestedSlug: string;
-}): Promise<void> {
+}): Promise<RecordProject> {
   const response = await apiFetch(
     `/api/v1/projects/resolve-slug?workspaceId=${encodeURIComponent(input.workspaceId)}&slug=${encodeURIComponent(input.requestedSlug)}`,
   );
-  if (!response.ok) return;
+  if (!response.ok) notFound();
   const payload = (await response.json()) as {
     redirect?: boolean;
-    project?: { slug: string };
+    project?: RecordProject;
   };
-  if (!payload.redirect || !payload.project?.slug) return;
-  if (payload.project.slug === input.requestedSlug) return;
-  const headerStore = await headers();
-  const pathname =
-    headerStore.get('x-kh-pathname')
-    ?? `/workspaces/${input.workspaceSlug}/projects/${input.requestedSlug}`;
-  const search = headerStore.get('x-kh-search') ?? '';
-  const nextPath = replaceProjectSlugInPath(
-    pathname,
-    input.workspaceSlug,
-    input.requestedSlug,
-    payload.project.slug,
-  );
-  if (!nextPath) return;
-  permanentRedirect(`${nextPath}${search}`);
+  const project = payload.project;
+  if (!project?.id || !project.slug) notFound();
+  if (payload.redirect && project.slug !== input.requestedSlug) {
+    const headerStore = await headers();
+    const pathname =
+      headerStore.get('x-kh-pathname')
+      ?? `/workspaces/${input.workspaceSlug}/projects/${input.requestedSlug}`;
+    const search = headerStore.get('x-kh-search') ?? '';
+    const nextPath = replaceProjectSlugInPath(
+      pathname,
+      input.workspaceSlug,
+      input.requestedSlug,
+      project.slug,
+    );
+    if (!nextPath) notFound();
+    permanentRedirect(`${nextPath}${search}`);
+  }
+  return project;
 }
 
 export async function requireProjectBySlug(
@@ -94,28 +94,11 @@ export async function requireProjectBySlug(
   projectSlug: string,
   workspaceSlug: string,
 ): Promise<RecordProject> {
-  const response = await apiFetch(
-    `/api/v1/projects?workspaceId=${workspaceId}&includeArchived=true`,
-  );
-  if (!response.ok) {
-    notFound();
-  }
-  const payload = (await response.json()) as { projects: RecordProject[] };
-  const summary = payload.projects.find((item) => item.slug === projectSlug);
-  if (!summary) {
-    await redirectRetiredProjectSlug({
-      workspaceId,
-      workspaceSlug,
-      requestedSlug: projectSlug,
-    });
-    notFound();
-  }
-  const detailResponse = await apiFetch(`/api/v1/projects/${summary.id}`);
-  if (!detailResponse.ok) {
-    notFound();
-  }
-  const detail = (await detailResponse.json()) as { project: RecordProject };
-  return detail.project;
+  return resolveProjectInWorkspace({
+    workspaceId,
+    workspaceSlug,
+    requestedSlug: projectSlug,
+  });
 }
 
 /**

@@ -42,9 +42,11 @@ export {
 };
 import { loadCompletedAtByTask, requireProjectContext } from './project-delivery.js';
 import { loadProjectScheduleFacts } from './project-calendar.js';
-import { listAiModelPrices } from './ai-usage-pricing.js';
 import { AI_ASSISTANT_SYSTEM_TYPE } from './project-stakeholders.js';
-import { loadProjectPaidAi } from './ai-billing.js';
+import {
+  loadWorkspacePaidAiContext,
+  projectPaidAiFromContext,
+} from './ai-billing.js';
 import type { AiPaidPeriod, ProjectPaidAi, PublicAiBillingEntry } from './ai-billing.js';
 
 export type BudgetTaskCost = {
@@ -771,7 +773,7 @@ export async function computeAiBudgetCosts(
   aiTheoreticalReporting: number;
   aiCostFx: ProjectPaidAi['aiCostFx'];
 }> {
-  const assistantRows = await database.db
+  const assistantRowsPromise = database.db
     .select({
       id: systems.id,
       name: systems.name,
@@ -794,7 +796,7 @@ export async function computeAiBudgetCosts(
       ),
     );
 
-  const taskRows = await database.db
+  const taskRowsPromise = database.db
     .select({
       id: projectTasks.id,
       tokensUsed: projectTasks.tokensUsed,
@@ -813,22 +815,34 @@ export async function computeAiBudgetCosts(
     .where(
       and(eq(projectTasks.projectId, projectId), isNull(projectTasks.archivedAt)),
     );
-
-  const completedAt = await loadCompletedAtByTask(
-    database,
-    taskRows.map((row) => row.id),
+  const completedAtPromise = taskRowsPromise.then((rows) =>
+    loadCompletedAtByTask(
+      database,
+      rows.map((row) => row.id),
+    ),
   );
-  const catalogPrices = await listAiModelPrices(database, project.workspaceId);
+  const contextPromise = loadWorkspacePaidAiContext(
+    database,
+    project.workspaceId,
+    today,
+  );
+
+  const [assistantRows, taskRows, completedAt, context] = await Promise.all([
+    assistantRowsPromise,
+    taskRowsPromise,
+    completedAtPromise,
+    contextPromise,
+  ]);
   const built = buildProjectAiBill({
     project,
     assistantRows,
     taskRows,
     completedAt,
-    catalogPrices,
+    catalogPrices: context.imported.prices,
     today,
   });
-  const paid = await loadProjectPaidAi(
-    database,
+  const paid = projectPaidAiFromContext(
+    context,
     {
       id: project.id,
       workspaceId: project.workspaceId,
@@ -837,7 +851,6 @@ export async function computeAiBudgetCosts(
       endDate: project.endDate,
     },
     built.systemInputs,
-    today,
   );
   return applyPaidAiBill(built, paid);
 }

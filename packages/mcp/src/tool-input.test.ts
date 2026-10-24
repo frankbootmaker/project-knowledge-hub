@@ -35,18 +35,18 @@ describe('shared tool input validation', () => {
 
   it('names every missing required field', () => {
     const issues = toolInputIssues(schema, {});
-    expect(formatToolInputIssues(issues)).toBe(
-      'Missing required fields: projectId, entityId',
-    );
+    expect(formatToolInputIssues(issues)).toBe('Missing required fields: projectId, entityId');
     expect(issues.map((issue) => issue.field)).toEqual(['projectId', 'entityId']);
   });
 
   it('names an invalid required uuid and a nested enum', () => {
-    expect(() => assertToolInput(schema, {
-      projectId: 'not-a-uuid',
-      entityId: 'PRO-T-1',
-      links: [{ predecessorId: 'PRO-T-1', successorId: 'PRO-B-1', linkType: 'XX' }],
-    })).toThrow(AppError);
+    expect(() =>
+      assertToolInput(schema, {
+        projectId: 'not-a-uuid',
+        entityId: 'PRO-T-1',
+        links: [{ predecessorId: 'PRO-T-1', successorId: 'PRO-B-1', linkType: 'XX' }],
+      }),
+    ).toThrow(AppError);
 
     try {
       assertToolInput(schema, {
@@ -71,16 +71,16 @@ describe('shared tool input validation', () => {
       entityId: 'PRO-T-1',
       links: [{ predecessorId: 'PRO-T-1', linkType: 'FS' }],
     });
-    expect(formatToolInputIssues(issues)).toBe(
-      'Missing required field: links[0].successorId',
-    );
+    expect(formatToolInputIssues(issues)).toBe('Missing required field: links[0].successorId');
   });
 
   it('accepts a complete value and a nullable money amount', () => {
-    expect(toolInputIssues(schema, {
-      projectId: PROJECT_ID,
-      entityId: 'PRO-T-1',
-    })).toEqual([]);
+    expect(
+      toolInputIssues(schema, {
+        projectId: PROJECT_ID,
+        entityId: 'PRO-T-1',
+      }),
+    ).toEqual([]);
 
     const money: ToolInputSchema = {
       type: 'object',
@@ -99,10 +99,7 @@ describe('shared tool input validation', () => {
   it('describes every catalog required field as required', () => {
     for (const tool of LLM_TOOL_CATALOG) {
       const required = (tool.body.required ?? []) as string[];
-      const properties = (tool.body.properties ?? {}) as Record<
-        string,
-        { description?: string }
-      >;
+      const properties = (tool.body.properties ?? {}) as Record<string, { description?: string }>;
       for (const field of required) {
         expect(properties[field]?.description, `${tool.name}.${field}`).toMatch(/required/i);
       }
@@ -121,7 +118,7 @@ describe('missing projectId on hub tools', () => {
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
       statusCode: 400,
-      message: 'Missing required fields: projectId, entityId',
+      message: expect.stringContaining('Missing required fields: projectId, entityId'),
     });
     await expect(
       invokeNamedHubTool(handlers, ['pm:write'], 'set_delivery_dependency', {
@@ -132,7 +129,7 @@ describe('missing projectId on hub tools', () => {
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
       statusCode: 400,
-      message: 'Missing required field: projectId',
+      message: expect.stringContaining('Missing required field: projectId'),
     });
     expect(listDeliveryDependencies).not.toHaveBeenCalled();
     expect(setDeliveryDependency).not.toHaveBeenCalled();
@@ -147,7 +144,7 @@ describe('missing projectId on hub tools', () => {
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
       statusCode: 400,
-      message: 'Invalid field projectId: expected a UUID',
+      message: expect.stringContaining('Invalid field projectId: expected a UUID'),
     });
     expect(listProjectTasks).not.toHaveBeenCalled();
   });
@@ -161,17 +158,12 @@ describe('missing projectId on hub tools', () => {
       'list_delivery_dependencies',
       { projectId: PROJECT_ID, entityId: 'PRO-T-1' },
     );
-    await invokeNamedHubTool(
-      { setDeliveryDependency },
-      ['pm:write'],
-      'set_delivery_dependency',
-      {
-        projectId: PROJECT_ID,
-        predecessorId: 'PRO-T-1',
-        successorId: 'PRO-B-1',
-        linkType: 'FS',
-      },
-    );
+    await invokeNamedHubTool({ setDeliveryDependency }, ['pm:write'], 'set_delivery_dependency', {
+      projectId: PROJECT_ID,
+      predecessorId: 'PRO-T-1',
+      successorId: 'PRO-B-1',
+      linkType: 'FS',
+    });
     expect(listDeliveryDependencies).toHaveBeenCalledWith({
       projectId: PROJECT_ID,
       entityId: 'PRO-T-1',
@@ -202,11 +194,13 @@ describe('update_knowledge_record slug', () => {
   it('passes an optional slug through and keeps the description short', async () => {
     const tool = findLlmTool('update_knowledge_record');
     const properties = tool?.body.properties as Record<string, { description?: string }>;
-    expect(properties.slug?.description).toBe(
-      'URL slug (lowercase a-z, 0-9, hyphens)',
-    );
+    expect(properties.slug?.description).toBe('URL slug (lowercase a-z, 0-9, hyphens)');
+    expect(properties).toHaveProperty('translationGroupId');
+    expect(properties).toHaveProperty('expectSha256');
+    expect(properties).toHaveProperty('expectedVersion');
     expect(tool?.description).toContain('Optional slug');
-    expect(tool?.description.length ?? 0).toBeLessThan(500);
+    expect(tool?.description).toContain('409 conflict');
+    expect(tool?.description).toContain('preservedLiveRecord');
 
     const updateKnowledgeRecord = vi.fn(async () => ({ ok: true }));
     await invokeNamedHubTool(

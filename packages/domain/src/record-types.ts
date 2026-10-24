@@ -48,12 +48,7 @@ export type RecordType = (typeof RECORD_TYPES)[number];
 export const recordTypeSchema = z.enum(RECORD_TYPES);
 
 export type RecordTypeCategory =
-  | 'foundation'
-  | 'delivery'
-  | 'operations'
-  | 'planning'
-  | 'reflection'
-  | 'other';
+  'foundation' | 'delivery' | 'operations' | 'planning' | 'reflection' | 'other';
 
 export type RecordTypeDefinition = {
   value: RecordType;
@@ -192,16 +187,14 @@ export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
     docKeyCode: 'MSUM',
     category: 'planning',
     label: 'Management summary',
-    description:
-      'Executive-oriented summary of situation, outcomes, risks, and decisions needed.',
+    description: 'Executive-oriented summary of situation, outcomes, risks, and decisions needed.',
   },
   {
     value: 'progress-summary',
     docKeyCode: 'PSUM',
     category: 'planning',
     label: 'Progress summary',
-    description:
-      'Period progress report: completed, in progress, blocked, and upcoming work.',
+    description: 'Period progress report: completed, in progress, blocked, and upcoming work.',
   },
   {
     value: 'roadmap',
@@ -292,8 +285,7 @@ export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
     docKeyCode: 'INVC',
     category: 'operations',
     label: 'Invoice',
-    description:
-      'Vendor or customer invoice: amounts, dates, parties, and payment references.',
+    description: 'Vendor or customer invoice: amounts, dates, parties, and payment references.',
   },
   {
     value: 'note',
@@ -324,7 +316,6 @@ export const RECORD_TYPE_CATALOG: RecordTypeDefinition[] = [
     description: 'Sprint review notes: demoed work, feedback, and outcomes.',
   },
 ];
-
 
 const RESERVED_DELIVERY_KEY_CODES = new Set([
   'E',
@@ -477,14 +468,14 @@ const IGNORED_ON_MCP_WRITE_FIELDS: KnowledgeRecordFieldGuide[] = [
     name: 'lifecycleStatus',
     requirement: 'ignored_on_mcp_write',
     description:
-      'Human/session API only for promotion. MCP create/update always persist draft.',
+      'Human/session API promotes records. MCP create always persists draft. MCP update of a draft forces draft. A content change of a current or verified record does not demote it; MCP creates a new draft revision and leaves the approved record live.',
     appliesTo: ['human_api'],
   },
   {
     name: 'sourceOfTruthMode',
     requirement: 'ignored_on_mcp_write',
     description:
-      'Human/session API may set this. MCP writes always force ai_generated_draft.',
+      'Human/session API may set this. MCP create forces ai_generated_draft. A content change of a current or verified record creates a new ai_generated_draft revision and leaves the approved record mode unchanged. In-place draft updates force ai_generated_draft.',
     appliesTo: ['human_api'],
   },
 ];
@@ -528,13 +519,28 @@ const UPDATE_FIELDS: KnowledgeRecordFieldGuide[] = [
   {
     name: 'recordId',
     requirement: 'required',
-    description: 'UUID or project document key (e.g. HL1-VIS-2) of the record to update.',
+    description:
+      'UUID (any case, urn:uuid:, or 32 hex) or project document key (e.g. HL1-VIS-2) of the record to update.',
     appliesTo: ['update'],
   },
   {
     name: 'changeMessage',
     requirement: 'required',
     description: 'Required on update: why the change was made.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'expectSha256',
+    requirement: 'optional',
+    description:
+      'SHA-256 hex of the full body. A mismatch returns 409 conflict (errorType conflict) and writes nothing.',
+    appliesTo: ['update'],
+  },
+  {
+    name: 'expectedVersion',
+    requirement: 'optional',
+    description:
+      'Expected currentVersionNumber. A mismatch returns 409 conflict (errorType conflict) and writes nothing.',
     appliesTo: ['update'],
   },
   {
@@ -546,8 +552,7 @@ const UPDATE_FIELDS: KnowledgeRecordFieldGuide[] = [
   {
     name: 'slug',
     requirement: 'optional',
-    description:
-      'URL slug (lowercase a-z, 0-9, hyphens). Title edits do not change it.',
+    description: 'URL slug (lowercase a-z, 0-9, hyphens). Title edits do not change it.',
     appliesTo: ['update'],
   },
   {
@@ -617,46 +622,23 @@ export const createKnowledgeRecordInputSchema = z.object({
     .string()
     .uuid()
     .describe('Target workspace UUID (must be on the API client allowlist for writes).'),
-  title: z
-    .string()
-    .min(1)
-    .max(300)
-    .describe('Human-readable title (1–300 chars).'),
+  title: z.string().min(1).max(300).describe('Human-readable title (1–300 chars).'),
   recordType: z
     .string()
     .min(1)
     .max(64)
     .describe('One of the catalog recordType values from list_record_metadata.'),
-  contentMarkdown: z
-    .string()
-    .max(500_000)
-    .describe('Markdown body of the record.'),
-  summary: z
-    .string()
-    .max(1000)
-    .optional()
-    .describe('Short summary (≤1000 chars).'),
+  contentMarkdown: z.string().max(500_000).describe('Markdown body of the record.'),
+  summary: z.string().max(1000).optional().describe('Short summary (≤1000 chars).'),
   slug: z
     .string()
     .min(1)
     .max(96)
     .optional()
     .describe('URL slug; auto-derived from title when omitted.'),
-  projectId: z
-    .string()
-    .uuid()
-    .optional()
-    .describe('Optional project UUID to scope the record.'),
-  systemId: z
-    .string()
-    .uuid()
-    .optional()
-    .describe('Optional system UUID to scope the record.'),
-  tags: z
-    .array(z.string().min(1).max(64))
-    .max(30)
-    .optional()
-    .describe('Up to 30 tag strings.'),
+  projectId: z.string().uuid().optional().describe('Optional project UUID to scope the record.'),
+  systemId: z.string().uuid().optional().describe('Optional system UUID to scope the record.'),
+  tags: z.array(z.string().min(1).max(64)).max(30).optional().describe('Up to 30 tag strings.'),
   language: z
     .string()
     .min(2)
@@ -681,46 +663,62 @@ export const createKnowledgeRecordInputSchema = z.object({
     .describe('Human label for the originating conversation or document.'),
 });
 
+const sha256Schema = z
+  .string()
+  .regex(/^[a-fA-F0-9]{64}$/)
+  .describe(
+    'Optional SHA-256 hex of the full body. A mismatch returns 409 conflict (errorType conflict) and writes nothing.',
+  );
+
+const expectedVersionSchema = z
+  .number()
+  .int()
+  .min(1)
+  .describe(
+    'Optional current version number. A mismatch returns 409 conflict (errorType conflict) and writes nothing.',
+  );
+
+export const UPDATE_KNOWLEDGE_RECORD_TOOL_DESCRIPTION =
+  'Update a knowledge record (requires knowledge:write and changeMessage). recordId is a UUID (any case, urn:uuid:, or 32 hex) or a project document key (e.g. HL1-VIS-2). Send the full markdown body; a value ending in the get_knowledge_record truncation marker is rejected. Page that read until nextOffset is null before rewriting. Optional slug renames the URL (lowercase a-z, 0-9, hyphens). Optional expectSha256 and expectedVersion are optimistic concurrency checks: a mismatch returns 409 conflict (errorType conflict) and writes nothing. A content change (title, summary, recordType, language, or contentMarkdown) of a current or verified record leaves that approved record live and creates a new draft revision (lifecycleStatus draft, sourceOfTruthMode ai_generated_draft) linked by supersedesRecordId. The response includes preservedLiveRecord and a warning. Drafts and other non-approved statuses update in place and stay draft. Metadata-only edits of an approved record stay on the live row and do not change lifecycleStatus. archived=true sets archivedAt and does not change lifecycleStatus. Git-managed records stay read-only except archival. For images: begin → append → finalize_workspace_media_upload.';
+
+export const BEGIN_RECORD_CONTENT_UPLOAD_TOOL_DESCRIPTION =
+  'Start a chunked markdown update (knowledge:write). Required field: recordId (UUID or document key). Optional changeMessage is stored on the session and used by finalize_record_content_upload when finalize omits it. Optional expectSha256 and expectedVersion fail fast with 409 conflict (errorType conflict) before a session is created. Then append_record_content with uploadId, chunk, and optional index — contentMarkdown is not valid on append. Finalize with uploadId. One version per session. Approved (current or verified) records stay live; finalize creates a new draft revision instead of demoting them. The session expires in 15 minutes. Returns uploadId, maxChunkChars (40000), contentSha256, contentLength, and currentVersionNumber.';
+
+export const APPEND_RECORD_CONTENT_TOOL_DESCRIPTION =
+  'Append one markdown chunk to a begin_record_content_upload session. Required fields: uploadId and chunk (1–40000 characters). Optional field: index (the next chunk index). contentMarkdown is not a valid field. The joined body cannot exceed 500000 characters. Requires knowledge:write.';
+
+export const FINALIZE_RECORD_CONTENT_UPLOAD_TOOL_DESCRIPTION =
+  'Join appended chunks and save them (knowledge:write). Required field: uploadId. changeMessage is required unless begin_record_content_upload stored one. Optional expectedLength must match the joined body. Optional expectSha256 and expectedVersion return 409 conflict (errorType conflict) and write nothing when the live record does not match. Also returns 409 when the body changed after begin. A content save of a current or verified record leaves that record live and creates a new draft revision. The session is deleted on success.';
+
+export const LIST_KNOWLEDGE_RECORDS_TOOL_DESCRIPTION =
+  'List knowledge records in a workspace (excludes archived). limit is 1–50 and defaults to 50. Pass cursor from nextCursor to read the next page; nextCursor is null and hasMore is false on the last page. total is the count after project allow-list filtering. Each record includes tags as a string array of tag names, the same shape as search_knowledge. Prefer language: "en" unless the user asks for another locale.';
+
 export const updateKnowledgeRecordInputSchema = z.object({
   recordId: z
     .string()
     .min(1)
     .max(80)
-    .describe('UUID or project document key (e.g. HL1-VIS-2) of the record to update.'),
-  changeMessage: z
-    .string()
-    .min(1)
-    .max(500)
-    .describe('Required: why the change was made.'),
-  title: z
-    .string()
-    .min(1)
-    .max(300)
-    .optional()
-    .describe('Human-readable title (1–300 chars).'),
+    .describe(
+      'UUID (any case, urn:uuid:, or 32 hex) or project document key (e.g. HL1-VIS-2) of the record to update.',
+    ),
+  changeMessage: z.string().min(1).max(500).describe('Required: why the change was made.'),
+  expectSha256: sha256Schema.optional(),
+  expectedVersion: expectedVersionSchema.optional(),
+  title: z.string().min(1).max(300).optional().describe('Human-readable title (1–300 chars).'),
   slug: z
     .string()
     .min(1)
     .max(KNOWLEDGE_RECORD_SLUG_MAX)
     .optional()
-    .describe('URL slug (lowercase a-z, 0-9, hyphens).'),
-  summary: z
-    .string()
-    .max(1000)
-    .nullable()
-    .optional()
-    .describe('Short summary (≤1000 chars).'),
+    .describe('URL slug (lowercase a-z, 0-9, hyphens)'),
+  summary: z.string().max(1000).nullable().optional().describe('Short summary (≤1000 chars).'),
   recordType: z
     .string()
     .min(1)
     .max(64)
     .optional()
     .describe('One of the catalog recordType values from list_record_metadata.'),
-  contentMarkdown: z
-    .string()
-    .max(500_000)
-    .optional()
-    .describe('Markdown body of the record.'),
+  contentMarkdown: z.string().max(500_000).optional().describe('Markdown body of the record.'),
   projectId: z
     .string()
     .uuid()
@@ -733,11 +731,7 @@ export const updateKnowledgeRecordInputSchema = z.object({
     .nullable()
     .optional()
     .describe('Optional system UUID to scope the record.'),
-  tags: z
-    .array(z.string().min(1).max(64))
-    .max(30)
-    .optional()
-    .describe('Up to 30 tag strings.'),
+  tags: z.array(z.string().min(1).max(64)).max(30).optional().describe('Up to 30 tag strings.'),
   language: z
     .string()
     .min(2)
@@ -767,8 +761,75 @@ export const updateKnowledgeRecordInputSchema = z.object({
     .describe('Set true to soft-archive the record, or false to restore it.'),
 });
 
+export const beginRecordContentUploadInputSchema = z.object({
+  recordId: z
+    .string()
+    .min(1)
+    .max(80)
+    .describe(
+      'Required knowledge record id: UUID (any case, urn:uuid:, or 32 hex) or document key.',
+    ),
+  changeMessage: z
+    .string()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe(
+      'Optional reason stored on the upload session. finalize_record_content_upload uses it when changeMessage is omitted there.',
+    ),
+  expectSha256: sha256Schema.optional(),
+  expectedVersion: expectedVersionSchema.optional(),
+});
+
+export const appendRecordContentInputSchema = z.object({
+  uploadId: z
+    .string()
+    .uuid()
+    .describe('Required upload session id from begin_record_content_upload.'),
+  chunk: z
+    .string()
+    .min(1)
+    .max(40_000)
+    .describe('Required markdown chunk (1–40000 characters). Not contentMarkdown.'),
+  index: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe('Optional next chunk index. Omit to append in order.'),
+});
+
+export const finalizeRecordContentUploadInputSchema = z.object({
+  uploadId: z
+    .string()
+    .uuid()
+    .describe('Required upload session id from begin_record_content_upload.'),
+  changeMessage: z
+    .string()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe(
+      'Why this change was made. Required here unless begin_record_content_upload stored changeMessage.',
+    ),
+  expectedLength: z
+    .number()
+    .int()
+    .min(0)
+    .max(500_000)
+    .optional()
+    .describe('Optional joined character count. Rejected when it does not match.'),
+  expectSha256: sha256Schema.optional(),
+  expectedVersion: expectedVersionSchema.optional(),
+});
+
 export type CreateKnowledgeRecordInput = z.infer<typeof createKnowledgeRecordInputSchema>;
 export type UpdateKnowledgeRecordInput = z.infer<typeof updateKnowledgeRecordInputSchema>;
+export type BeginRecordContentUploadInput = z.infer<typeof beginRecordContentUploadInputSchema>;
+export type AppendRecordContentInput = z.infer<typeof appendRecordContentInputSchema>;
+export type FinalizeRecordContentUploadInput = z.infer<
+  typeof finalizeRecordContentUploadInputSchema
+>;
 
 export function getRecordTypeDefinition(value: string): RecordTypeDefinition | undefined {
   return RECORD_TYPE_CATALOG.find((entry) => entry.value === value);
@@ -777,7 +838,7 @@ export function getRecordTypeDefinition(value: string): RecordTypeDefinition | u
 /** Discovery payload for MCP / OpenAPI clients before creating a record. */
 export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
   return {
-    version: 1,
+    version: 2,
     recordTypes: RECORD_TYPE_CATALOG,
     lifecycleStatuses: [
       { value: 'draft', description: 'Editable working copy; default for MCP writes.' },
@@ -871,6 +932,8 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
         'generatedByModel',
         'sourceTitle',
         'archived',
+        'expectSha256',
+        'expectedVersion',
       ],
       fields: UPDATE_FIELDS,
     },
@@ -906,6 +969,9 @@ export function buildKnowledgeRecordMetadata(): KnowledgeRecordMetadata {
       'For charts/screenshots: begin_workspace_media_upload → append_workspace_media_upload → finalize_workspace_media_upload, then embed media.markdownSnippet — never upload_workspace_media or data: URIs.',
       'Locale siblings (hu/de/…): always create_record_translation; never a second create_knowledge_record.',
       'To import a PDF or DOCX, call import_document_knowledge_record. Do not paste the file into create_knowledge_record.',
+      'update_knowledge_record and finalize_record_content_upload accept optional expectSha256 and expectedVersion. A mismatch is a 409 conflict (errorType conflict) and writes nothing.',
+      'A content change of a current or verified record keeps that version live and creates a new draft revision linked by supersedesRecordId.',
+      'list_knowledge_records pages with limit (max 50, default 50), cursor, nextCursor, and hasMore.',
     ],
   };
 }

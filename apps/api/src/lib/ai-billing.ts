@@ -57,6 +57,7 @@ import {
 export type { AiPaidPeriod };
 import { AI_ASSISTANT_SYSTEM_TYPE } from './ai-assistant-systems.js';
 import { loadCompletedAtByTask } from './project-delivery.js';
+import { liveReadTtl } from './read-cache.js';
 import {
   addTheoreticalCost,
   foldBillingSlices,
@@ -74,7 +75,6 @@ import {
 } from './project-budget.js';
 import {
   buildImportedTheoretical,
-  loadImportedTheoretical,
   presentWorkspaceAiModelPrices,
 } from './ai-usage-pricing.js';
 
@@ -897,11 +897,13 @@ async function assembleWorkspacePaidAi(input: {
   overrideRows: Parameters<typeof allocationCandidates>[0]['overrideRows'];
   projectRows: Array<{
     id: string;
+    name: string;
+    slug: string;
     status: string;
     currency: string;
     archivedAt: Date | null;
   }>;
-  assistantRows: Array<{ id: string; projectId: string | null }>;
+  assistantRows: Array<{ id: string; name: string; projectId: string | null }>;
   taskRows: PaidAiTaskRow[];
   prices: ReturnType<typeof presentWorkspaceAiModelPrices>;
   linkedAgentIds: ReadonlySet<string>;
@@ -991,6 +993,13 @@ async function assembleWorkspacePaidAi(input: {
     imported,
     fxBook,
     folded,
+    openProjects,
+    systemProjectId,
+    overrideRows: input.overrideRows,
+    tokenSlices,
+    assistantNames: new Map(input.assistantRows.map((row) => [row.id, row.name])),
+    projectById: new Map(input.projectRows.map((row) => [row.id, row])),
+    taskUnpriced: catalog.unpriced,
   };
 }
 
@@ -1035,6 +1044,8 @@ async function loadWorkspacePaidAiContextsUncached(
       .select({
         id: projects.id,
         workspaceId: projects.workspaceId,
+        name: projects.name,
+        slug: projects.slug,
         status: projects.status,
         currency: projects.currency,
         archivedAt: projects.archivedAt,
@@ -1045,6 +1056,7 @@ async function loadWorkspacePaidAiContextsUncached(
       .select({
         id: systems.id,
         workspaceId: systems.workspaceId,
+        name: systems.name,
         projectId: systems.projectId,
       })
       .from(systems)
@@ -1188,12 +1200,16 @@ async function loadWorkspacePaidAiContextsUncached(
   return result;
 }
 
-const workspacePaidAiInflight = new WeakMap<
-  Database,
-  Map<string, Promise<WorkspacePaidAiContext>>
->();
+const PAID_AI_TTL_MS = 20_000;
 
-function paidAiBucket(database: Database): Map<string, Promise<WorkspacePaidAiContext>> {
+type PaidAiCacheEntry = {
+  promise: Promise<WorkspacePaidAiContext>;
+  expiresAt: number;
+};
+
+const workspacePaidAiInflight = new WeakMap<Database, Map<string, PaidAiCacheEntry>>();
+
+function paidAiBucket(database: Database): Map<string, PaidAiCacheEntry> {
   let bucket = workspacePaidAiInflight.get(database);
   if (!bucket) {
     bucket = new Map();
@@ -1204,7 +1220,9 @@ function paidAiBucket(database: Database): Map<string, Promise<WorkspacePaidAiCo
 
 /**
  * Paid-AI contexts for every workspace in one batched load.
- * A workspace already loading is reused instead of queried again.
+ * The key is workspace and day. A result stays for a short TTL so the
+ * project list, the project page, and budget-summary share one ledger read.
+ * ensureExchangeRates runs once inside that load.
  */
 export async function loadWorkspacePaidAiContexts(
   database: Database,
@@ -1213,16 +1231,22 @@ export async function loadWorkspacePaidAiContexts(
 ): Promise<Map<string, WorkspacePaidAiContext>> {
   const ids = [...new Set(workspaceIds)];
   const bucket = paidAiBucket(database);
+  const now = Date.now();
+  const ttl = liveReadTtl(PAID_AI_TTL_MS);
   const pending = new Map<string, Promise<WorkspacePaidAiContext>>();
   const missing: string[] = [];
   for (const id of ids) {
     const key = `${id}:${today}`;
     const existing = bucket.get(key);
-    if (existing) pending.set(id, existing);
-    else missing.push(id);
+    if (existing && existing.expiresAt > now) pending.set(id, existing.promise);
+    else {
+      if (existing) bucket.delete(key);
+      missing.push(id);
+    }
   }
   if (missing.length > 0) {
     const batch = loadWorkspacePaidAiContextsUncached(database, missing, today);
+    const expiresAt = now + ttl;
     for (const id of missing) {
       const key = `${id}:${today}`;
       const one = batch.then((map) => {
@@ -1232,10 +1256,25 @@ export async function loadWorkspacePaidAiContexts(
         }
         return context;
       });
-      const tracked = one.finally(() => {
-        if (bucket.get(key) === tracked) bucket.delete(key);
+      const tracked = one.then(
+        (value) => value,
+        (error: unknown) => {
+          if (bucket.get(key)?.promise === tracked) bucket.delete(key);
+          throw error;
+        },
+      );
+      bucket.set(key, {
+        promise: tracked,
+        expiresAt: ttl > 0 ? expiresAt : now,
       });
-      bucket.set(key, tracked);
+      if (ttl <= 0) {
+        void tracked.then(
+          () => {
+            if (bucket.get(key)?.promise === tracked) bucket.delete(key);
+          },
+          () => undefined,
+        );
+      }
       pending.set(id, tracked);
     }
   }
@@ -1530,143 +1569,54 @@ export type WorkspaceAiCostOverview = {
  * Workspace view of the ledger: paid totals by month, the theoretical API
  * line, and how each pool is split across projects.
  */
-export async function loadWorkspaceAiCostOverview(
-  database: Database,
-  workspaceId: string,
+/** UTC day, matching the previous per-workspace overview. */
+export function aiCostToday(now = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+/**
+ * Chart, pools, and theoretical days from a workspace context that was
+ * loaded with the shared FX book. Numbers match the previous per-workspace
+ * queries: the same fold, then the same theoretical lines.
+ */
+export function overviewFromPaidContext(
+  source: WorkspacePaidAiContext,
   options?: { reportingCurrency?: ProjectCurrency },
-): Promise<WorkspaceAiCostOverview> {
-  const [entryRows, overrideRows, projectRows, assistantRows, taskRows] =
-    await Promise.all([
-      database.db
-        .select()
-        .from(aiBillingEntries)
-        .where(eq(aiBillingEntries.workspaceId, workspaceId))
-        .orderBy(desc(aiBillingEntries.period), desc(aiBillingEntries.createdAt)),
-      database.db
-        .select()
-        .from(aiBillingAllocationOverrides)
-        .where(eq(aiBillingAllocationOverrides.workspaceId, workspaceId)),
-      database.db
-        .select({
-          id: projects.id,
-          name: projects.name,
-          slug: projects.slug,
-          status: projects.status,
-          currency: projects.currency,
-          archivedAt: projects.archivedAt,
-        })
-        .from(projects)
-        .where(eq(projects.workspaceId, workspaceId)),
-      database.db
-        .select({
-          id: systems.id,
-          name: systems.name,
-          projectId: systems.projectId,
-        })
-        .from(systems)
-        .where(
-          and(
-            eq(systems.workspaceId, workspaceId),
-            eq(systems.systemType, AI_ASSISTANT_SYSTEM_TYPE),
-            isNull(systems.archivedAt),
-          ),
-        ),
-      database.db
-        .select({
-          id: projectTasks.id,
-          projectId: projectTasks.projectId,
-          aiSystemId: projectTasks.aiSystemId,
-          status: projectTasks.status,
-          tokensUsed: projectTasks.tokensUsed,
-          tokensInput: projectTasks.tokensInput,
-          tokensOutput: projectTasks.tokensOutput,
-          tokensCache: projectTasks.tokensCache,
-          tokensCacheWrite: projectTasks.tokensCacheWrite,
-          aiModelId: projectTasks.aiModelId,
-          billingPeriod: projectTasks.billingPeriod,
-          usageOccurredAt: projectTasks.usageOccurredAt,
-          updatedAt: projectTasks.updatedAt,
-          cloudAgentId: projectTasks.cloudAgentId,
-        })
-        .from(projectTasks)
-        .innerJoin(projects, eq(projectTasks.projectId, projects.id))
-        .where(
-          and(
-            eq(projects.workspaceId, workspaceId),
-            isNull(projectTasks.archivedAt),
-            isNull(projects.archivedAt),
-          ),
-        ),
-    ]);
-
-  const today = new Date().toISOString().slice(0, 10);
-  const imported = await loadImportedTheoretical(database, workspaceId);
-  const taskUsages = await taskUsageRows(database, taskRows, today);
-  const tokenSlices = allocationTokenSlices({
-    tasks: taskUsages.map((row) => ({
-      taskId: row.taskId,
-      projectId: row.projectId,
-      aiSystemId: row.aiSystemId,
-      cloudAgentId: row.cloudAgentId,
-      cloudAgentIds: row.cloudAgentIds,
-      period: row.period,
-      tokens: row.tokens,
-    })),
-    events: imported.allocationEvents,
+): WorkspaceAiCostOverview {
+  const reportingCurrency = options?.reportingCurrency ?? source.fxBook.reportingCurrency;
+  const fxBook = {
+    reportingCurrency,
+    rates: source.fxBook.rates,
+  };
+  const folded = reportingCurrency === source.fxBook.reportingCurrency
+    ? source.folded
+    : foldBillingSlices({
+        slices: slicesFromEntries(source.entryRows),
+        reportingCurrency,
+        rates: source.fxBook.rates,
+        candidates: (slice) =>
+          allocationCandidates({
+            slice,
+            openProjects: source.openProjects,
+            systemProjectId: source.systemProjectId,
+            overrideRows: source.overrideRows,
+            tokensOf: (projectId, period, aiSystemId) =>
+              tokensInSlices(source.tokenSlices, projectId, period, aiSystemId),
+          }),
+      });
+  const entryRows = [...source.entryRows].sort((left, right) => {
+    const period = right.period.localeCompare(left.period);
+    if (period !== 0) return period;
+    return right.createdAt.getTime() - left.createdAt.getTime();
   });
-  const usages = taskUsages.filter(
-    (row) => !taskSupersededByImport(row.cloudAgentIds, imported.agentIds),
-  );
-
-  const taskCatalog = priceTaskUsagesFromCatalog(
-    usages.map((row) => ({
-      usage: row.usage,
-      model: row.model,
-      onDate: row.onDate,
-      tokens: row.tokens,
-    })),
-    imported.prices,
-  );
-  const projectById = new Map(projectRows.map((row) => [row.id, row]));
-  const systemName = new Map(assistantRows.map((row) => [row.id, row.name]));
-  const systemProjectId = new Map(
-    assistantRows.map((row) => [row.id, row.projectId]),
-  );
-  const openProjects = projectRows.filter(
-    (row) => !row.archivedAt && row.status !== 'archived',
-  );
-
-  const tokensOf = (
-    projectId: string,
-    period: string,
-    aiSystemId: string | null,
-  ) => tokensInSlices(tokenSlices, projectId, period, aiSystemId);
-
-  const paidSlices = slicesFromEntries(entryRows);
-  const fxDates = [
-    ...paidSlices.map((slice) => slice.onDate),
-    ...usages.map((row) => row.onDate),
-    ...imported.rows.map((row) => row.occurredOn),
-  ];
-  const fxBook = await loadWorkspaceFx(
-    database,
-    workspaceId,
-    fxDates,
-    options?.reportingCurrency,
-  );
-  const folded = foldBillingSlices({
-    slices: paidSlices,
-    reportingCurrency: fxBook.reportingCurrency,
-    rates: fxBook.rates,
-    candidates: (slice) =>
-      allocationCandidates({
-        slice,
-        openProjects,
-        systemProjectId,
-        overrideRows,
-        tokensOf,
-      }),
-  });
+  const imported = source.imported;
+  const projectById = source.projectById;
+  const systemName = source.assistantNames;
+  const usages = source.pricedBillable;
+  const taskCatalog = {
+    rows: source.pricedBillable,
+    unpriced: source.taskUnpriced,
+  };
 
   let reportingChart = folded.reportingChart;
   let originalChart = folded.originalChart;
@@ -1809,6 +1759,19 @@ export async function loadWorkspaceAiCostOverview(
   };
 }
 
+export async function loadWorkspaceAiCostOverview(
+  database: Database,
+  workspaceId: string,
+  options?: { reportingCurrency?: ProjectCurrency },
+): Promise<WorkspaceAiCostOverview> {
+  const context = await loadWorkspacePaidAiContext(
+    database,
+    workspaceId,
+    aiCostToday(),
+  );
+  return overviewFromPaidContext(context, options);
+}
+
 function pushTheoreticalDay(days: TheoreticalDayPoint[], point: TheoreticalDayPoint): void {
   const found = days.find(
     (row) =>
@@ -1930,14 +1893,21 @@ export async function loadPlatformAiCost(
     })
     .from(workspaces)
     .orderBy(asc(workspaces.name), asc(workspaces.slug));
-  const overviews = await Promise.all(
-    workspaceRows.map(async (workspace) => ({
-      workspace,
-      overview: await loadWorkspaceAiCostOverview(database, workspace.id, {
-        reportingCurrency: rollup,
-      }),
-    })),
+  const contexts = await loadWorkspacePaidAiContexts(
+    database,
+    workspaceRows.map((workspace) => workspace.id),
+    aiCostToday(now),
   );
+  const overviews = workspaceRows.map((workspace) => {
+    const context = contexts.get(workspace.id);
+    if (!context) {
+      throw new Error(`Missing paid AI context for workspace ${workspace.id}`);
+    }
+    return {
+      workspace,
+      overview: overviewFromPaidContext(context, { reportingCurrency: rollup }),
+    };
+  });
   const entryFilter = {
     ...(query.workspaceId ? { workspaceId: query.workspaceId } : {}),
     ...(query.provider ? { provider: query.provider } : {}),
