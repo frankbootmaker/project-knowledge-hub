@@ -18,11 +18,11 @@ export {
   sliceContentToFit,
   serializedResponseBytes,
   isTruncatedReadback,
-  contentSha256,
   enforceResponseSize,
   type ContentBoundary,
   type ContentPage,
 } from './limits.js';
+export { contentSha256 } from './content-hash.js';
 export {
   createKnowledgeHubMcpServer,
   type McpClientContext,

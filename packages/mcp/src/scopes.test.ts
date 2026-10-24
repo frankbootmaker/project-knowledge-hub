@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_MCP_SCOPES, hasMcpScope } from './scopes.js';
+import { contentSha256 } from './content-hash.js';
 import {
-  contentSha256,
   ContentOffsetError,
   enforceResponseSize,
   isTruncatedReadback,
