@@ -21,6 +21,12 @@ export const MCP_MAX_CONTENT_BYTES = 100_000;
 /** Max items returned by list/search tools. */
 export const MCP_MAX_LIST_LIMIT = 25;
 
+/**
+ * Page size for list_knowledge_records on Bearer /mcp and call_hub_tool.
+ * Other lists stay at MCP_MAX_LIST_LIMIT.
+ */
+export const MCP_KNOWLEDGE_LIST_LIMIT = 50;
+
 /** Soft cap on serialized JSON tool result size (bytes). */
 export const MCP_MAX_RESPONSE_BYTES = 200_000;
 

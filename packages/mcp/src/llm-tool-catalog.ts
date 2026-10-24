@@ -4,13 +4,29 @@
  * and expose the rest via call_hub_tool.
  */
 
-import { AppError, RECORD_TYPES } from '@project-knowledge-hub/domain';
+import {
+  AppError,
+  APPEND_RECORD_CONTENT_TOOL_DESCRIPTION,
+  BEGIN_RECORD_CONTENT_UPLOAD_TOOL_DESCRIPTION,
+  FINALIZE_RECORD_CONTENT_UPLOAD_TOOL_DESCRIPTION,
+  KNOWLEDGE_RECORD_RELATION_INVERSE_GUIDE,
+  LIST_KNOWLEDGE_RECORDS_TOOL_DESCRIPTION,
+  RECORD_TYPES,
+  UPDATE_KNOWLEDGE_RECORD_TOOL_DESCRIPTION,
+  appendRecordContentInputSchema,
+  beginRecordContentUploadInputSchema,
+  finalizeRecordContentUploadInputSchema,
+  updateKnowledgeRecordInputSchema,
+} from '@project-knowledge-hub/domain';
+import { MCP_KNOWLEDGE_LIST_LIMIT } from './limits.js';
 import { hasMcpScope, type McpScope } from './scopes.js';
 import {
   annotateRequiredFieldDescriptions,
+  appendToolSchemaFieldHint,
   assertToolInput,
   type ToolInputSchema,
 } from './tool-input.js';
+import { zodObjectToToolSchema } from './zod-tool-schema.js';
 
 export type LlmToolDef = {
   name: string;
@@ -859,11 +875,10 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'list_knowledge_records',
-    description:
-      'List knowledge records (excludes archived). Prefer language en unless asked otherwise. Returns humanKey when present and tags as a string array of tag names (same shape as search_knowledge).',
+    description: LIST_KNOWLEDGE_RECORDS_TOOL_DESCRIPTION,
     scope: 'knowledge:read',
     openApi: true,
-    defaults: { limit: 50 },
+    defaults: { limit: MCP_KNOWLEDGE_LIST_LIMIT },
     body: {
       type: 'object',
       required: ['workspaceId'],
@@ -875,7 +890,16 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
           minLength: 2,
           maxLength: 16,
         }),
-        limit: { type: 'integer', minimum: 1, maximum: 50 },
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: MCP_KNOWLEDGE_LIST_LIMIT,
+          description: 'Page size. Defaults to 50.',
+        },
+        cursor: stringProp('Page cursor from nextCursor. Omit for the first page.', {
+          minLength: 1,
+          maxLength: 500,
+        }),
       },
     },
   },
@@ -904,7 +928,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record',
     description:
-      'Get a knowledge record (paged markdown). Returns language, translationGroupId, and translations (id, key, language, slug) for the translation family, including this record. key is the human document key. Tags, media, and linkedItems are on the first page only. linkedItems has deliveryLinks, raidLinks, and changeItems for the same project. Archived RAID, change, and delivery items are omitted. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). Read pixels with call_hub_tool get_workspace_media. recordId may be UUID or document key. recordRelations (counts and up to 20 summaries) is included on every page unless includeRecordRelations is false.',
+      'Get a knowledge record (paged markdown). Returns language, translationGroupId, and translations (id, key, language, slug) for the translation family, including this record. key is the human document key. Tags, media, and linkedItems are on the first page only. linkedItems has deliveryLinks, raidLinks, and changeItems for the same project. Archived RAID, change, and delivery items are omitted. Each page is at most 50,000 characters. contentLength is the full length and contentSha256 hashes the full body. When contentTruncated is true, call again with contentOffset set to nextOffset until nextOffset is null before rewriting the record. With contentOffset or contentLimit, pages are raw slices (concatenate contentMarkdown); chunkIndex is the 0-based page index (ceil(contentOffset/contentLimit) after the first). The default call without those params still ends the first page with …[truncated] when more remains. Pass expectSha256 to get 409 when the body changed. boundary snaps the cut (none, paragraph, or line). Read pixels with call_hub_tool get_workspace_media. recordId may be UUID or document key. recordRelations (counts and up to 20 summaries) is included on every page unless includeRecordRelations is false. Inbound derived_from is source_for, depends_on is required_by, and refines is refined_by. Each edge includes canonicalType and direction.',
     scope: 'knowledge:read',
     openApi: true,
     output: knowledgeRecordResult,
@@ -1060,93 +1084,32 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   },
   {
     name: 'update_knowledge_record',
-    description:
-      'Update a knowledge record. Content edits stay draft. Send the full markdown body; a value ending in the get_knowledge_record truncation marker is rejected. Page that read until nextOffset is null before rewriting. archived=true sets archivedAt and leaves lifecycleStatus unchanged. Optional slug renames the URL (lowercase a-z, 0-9, hyphens). Requires knowledge:write.',
+    description: UPDATE_KNOWLEDGE_RECORD_TOOL_DESCRIPTION,
     scope: 'knowledge:write',
     write: true,
     openApi: true,
-    body: {
-      type: 'object',
-      required: ['recordId', 'changeMessage'],
-      properties: {
-        recordId: entityRefProp('Knowledge record id'),
-        changeMessage: stringProp('Why this change was made', {
-          minLength: 1,
-          maxLength: 500,
-        }),
-        title: stringProp('Title', { minLength: 1, maxLength: 300 }),
-        slug: stringProp('URL slug (lowercase a-z, 0-9, hyphens)', {
-          minLength: 1,
-          maxLength: 96,
-        }),
-        summary: { type: 'string', nullable: true, maxLength: 1000 },
-        recordType: { type: 'string', enum: [...RECORD_TYPES] },
-        contentMarkdown: stringProp('Markdown body', { maxLength: 500_000 }),
-        projectId: { type: 'string', format: 'uuid', nullable: true },
-        systemId: { type: 'string', format: 'uuid', nullable: true },
-        tags: {
-          type: 'array',
-          items: { type: 'string', minLength: 1, maxLength: 64 },
-          maxItems: 30,
-        },
-        language: { type: 'string', nullable: true, minLength: 2, maxLength: 16 },
-        archived: {
-          type: 'boolean',
-          description: 'Set true to soft-archive (hide from catalogues); false to restore',
-        },
-        generatedByModel: stringProp('Optional model name', { maxLength: 160 }),
-        sourceTitle: stringProp('Optional source title', { maxLength: 300 }),
-      },
-    },
+    body: zodObjectToToolSchema(updateKnowledgeRecordInputSchema),
   },
   {
     name: 'begin_record_content_upload',
-    description:
-      'Start a chunked markdown update. Then append_record_content and finalize_record_content_upload. One draft version per session. Requires knowledge:write.',
+    description: BEGIN_RECORD_CONTENT_UPLOAD_TOOL_DESCRIPTION,
     scope: 'knowledge:write',
     write: true,
-    body: {
-      type: 'object',
-      required: ['recordId'],
-      properties: {
-        recordId: entityRefProp('Knowledge record id'),
-      },
-    },
+    body: zodObjectToToolSchema(beginRecordContentUploadInputSchema),
   },
   {
     name: 'append_record_content',
-    description:
-      'Append one markdown chunk (max 40000 characters) to a record content upload. Requires knowledge:write.',
+    description: APPEND_RECORD_CONTENT_TOOL_DESCRIPTION,
     scope: 'knowledge:write',
     write: true,
-    body: {
-      type: 'object',
-      required: ['uploadId', 'chunk'],
-      properties: {
-        uploadId: uuidProp('Upload session id'),
-        chunk: stringProp('Markdown chunk', { minLength: 1, maxLength: 40_000 }),
-        index: { type: 'integer', minimum: 0 },
-      },
-    },
+    body: zodObjectToToolSchema(appendRecordContentInputSchema),
   },
   {
     name: 'finalize_record_content_upload',
-    description:
-      'Save appended chunks as one draft version. 409 CONTENT_CHANGED when the record changed after begin. Requires knowledge:write.',
+    description: FINALIZE_RECORD_CONTENT_UPLOAD_TOOL_DESCRIPTION,
     scope: 'knowledge:write',
     write: true,
-    body: {
-      type: 'object',
-      required: ['uploadId', 'changeMessage'],
-      properties: {
-        uploadId: uuidProp('Upload session id'),
-        changeMessage: stringProp('Why this change was made', {
-          minLength: 1,
-          maxLength: 500,
-        }),
-        expectedLength: { type: 'integer', minimum: 0, maximum: 500_000 },
-      },
-    },
+    body: zodObjectToToolSchema(finalizeRecordContentUploadInputSchema),
   },
   {
     name: 'begin_workspace_media_upload',
@@ -2829,7 +2792,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'get_knowledge_record_relations',
     description:
-      'List typed relations for a knowledge record plus lifecycle successor and predecessor. Inbound edges use inverse labels (required_by, refined_by, source_for). relates_to and contradicts are listed as outbound on both records. recordId may be a UUID or document key. Requires knowledge:read.',
+      `List typed relations for a knowledge record plus lifecycle successor and predecessor. Inbound edges use inverse labels (required_by, refined_by, source_for). relates_to and contradicts are listed as outbound on both records. recordId may be a UUID or document key. Requires knowledge:read. ${KNOWLEDGE_RECORD_RELATION_INVERSE_GUIDE}`,
     scope: 'knowledge:read',
     body: {
       type: 'object',
@@ -2859,7 +2822,7 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
   {
     name: 'set_knowledge_record_relations',
     description:
-      'Replace relations for this record. Types: relates_to, depends_on, refines, derived_from, contradicts. Directed inbound edges stay. relates_to and contradicts are stored once and can be added or removed from either record. Symmetric relations are listed as outbound on both records. Rejects self-links, cross-project targets, depends_on and refines cycles, and archived endpoints. Requires knowledge:write.',
+      `Replace relations for this record. Types: relates_to, depends_on, refines, derived_from, contradicts. Directed inbound edges stay. relates_to and contradicts are stored once and can be added or removed from either record. Symmetric relations are listed as outbound on both records. Rejects self-links, cross-project targets, depends_on and refines cycles, and archived endpoints. Requires knowledge:write. ${KNOWLEDGE_RECORD_RELATION_INVERSE_GUIDE}`,
     scope: 'knowledge:write',
     write: true,
     body: {
@@ -3005,11 +2968,35 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
     },
   },
   {
+    name: 'describe_hub_tool',
+    description:
+      'Return the JSON input schema, allowed fields, and required fields for one hub tool. Pass name from list_hub_tools. list_hub_tools with name returns the same payload. Write-tool schemas are hidden without a write scope. Requires projects:read.',
+    scope: 'projects:read',
+    body: {
+      type: 'object',
+      required: ['name'],
+      properties: {
+        name: stringProp('Required exact tool name from list_hub_tools', {
+          minLength: 1,
+          maxLength: 80,
+        }),
+      },
+    },
+  },
+  {
     name: 'list_hub_tools',
     description:
-      'List every invokable hub tool name, scope, and short description (including tools only reachable via call_hub_tool).',
+      'List every invokable hub tool name, scope, and short description (including tools only reachable via call_hub_tool). Pass name to return that tool input schema, allowed fields, and required fields (same payload as describe_hub_tool).',
     scope: 'projects:read',
-    body: { type: 'object', properties: {} },
+    body: {
+      type: 'object',
+      properties: {
+        name: stringProp('Optional exact tool name. Returns that tool input schema.', {
+          minLength: 1,
+          maxLength: 80,
+        }),
+      },
+    },
   },
   {
     name: 'call_hub_tool',
@@ -3038,7 +3025,11 @@ export const LLM_TOOL_CATALOG: LlmToolDef[] = [
 
 export function toolDefinitionsForGemini(includeWriteTools: boolean): LlmToolDef[] {
   return LLM_TOOL_CATALOG.filter((tool) => {
-    if (tool.name === 'call_hub_tool' || tool.name === 'list_hub_tools') return false;
+    if (
+      tool.name === 'call_hub_tool'
+      || tool.name === 'list_hub_tools'
+      || tool.name === 'describe_hub_tool'
+    ) return false;
     if (!includeWriteTools && tool.write) return false;
     return true;
   });
@@ -3766,9 +3757,77 @@ function assertKnownToolFields(
       : `Unknown fields: ${unknown.join(', ')}`;
   throw new AppError({
     code: 'VALIDATION_ERROR',
-    message,
+    message: appendToolSchemaFieldHint(message, schema),
     statusCode: 400,
   });
+}
+
+function clientCanSeeWriteTools(scopes: string[]): boolean {
+  return (
+    hasMcpScope(scopes, 'knowledge:write') ||
+    hasMcpScope(scopes, 'pm:write') ||
+    hasMcpScope(scopes, 'catalogue:write') ||
+    hasMcpScope(scopes, 'projects:write')
+  );
+}
+
+function toolNameArgument(body: unknown): string | undefined {
+  const name = asToolArgs(body).name;
+  if (typeof name !== 'string') return undefined;
+  const trimmed = name.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function schemaFieldLists(schema: ToolInputSchema): { allowed: string[]; required: string[] } {
+  const allowed = schema.properties ? Object.keys(schema.properties) : [];
+  const required = Array.isArray(schema.required)
+    ? schema.required.filter((item): item is string => typeof item === 'string')
+    : [];
+  return { allowed, required };
+}
+
+/** JSON input schema for one hub tool. Write tools stay hidden without a write scope. */
+export function describeHubTool(
+  name: string,
+  includeWrite: boolean,
+): {
+  name: string;
+  description: string;
+  scope: McpScope;
+  write: boolean;
+  inputSchema: ToolInputSchema;
+  allowed: string[];
+  required: string[];
+} {
+  const catalog = findLlmTool(name);
+  const extra = EXTRA_HUB_TOOLS.find((tool) => tool.name === name);
+  const unlisted = UNLISTED_INPUT_SCHEMAS[name];
+  const write = Boolean(catalog?.write ?? extra?.write ?? unlisted);
+  const scope = catalog?.scope ?? extra?.scope ?? (unlisted ? 'knowledge:write' : undefined);
+  const description =
+    catalog?.description ??
+    extra?.description ??
+    (unlisted
+      ? 'Upload workspace media in one request. Prefer the chunked media tools. Requires knowledge:write.'
+      : undefined);
+  const inputSchema = (catalog?.body ?? extra?.body ?? unlisted) as ToolInputSchema | undefined;
+  if (!scope || !description || !inputSchema || (write && !includeWrite)) {
+    throw new AppError({
+      code: 'NOT_FOUND',
+      message: `Unknown tool: ${name}`,
+      statusCode: 404,
+    });
+  }
+  const fields = schemaFieldLists(inputSchema);
+  return {
+    name,
+    description,
+    scope,
+    write,
+    inputSchema,
+    allowed: fields.allowed,
+    required: fields.required,
+  };
 }
 
 /** Invoke a catalog tool by name. Used by OpenAPI and the ChatGPT OAuth dispatcher. */
@@ -3787,7 +3846,7 @@ export async function invokeNamedHubTool(
     });
   }
 
-  if (toolName === 'list_hub_tools') {
+  if (toolName === 'list_hub_tools' || toolName === 'describe_hub_tool') {
     if (!hasMcpScope(scopes, 'projects:read')) {
       throw new AppError({
         code: 'FORBIDDEN',
@@ -3795,11 +3854,23 @@ export async function invokeNamedHubTool(
         statusCode: 403,
       });
     }
-    const includeWrite =
-      hasMcpScope(scopes, 'knowledge:write')
-      || hasMcpScope(scopes, 'pm:write')
-      || hasMcpScope(scopes, 'catalogue:write')
-      || hasMcpScope(scopes, 'projects:write');
+    const includeWrite = clientCanSeeWriteTools(scopes);
+    if (toolName === 'describe_hub_tool') {
+      const name = toolNameArgument(body);
+      if (!name) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message: appendToolSchemaFieldHint(
+            'Missing required field: name',
+            findLlmTool('describe_hub_tool')?.body,
+          ),
+          statusCode: 400,
+        });
+      }
+      return describeHubTool(name, includeWrite);
+    }
+    const requested = toolNameArgument(body);
+    if (requested) return describeHubTool(requested, includeWrite);
     return { tools: listHubToolSummaries(includeWrite) };
   }
 

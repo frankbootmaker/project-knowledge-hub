@@ -266,6 +266,26 @@ export function toolInputIssues(schema: unknown, value: unknown): ToolInputIssue
   return issues;
 }
 
+/** Allowed and required field names for a validation error. */
+export function toolSchemaFieldHint(schema: unknown): string {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return '';
+  const body = schema as ToolInputSchema;
+  const allowed = body.properties ? Object.keys(body.properties) : [];
+  const required = Array.isArray(body.required)
+    ? body.required.filter((name) => typeof name === 'string')
+    : [];
+  const parts: string[] = [];
+  if (allowed.length > 0) parts.push(`Allowed fields: ${allowed.join(', ')}.`);
+  if (required.length > 0) parts.push(`Required fields: ${required.join(', ')}.`);
+  return parts.join(' ');
+}
+
+export function appendToolSchemaFieldHint(message: string, schema: unknown): string {
+  const hint = toolSchemaFieldHint(schema);
+  if (!hint || message.includes('Allowed fields:')) return message;
+  return `${message} ${hint}`;
+}
+
 export function formatToolInputIssues(issues: ToolInputIssue[]): string {
   const missing = issues.filter((issue) => issue.code === 'required').map((issue) => issue.field);
   const invalidIssues = issues.filter((issue) => issue.code === 'invalid');
@@ -291,7 +311,7 @@ export function assertToolInput(schema: unknown, value: unknown): void {
   if (issues.length === 0) return;
   throw new AppError({
     code: 'VALIDATION_ERROR',
-    message: formatToolInputIssues(issues),
+    message: appendToolSchemaFieldHint(formatToolInputIssues(issues), schema),
     statusCode: 400,
     details: {
       fields: issues.map((issue) => ({ field: issue.field, code: issue.code })),

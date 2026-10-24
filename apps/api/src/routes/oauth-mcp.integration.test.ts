@@ -17,8 +17,7 @@ import { buildApp } from '../app.js';
 import { closeUserAccount } from '../lib/close-user.js';
 import type { FastifyInstance } from 'fastify';
 
-const hasIntegrationEnv =
-  Boolean(process.env.DATABASE_URL) && Boolean(process.env.REDIS_URL);
+const hasIntegrationEnv = Boolean(process.env.DATABASE_URL) && Boolean(process.env.REDIS_URL);
 
 const REDIRECT = 'https://chatgpt.com/connector_platform_oauth_redirect';
 const CLIENT_ID = 'https://chatgpt.com/oauth/client.json';
@@ -242,10 +241,21 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
       },
     });
     expect(oauthCall.statusCode).toBe(200);
-    const tools = (oauthCall.json() as { result: { tools: Array<{ name: string; _meta?: { securitySchemes?: unknown; 'openai/profile'?: boolean } }> } }).result.tools;
+    const tools = (
+      oauthCall.json() as {
+        result: {
+          tools: Array<{
+            name: string;
+            _meta?: { securitySchemes?: unknown; 'openai/profile'?: boolean };
+          }>;
+        };
+      }
+    ).result.tools;
     expect(tools.some((tool) => tool.name === 'get_profile')).toBe(true);
     expect(tools.find((tool) => tool.name === 'get_profile')?._meta?.['openai/profile']).toBe(true);
-    expect(tools.find((tool) => tool.name === 'list_workspaces')?._meta?.securitySchemes).toBeTruthy();
+    expect(
+      tools.find((tool) => tool.name === 'list_workspaces')?._meta?.securitySchemes,
+    ).toBeTruthy();
 
     const bearerMount = await app!.inject({
       method: 'POST',
@@ -282,7 +292,9 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
       payload: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
     });
     expect(khOnOauth.statusCode).toBe(401);
-    expect(String(khOnOauth.headers['www-authenticate'])).toContain('oauth-protected-resource/mcp/oauth');
+    expect(String(khOnOauth.headers['www-authenticate'])).toContain(
+      'oauth-protected-resource/mcp/oauth',
+    );
 
     const refreshed = await app!.inject({
       method: 'POST',
@@ -332,8 +344,9 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
       url: '/api/v1/oauth/grants',
       headers: { cookie },
     });
-    const grantId = (grants.json() as { grants: Array<{ id: string; status: string }> }).grants
-      .find((grant) => grant.status === 'active')?.id;
+    const grantId = (
+      grants.json() as { grants: Array<{ id: string; status: string }> }
+    ).grants.find((grant) => grant.status === 'active')?.id;
     expect(grantId).toBeTruthy();
     const blockedDelete = await app!.inject({
       method: 'DELETE',
@@ -375,7 +388,9 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
         allowedWorkspaceIds: [workspaceId],
       },
     });
-    const code = new URL((consent.json() as { redirectTo: string }).redirectTo).searchParams.get('code')!;
+    const code = new URL((consent.json() as { redirectTo: string }).redirectTo).searchParams.get(
+      'code',
+    )!;
     const token = await app!.inject({
       method: 'POST',
       url: '/oauth/token',
@@ -395,8 +410,9 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
       url: '/api/v1/me/oauth/grants',
       headers: { cookie },
     });
-    const mine = (grantsAfter.json() as { grants: Array<{ id: string; status: string }> }).grants
-      .find((grant) => grant.status === 'active');
+    const mine = (
+      grantsAfter.json() as { grants: Array<{ id: string; status: string }> }
+    ).grants.find((grant) => grant.status === 'active');
     await app!.inject({
       method: 'POST',
       url: `/api/v1/me/oauth/grants/${mine!.id}/revoke`,
@@ -497,9 +513,7 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
     });
     const grant = (
       grants.json() as { grants: Array<{ id: string; status: string; scopes: string[] }> }
-    ).grants.find(
-      (row) => row.status === 'active' && row.scopes.includes('projects:write'),
-    );
+    ).grants.find((row) => row.status === 'active' && row.scopes.includes('projects:write'));
     expect(grant?.id).toBeTruthy();
 
     const created = await app!.inject({
@@ -664,7 +678,9 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
       headers: { cookie, origin: 'http://localhost:3100' },
       payload: { txn, scopes: ['knowledge:read'], allowedWorkspaceIds: [workspaceId] },
     });
-    const code = new URL((consent.json() as { redirectTo: string }).redirectTo).searchParams.get('code')!;
+    const code = new URL((consent.json() as { redirectTo: string }).redirectTo).searchParams.get(
+      'code',
+    )!;
     const token = await app!.inject({
       method: 'POST',
       url: '/oauth/token',
@@ -691,5 +707,145 @@ describe.skipIf(!hasIntegrationEnv)('MCP OAuth resource', () => {
       payload: { jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} },
     });
     expect(closed.statusCode).toBe(401);
+  });
+
+  it('PRO-B-52 discovers upload fields and audits the grant as oauth_grant', async () => {
+    const enabled = await app!.inject({
+      method: 'PUT',
+      url: '/api/v1/admin/oauth-mcp-settings',
+      headers: { cookie, origin: 'http://localhost:3100' },
+      payload: {
+        enabled: true,
+        redirectUris: [REDIRECT],
+        clientIdPrefixes: ['https://chatgpt.com/oauth/'],
+        scopeCeiling: ['projects:read', 'knowledge:read', 'knowledge:write'],
+      },
+    });
+    expect(enabled.statusCode).toBe(200);
+
+    const { verifier, txn } = await authorize('projects:read knowledge:read knowledge:write');
+    const consent = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/oauth/consent',
+      headers: { cookie, origin: 'http://localhost:3100' },
+      payload: {
+        txn,
+        scopes: ['projects:read', 'knowledge:read', 'knowledge:write'],
+        allowedWorkspaceIds: [workspaceId],
+      },
+    });
+    expect(consent.statusCode).toBe(200);
+    const code = new URL((consent.json() as { redirectTo: string }).redirectTo).searchParams.get(
+      'code',
+    )!;
+    const token = await app!.inject({
+      method: 'POST',
+      url: '/oauth/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT,
+        client_id: CLIENT_ID,
+        code_verifier: verifier,
+        resource: 'http://localhost:3100/mcp/oauth',
+      }).toString(),
+    });
+    expect(token.statusCode).toBe(200);
+    const access = (token.json() as { access_token: string }).access_token;
+    const grants = await app!.inject({
+      method: 'GET',
+      url: '/api/v1/oauth/grants',
+      headers: { cookie },
+    });
+    const grant = (
+      grants.json() as { grants: Array<{ id: string; status: string; scopes: string[] }> }
+    ).grants.find((row) => row.status === 'active' && row.scopes.includes('knowledge:write'));
+    expect(grant?.id).toBeTruthy();
+
+    async function hubTool(id: number, toolName: string, args: Record<string, unknown>) {
+      const response = await app!.inject({
+        method: 'POST',
+        url: '/mcp/oauth',
+        headers: {
+          authorization: `Bearer ${access}`,
+          accept: 'application/json, text/event-stream',
+          'content-type': 'application/json',
+        },
+        payload: {
+          jsonrpc: '2.0',
+          id,
+          method: 'tools/call',
+          params: {
+            name: 'call_hub_tool',
+            arguments: { toolName, arguments: args },
+          },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const result = (
+        response.json() as { result?: { isError?: boolean; content?: Array<{ text?: string }> } }
+      ).result;
+      const text = result?.content?.[0]?.text ?? '';
+      return {
+        isError: Boolean(result?.isError),
+        text,
+        data: JSON.parse(text || '{}') as Record<string, unknown>,
+      };
+    }
+
+    const described = await hubTool(1, 'describe_hub_tool', {
+      name: 'begin_record_content_upload',
+    });
+    expect(described.isError, described.text).toBe(false);
+    const beginSchema = described.data as {
+      allowed: string[];
+      required: string[];
+    };
+    expect(beginSchema.allowed).toContain('changeMessage');
+    expect(beginSchema.required).toEqual(['recordId']);
+
+    const created = await hubTool(2, 'create_knowledge_record', {
+      workspaceId,
+      title: 'OAuth draft',
+      recordType: 'note',
+      contentMarkdown: '# Grant\n',
+    });
+    expect(created.isError, created.text).toBe(false);
+    const recordId = (created.data.knowledgeRecord as { id: string }).id;
+
+    const beginArgs: Record<string, unknown> = {};
+    if (beginSchema.required.includes('recordId')) beginArgs.recordId = recordId;
+    if (beginSchema.allowed.includes('changeMessage')) beginArgs.changeMessage = 'from begin';
+    const begun = await hubTool(3, 'begin_record_content_upload', beginArgs);
+    expect(begun.isError, begun.text).toBe(false);
+    const uploadId = begun.data.uploadId as string;
+
+    const appendSchema = await hubTool(4, 'list_hub_tools', { name: 'append_record_content' });
+    expect(appendSchema.isError, appendSchema.text).toBe(false);
+    const appendFields = appendSchema.data as { allowed: string[]; required: string[] };
+    expect(appendFields.allowed).not.toContain('contentMarkdown');
+    const appendArgs: Record<string, unknown> = {};
+    if (appendFields.required.includes('uploadId')) appendArgs.uploadId = uploadId;
+    if (appendFields.required.includes('chunk')) appendArgs.chunk = '# Grant body\n';
+    const appended = await hubTool(5, 'append_record_content', appendArgs);
+    expect(appended.isError, appended.text).toBe(false);
+
+    const finalizeSchema = await hubTool(6, 'describe_hub_tool', {
+      name: 'finalize_record_content_upload',
+    });
+    const finalizeFields = finalizeSchema.data as { required: string[] };
+    expect(finalizeFields.required).not.toContain('changeMessage');
+    const finalizeArgs: Record<string, unknown> = { uploadId };
+    const finalized = await hubTool(7, 'finalize_record_content_upload', finalizeArgs);
+    expect(finalized.isError, finalized.text).toBe(false);
+
+    const audits = await database!.db
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.entityId, recordId));
+    expect(audits.some((event) => event.action === 'knowledge_record.create')).toBe(true);
+    expect(audits.every((event) => event.actorType === 'oauth_grant')).toBe(true);
+    expect(audits.every((event) => event.actorId === grant!.id)).toBe(true);
   });
 });

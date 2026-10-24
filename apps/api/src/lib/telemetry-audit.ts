@@ -23,7 +23,7 @@ export async function resolveWorkspaceOrganizationId(
 export async function auditKnowledgeView(input: {
   database: Database;
   organizationId: string | null;
-  actorType: 'user' | 'api_client';
+  actorType: 'user' | 'api_client' | 'oauth_grant';
   actorId: string;
   recordId: string;
   workspaceId: string;
@@ -54,7 +54,7 @@ export async function auditKnowledgeView(input: {
 export async function auditKnowledgeSearch(input: {
   database: Database;
   organizationId: string | null;
-  actorType: 'user' | 'api_client';
+  actorType: 'user' | 'api_client' | 'oauth_grant';
   actorId: string;
   workspaceId: string;
   query: string;

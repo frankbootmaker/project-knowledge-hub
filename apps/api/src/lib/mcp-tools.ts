@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import {
+  knowledgeRecordVersions,
   knowledgeRecords,
   knowledgeSources,
   memberships,
@@ -17,6 +18,8 @@ import {
 } from '@project-knowledge-hub/database';
 import {
   AppError,
+  assertKnowledgeRecordConcurrency,
+  KNOWLEDGE_RECORD_SLUG_MAX,
   auditModelPriceMetadata,
   modelPriceScopeDenial,
   assertDateRange,
@@ -32,6 +35,7 @@ import {
   effectiveDateRange,
   epicStatusSchema,
   formatHumanKey,
+  isKnowledgeRecordSlug,
   isUuid,
   milestoneStatusSchema,
   aiCostModeSchema,
@@ -71,6 +75,7 @@ import {
   ContentOffsetError,
   contentSha256,
   isTruncatedReadback,
+  MCP_KNOWLEDGE_LIST_LIMIT,
   MCP_MAX_LIST_LIMIT,
   hasMcpScope,
   serializedResponseBytes,
@@ -969,20 +974,14 @@ async function embedMediaIntoRecord(
 
   const updated = alreadyEmbedded
     ? null
-    : await updateKnowledgeRecord(
+    : await applyMcpKnowledgeUpdate(
         app,
-        existing.id,
+        existing,
         {
           contentMarkdown: nextContent,
           changeMessage: `Embed media ${media.id}`,
-          lifecycleStatus: 'draft',
-          sourceOfTruthMode: 'ai_generated_draft',
         },
-        {
-          actorType: 'api_client',
-          actorId: client.id,
-          userId: actingUserId,
-        },
+        { ...mcpAuditActor(client), userId: actingUserId },
         ipAddress,
       );
 
@@ -1003,6 +1002,12 @@ async function embedMediaIntoRecord(
           currentVersionNumber: existing.currentVersionNumber,
           lifecycleStatus: existing.lifecycleStatus,
         },
+    ...(updated?.preservedLiveRecord
+      ? {
+          preservedLiveRecord: updated.preservedLiveRecord,
+          warning: updated.warning,
+        }
+      : {}),
   };
 }
 
@@ -1419,6 +1424,281 @@ function mcpSource(
   };
 }
 
+function mcpAuditActor(client: McpClientContext): {
+  actorType: 'oauth_grant' | 'api_client';
+  actorId: string;
+} {
+  if (client.oauthGrantId) {
+    return { actorType: 'oauth_grant', actorId: client.oauthGrantId };
+  }
+  return { actorType: 'api_client', actorId: client.id };
+}
+
+type McpLiveRecord = typeof knowledgeRecords.$inferSelect;
+
+type McpKnowledgeWrite = {
+  changeMessage: string;
+  title?: string;
+  slug?: string;
+  summary?: string | null;
+  recordType?: string;
+  contentMarkdown?: string;
+  projectId?: string | null;
+  systemId?: string | null;
+  tags?: string[];
+  language?: string | null;
+  translationGroupId?: string | null;
+  archived?: boolean;
+  generatedByModel?: string;
+  sourceTitle?: string;
+  expectSha256?: string;
+  expectedVersion?: number;
+};
+
+const DRAFT_REVISION_WARNING =
+  'The approved record was left live. This update created a new draft revision (ai_generated_draft) linked by supersedesRecordId. The live record lifecycle was not changed.';
+
+function mcpContentChanging(existing: McpLiveRecord, input: McpKnowledgeWrite): boolean {
+  if (input.contentMarkdown !== undefined && input.contentMarkdown !== existing.contentMarkdown) {
+    return true;
+  }
+  if (input.title !== undefined && input.title !== existing.title) return true;
+  if (input.summary !== undefined && input.summary !== existing.summary) return true;
+  if (input.recordType !== undefined && input.recordType !== existing.recordType) return true;
+  if (input.language !== undefined && input.language !== existing.language) return true;
+  return false;
+}
+
+function draftRevisionSlug(base: string, attempt: number): string {
+  const suffix = attempt === 0 ? '-draft' : `-draft-${attempt + 1}`;
+  let stem = base.slice(0, Math.max(1, KNOWLEDGE_RECORD_SLUG_MAX - suffix.length));
+  stem = stem.replace(/-+$/g, '') || 'record';
+  let slug = `${stem}${suffix}`;
+  if (slug.length > KNOWLEDGE_RECORD_SLUG_MAX) {
+    slug = slug.slice(0, KNOWLEDGE_RECORD_SLUG_MAX).replace(/-+$/g, '');
+  }
+  if (!isKnowledgeRecordSlug(slug)) {
+    slug = `record${suffix}`.slice(0, KNOWLEDGE_RECORD_SLUG_MAX);
+  }
+  return slug;
+}
+
+function knowledgeWriteView(
+  record: {
+    id: string;
+    workspaceId: string;
+    title: string;
+    slug: string;
+    recordType: string;
+    lifecycleStatus: string;
+    sourceOfTruthMode: string;
+    archivedAt: string | null;
+    currentVersionNumber: number;
+    projectId: string | null;
+    systemId: string | null;
+  },
+  versioned: boolean,
+) {
+  return {
+    id: record.id,
+    workspaceId: record.workspaceId,
+    title: record.title,
+    slug: record.slug,
+    recordType: record.recordType,
+    lifecycleStatus: record.lifecycleStatus,
+    sourceOfTruthMode: record.sourceOfTruthMode,
+    archivedAt: record.archivedAt,
+    currentVersionNumber: record.currentVersionNumber,
+    projectId: record.projectId,
+    systemId: record.systemId,
+    versioned,
+  };
+}
+
+type McpKnowledgeUpdateResult = {
+  knowledgeRecord: ReturnType<typeof knowledgeWriteView>;
+  preservedLiveRecord?: {
+    id: string;
+    lifecycleStatus: string;
+    currentVersionNumber: number;
+    sourceOfTruthMode: string;
+  };
+  warning?: string;
+};
+
+/**
+ * Content edits of current/verified records fork a draft revision.
+ * Other statuses still update in place and stay draft. Concurrency is checked first.
+ */
+async function applyMcpKnowledgeUpdate(
+  app: FastifyInstance,
+  existing: McpLiveRecord,
+  input: McpKnowledgeWrite,
+  actor: { actorType: 'api_client' | 'oauth_grant'; actorId: string; userId: string },
+  ipAddress?: string | null,
+): Promise<McpKnowledgeUpdateResult> {
+  assertKnowledgeRecordConcurrency({
+    contentSha256: contentSha256(existing.contentMarkdown),
+    currentVersionNumber: existing.currentVersionNumber,
+    expectSha256: input.expectSha256,
+    expectedVersion: input.expectedVersion,
+  });
+
+  const approved =
+    existing.lifecycleStatus === 'current' || existing.lifecycleStatus === 'verified';
+  const contentChange = mcpContentChanging(existing, input);
+  if (approved && contentChange && existing.sourceOfTruthMode !== 'git_managed') {
+    const tagMap =
+      input.tags === undefined
+        ? await getKnowledgeRecordTags(app.database, [existing.id])
+        : undefined;
+    const tags = input.tags ?? (tagMap ? knowledgeRecordTagNames(tagMap, existing.id) : []);
+    const slugs = [
+      ...(input.slug && isKnowledgeRecordSlug(input.slug) ? [input.slug] : []),
+      ...Array.from({ length: 24 }, (_, attempt) => draftRevisionSlug(existing.slug, attempt)),
+    ];
+    let created: Awaited<ReturnType<typeof createKnowledgeRecord>> | undefined;
+    let slugError: unknown;
+    for (const slug of slugs) {
+      try {
+        created = await createKnowledgeRecord(
+          app,
+          {
+            workspaceId: existing.workspaceId,
+            title: input.title ?? existing.title,
+            slug,
+            summary:
+              input.summary === undefined
+                ? (existing.summary ?? undefined)
+                : (input.summary ?? undefined),
+            recordType: recordTypeSchema.parse(input.recordType ?? existing.recordType),
+            lifecycleStatus: 'draft',
+            sourceOfTruthMode: 'ai_generated_draft',
+            contentMarkdown: input.contentMarkdown ?? existing.contentMarkdown,
+            language:
+              input.language === undefined ? (existing.language ?? 'en') : (input.language ?? 'en'),
+            translationGroupId: input.translationGroupId,
+            projectId: input.projectId === undefined ? existing.projectId : input.projectId,
+            systemId: input.systemId === undefined ? existing.systemId : input.systemId,
+            tags,
+            source: mcpSource(
+              { generatedByModel: input.generatedByModel, sourceTitle: input.sourceTitle },
+              'Draft revision via MCP',
+            ),
+          },
+          actor,
+          ipAddress,
+        );
+        break;
+      } catch (error) {
+        if (error instanceof AppError && error.code === 'KNOWLEDGE_RECORD_SLUG_CONFLICT') {
+          slugError = error;
+          continue;
+        }
+        throw error;
+      }
+    }
+    if (!created) {
+      throw (
+        slugError ??
+        new AppError({
+          code: 'KNOWLEDGE_RECORD_SLUG_CONFLICT',
+          message: 'Could not allocate a draft revision slug',
+          statusCode: 409,
+        })
+      );
+    }
+    const draftId = created.knowledgeRecord.id;
+    await app.database.db
+      .update(knowledgeRecordVersions)
+      .set({ changeMessage: input.changeMessage })
+      .where(
+        and(
+          eq(knowledgeRecordVersions.knowledgeRecordId, draftId),
+          eq(knowledgeRecordVersions.versionNumber, 1),
+        ),
+      );
+    await app.database.db
+      .update(knowledgeRecords)
+      .set({ supersedesRecordId: existing.id, updatedAt: new Date() })
+      .where(eq(knowledgeRecords.id, draftId));
+
+    let liveStatus = existing.lifecycleStatus;
+    let liveVersion = existing.currentVersionNumber;
+    let liveMode = existing.sourceOfTruthMode;
+    if (input.archived !== undefined) {
+      const archived = await updateKnowledgeRecord(
+        app,
+        existing.id,
+        { archived: input.archived, changeMessage: input.changeMessage },
+        actor,
+        ipAddress,
+      );
+      liveStatus = archived.knowledgeRecord.lifecycleStatus;
+      liveVersion = archived.knowledgeRecord.currentVersionNumber;
+      liveMode = archived.knowledgeRecord.sourceOfTruthMode;
+    }
+    return {
+      knowledgeRecord: knowledgeWriteView(created.knowledgeRecord, true),
+      preservedLiveRecord: {
+        id: existing.id,
+        lifecycleStatus: liveStatus,
+        currentVersionNumber: liveVersion,
+        sourceOfTruthMode: liveMode,
+      },
+      warning: DRAFT_REVISION_WARNING,
+    };
+  }
+
+  const archiveOnly =
+    input.archived !== undefined &&
+    input.title === undefined &&
+    input.summary === undefined &&
+    input.recordType === undefined &&
+    input.contentMarkdown === undefined &&
+    input.projectId === undefined &&
+    input.systemId === undefined &&
+    input.tags === undefined &&
+    input.language === undefined &&
+    input.translationGroupId === undefined &&
+    input.slug === undefined;
+  const preserveLifecycle = archiveOnly || (approved && !contentChange);
+  const result = await updateKnowledgeRecord(
+    app,
+    existing.id,
+    {
+      title: input.title,
+      slug: input.slug,
+      summary: input.summary,
+      recordType:
+        input.recordType === undefined ? undefined : recordTypeSchema.parse(input.recordType),
+      contentMarkdown: input.contentMarkdown,
+      projectId: input.projectId,
+      systemId: input.systemId,
+      tags: input.tags,
+      language: input.language,
+      translationGroupId: input.translationGroupId,
+      changeMessage: input.changeMessage,
+      archived: input.archived,
+      ...(preserveLifecycle
+        ? {}
+        : {
+            lifecycleStatus: 'draft' as const,
+            sourceOfTruthMode: 'ai_generated_draft' as const,
+          }),
+      source:
+        input.generatedByModel !== undefined || input.sourceTitle !== undefined
+          ? mcpSource(input, 'Updated via MCP')
+          : undefined,
+    },
+    actor,
+    ipAddress,
+  );
+  return {
+    knowledgeRecord: knowledgeWriteView(result.knowledgeRecord, result.shouldVersion),
+  };
+}
+
 function projectListPage<T extends object>(
   rows: T[],
   input: { cursor?: string; limit?: number },
@@ -1743,8 +2023,7 @@ export function createMcpToolHandlers(
       );
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'system.create',
         entityType: 'system',
         entityId: system.id,
@@ -1809,8 +2088,7 @@ export function createMcpToolHandlers(
       }, { createdBy: actingUserId });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'system.update',
         entityType: 'system',
         entityId: system.id,
@@ -1992,8 +2270,7 @@ export function createMcpToolHandlers(
       }
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.baseline_updated',
         entityType: 'project',
         entityId: project.id,
@@ -2007,8 +2284,7 @@ export function createMcpToolHandlers(
       ) {
         await writeAuditEvent(app.database, {
           organizationId: client.organizationId,
-          actorType: 'api_client',
-          actorId: client.id,
+          ...mcpAuditActor(client),
           action: 'project.key_prefix_changed',
           entityType: 'project',
           entityId: project.id,
@@ -2087,8 +2363,7 @@ export function createMcpToolHandlers(
         targetWorkspaceId: targetWorkspace.id,
         dryRun: input.dryRun,
         confirmCrossOrganization: input.confirmCrossOrganization,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         ipAddress: ipAddress ?? null,
         uploadDir: app.env.MEDIA_UPLOAD_DIR,
         blobStore,
@@ -2156,8 +2431,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.initial_stakeholders_set',
         entityType: 'project',
         entityId: project.id,
@@ -2178,7 +2452,7 @@ export function createMcpToolHandlers(
       return { system };
     },
 
-    async listKnowledgeRecords({ workspaceId, projectId, systemId, language, limit }) {
+    async listKnowledgeRecords({ workspaceId, projectId, systemId, language, limit, cursor }) {
       assertWorkspaceAllowed(client, workspaceId);
       if (projectId) {
         assertProjectAllowed(client, projectId);
@@ -2200,7 +2474,7 @@ export function createMcpToolHandlers(
         .select()
         .from(knowledgeRecords)
         .where(and(...conditions))
-        .limit(limit);
+        .orderBy(asc(knowledgeRecords.id));
       const allowed = rows.filter((row) => {
         try {
           assertProjectAllowed(client, row.projectId);
@@ -2209,16 +2483,22 @@ export function createMcpToolHandlers(
           return false;
         }
       });
+      const pageLimit = Math.min(limit ?? MCP_KNOWLEDGE_LIST_LIMIT, MCP_KNOWLEDGE_LIST_LIMIT);
+      const page = pageItems(allowed, cursor, pageLimit, { excerptKeys: [] });
       const keyPrefixMap = await loadProjectKeyPrefixMap(
         app.database,
-        allowed.map((row) => row.projectId),
+        page.items.map((row) => row.projectId),
       );
       const tagMap = await getKnowledgeRecordTags(
         app.database,
-        allowed.map((row) => row.id),
+        page.items.map((row) => row.id),
       );
       return {
-        knowledgeRecords: allowed.map((row) => {
+        total: page.total,
+        limit: page.limit,
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore,
+        knowledgeRecords: page.items.map((row) => {
           const keyPrefix = row.projectId
             ? keyPrefixMap.get(row.projectId) ?? null
             : null;
@@ -2283,8 +2563,7 @@ export function createMcpToolHandlers(
       await auditKnowledgeSearch({
         database: app.database,
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         workspaceId: input.workspaceId,
         query: input.query,
         mode: result.mode,
@@ -2444,8 +2723,7 @@ export function createMcpToolHandlers(
         await auditKnowledgeView({
           database: app.database,
           organizationId: client.organizationId,
-          actorType: 'api_client',
-          actorId: client.id,
+          ...mcpAuditActor(client),
           recordId: record.id,
           workspaceId: record.workspaceId,
           projectId: record.projectId,
@@ -2571,8 +2849,7 @@ export function createMcpToolHandlers(
           contentMarkdown: input.contentMarkdown,
         },
         {
-          actorType: 'api_client',
-          actorId: client.id,
+          ...mcpAuditActor(client),
           userId: actingUserId,
         },
         ipAddress,
@@ -2628,8 +2905,7 @@ export function createMcpToolHandlers(
           source: mcpSource(input),
         },
         {
-          actorType: 'api_client',
-          actorId: client.id,
+          ...mcpAuditActor(client),
           userId: actingUserId,
         },
         ipAddress,
@@ -2670,8 +2946,7 @@ export function createMcpToolHandlers(
           app,
           input,
           {
-            actorType: 'api_client',
-            actorId: client.id,
+            ...mcpAuditActor(client),
             userId: actingUserId,
           },
           ipAddress,
@@ -2738,75 +3013,17 @@ export function createMcpToolHandlers(
         input.projectId === undefined ? existing.projectId : input.projectId;
       assertProjectAllowed(client, nextProjectId);
 
-      const recordType =
-        input.recordType === undefined
-          ? undefined
-          : parseMcpRecordType(input.recordType);
+      if (input.recordType !== undefined) {
+        parseMcpRecordType(input.recordType);
+      }
 
-      const archiveOnly =
-        input.archived !== undefined &&
-        input.title === undefined &&
-        input.summary === undefined &&
-        input.recordType === undefined &&
-        input.contentMarkdown === undefined &&
-        input.projectId === undefined &&
-        input.systemId === undefined &&
-        input.tags === undefined &&
-        input.language === undefined &&
-        input.translationGroupId === undefined &&
-        input.slug === undefined;
-
-      const result = await updateKnowledgeRecord(
+      return applyMcpKnowledgeUpdate(
         app,
-        resolvedId,
-        {
-          title: input.title,
-          slug: input.slug,
-          summary: input.summary,
-          recordType,
-          contentMarkdown: input.contentMarkdown,
-          projectId: input.projectId,
-          systemId: input.systemId,
-          tags: input.tags,
-          language: input.language,
-          translationGroupId: input.translationGroupId,
-          changeMessage: input.changeMessage,
-          archived: input.archived,
-          ...(archiveOnly
-            ? {}
-            : {
-                lifecycleStatus: 'draft' as const,
-                sourceOfTruthMode: 'ai_generated_draft' as const,
-              }),
-          source:
-            input.generatedByModel !== undefined || input.sourceTitle !== undefined
-              ? mcpSource(input, 'Updated via MCP')
-              : undefined,
-        },
-        {
-          actorType: 'api_client',
-          actorId: client.id,
-          userId: actingUserId,
-        },
+        existing,
+        input,
+        { ...mcpAuditActor(client), userId: actingUserId },
         ipAddress,
       );
-
-      return {
-        knowledgeRecord: {
-          id: result.knowledgeRecord.id,
-          workspaceId: result.knowledgeRecord.workspaceId,
-          title: result.knowledgeRecord.title,
-          slug: result.knowledgeRecord.slug,
-          recordType: result.knowledgeRecord.recordType,
-          lifecycleStatus: result.knowledgeRecord.lifecycleStatus,
-          sourceOfTruthMode: result.knowledgeRecord.sourceOfTruthMode,
-          archivedAt: result.knowledgeRecord.archivedAt,
-          currentVersionNumber: result.knowledgeRecord.currentVersionNumber,
-          projectId: result.knowledgeRecord.projectId,
-          systemId: result.knowledgeRecord.systemId,
-          versioned: result.shouldVersion,
-        },
-      };
     },
 
     async beginRecordContentUpload(input) {
@@ -2833,11 +3050,18 @@ export function createMcpToolHandlers(
       assertProjectAllowed(client, record.projectId);
       requireActingUserId(client);
       const hash = contentSha256(record.contentMarkdown);
+      assertKnowledgeRecordConcurrency({
+        contentSha256: hash,
+        currentVersionNumber: record.currentVersionNumber,
+        expectSha256: input.expectSha256,
+        expectedVersion: input.expectedVersion,
+      });
       const started = await beginRecordContentUploadSession(app.redis, {
         clientId: client.id,
         recordId: record.id,
         workspaceId: record.workspaceId,
         contentSha256: hash,
+        changeMessage: input.changeMessage,
       });
       return {
         ...started,
@@ -2905,38 +3129,29 @@ export function createMcpToolHandlers(
       }
       assertProjectAllowed(client, record.projectId);
       assertContentUnchanged(session.contentSha256, contentSha256(record.contentMarkdown));
-      const result = await updateKnowledgeRecord(
+      const changeMessage = input.changeMessage ?? session.changeMessage;
+      if (!changeMessage) {
+        throw new AppError({
+          code: 'VALIDATION_ERROR',
+          message:
+            'Missing required field: changeMessage. Pass changeMessage on begin_record_content_upload or finalize_record_content_upload. Allowed fields: uploadId, changeMessage, expectedLength, expectSha256, expectedVersion. Required fields: uploadId.',
+          statusCode: 400,
+        });
+      }
+      const result = await applyMcpKnowledgeUpdate(
         app,
-        record.id,
+        record,
         {
           contentMarkdown,
-          changeMessage: input.changeMessage,
-          lifecycleStatus: 'draft',
-          sourceOfTruthMode: 'ai_generated_draft',
+          changeMessage,
+          expectSha256: input.expectSha256,
+          expectedVersion: input.expectedVersion,
         },
-        {
-          actorType: 'api_client',
-          actorId: client.id,
-          userId: actingUserId,
-        },
+        { ...mcpAuditActor(client), userId: actingUserId },
         ipAddress,
       );
       await deleteRecordContentUploadSession(app.redis, session.uploadId);
-      return {
-        knowledgeRecord: {
-          id: result.knowledgeRecord.id,
-          workspaceId: result.knowledgeRecord.workspaceId,
-          title: result.knowledgeRecord.title,
-          slug: result.knowledgeRecord.slug,
-          recordType: result.knowledgeRecord.recordType,
-          lifecycleStatus: result.knowledgeRecord.lifecycleStatus,
-          sourceOfTruthMode: result.knowledgeRecord.sourceOfTruthMode,
-          currentVersionNumber: result.knowledgeRecord.currentVersionNumber,
-          projectId: result.knowledgeRecord.projectId,
-          systemId: result.knowledgeRecord.systemId,
-          versioned: result.shouldVersion,
-        },
-      };
+      return result;
     },
 
     async uploadWorkspaceMedia(input) {
@@ -3032,8 +3247,7 @@ export function createMcpToolHandlers(
 
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'media.upload',
         entityType: 'workspace_media',
         entityId: row.id,
@@ -3225,8 +3439,7 @@ export function createMcpToolHandlers(
 
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'media.upload',
         entityType: 'workspace_media',
         entityId: row.id,
@@ -3382,8 +3595,7 @@ export function createMcpToolHandlers(
 
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'media.read',
         entityType: 'workspace_media',
         entityId: row.id,
@@ -3441,8 +3653,7 @@ export function createMcpToolHandlers(
 
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'media.delete',
         entityType: 'workspace_media',
         entityId: archived.id,
@@ -3457,8 +3668,7 @@ export function createMcpToolHandlers(
       const dump = await buildSupportDump(app);
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'platform.status',
         entityType: 'monitoring',
         entityId: 'platform-status',
@@ -3555,8 +3765,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.milestone_created',
         entityType: 'project_milestone',
         entityId: milestone.id,
@@ -3598,8 +3807,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.milestone_updated',
         entityType: 'project_milestone',
         entityId: milestone.id,
@@ -3657,8 +3865,7 @@ export function createMcpToolHandlers(
       const milestone = await getPublicMilestone(app.database, milestoneId);
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.milestone_item_links_set',
         entityType: 'project_milestone',
         entityId: milestone.id,
@@ -3714,8 +3921,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.sprint_created',
         entityType: 'project_sprint',
         entityId: sprint.id,
@@ -3775,8 +3981,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.sprint_updated',
         entityType: 'project_sprint',
         entityId: sprint.id,
@@ -3932,8 +4137,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.item_media_links_set',
         entityType,
         entityId,
@@ -4070,8 +4274,7 @@ export function createMcpToolHandlers(
       }
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.task_created',
         entityType: 'project_task',
         entityId: task.id,
@@ -4163,8 +4366,7 @@ export function createMcpToolHandlers(
       }
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.task_updated',
         entityType: 'project_task',
         entityId: task.id,
@@ -4200,8 +4402,7 @@ export function createMcpToolHandlers(
       await upsertProjectCostSnapshot(app.database, project.id);
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.task_ai_usage_reported',
         entityType: 'project_task',
         entityId: task.id,
@@ -4249,8 +4450,7 @@ export function createMcpToolHandlers(
       const task = await getTask(app.database, taskId);
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.task_raci_set',
         entityType: 'project_task',
         entityId: task.id,
@@ -4308,8 +4508,7 @@ export function createMcpToolHandlers(
         });
         await writeAuditEvent(app.database, {
           organizationId: client.organizationId,
-          actorType: 'api_client',
-          actorId: client.id,
+          ...mcpAuditActor(client),
           action: 'project.delivery_dependency_set',
           entityType: 'project_delivery_dependency',
           entityId: result.dependencies[0]?.id ?? project.id,
@@ -4344,8 +4543,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.delivery_dependency_set',
         entityType: 'project_delivery_dependency',
         entityId: result.dependency.id,
@@ -4381,8 +4579,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.delivery_dependency_removed',
         entityType: 'project_delivery_dependency',
         entityId: result.removedId,
@@ -4430,8 +4627,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.epic_created',
         entityType: 'project_epic',
         entityId: epic.id,
@@ -4466,8 +4662,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.epic_updated',
         entityType: 'project_epic',
         entityId: epic.id,
@@ -4531,8 +4726,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.user_story_created',
         entityType: 'project_user_story',
         entityId: userStory.id,
@@ -4578,8 +4772,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.user_story_updated',
         entityType: 'project_user_story',
         entityId: userStory.id,
@@ -4636,8 +4829,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.task_commented',
         entityType: 'project_task',
         entityId: existing.id,
@@ -4670,8 +4862,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.task_handoff',
         entityType: 'project_task',
         entityId: task.id,
@@ -4765,8 +4956,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.stakeholder_upserted',
         entityType: 'project_stakeholder',
         entityId: stakeholder.rosterId ?? stakeholder.userId,
@@ -4845,8 +5035,7 @@ export function createMcpToolHandlers(
       
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.stakeholder_updated',
         entityType: 'project_stakeholder',
         entityId: rosterId,
@@ -4892,8 +5081,7 @@ export function createMcpToolHandlers(
       
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.stakeholder_assigned',
         entityType: 'project_stakeholder',
         entityId: rosterId,
@@ -4938,8 +5126,7 @@ export function createMcpToolHandlers(
       
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.stakeholder_unassigned',
         entityType: 'project_stakeholder',
         entityId: rosterId,
@@ -5021,8 +5208,7 @@ export function createMcpToolHandlers(
       await upsertProjectCostSnapshot(app.database, project.id);
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'system.ai_cost_updated',
         entityType: 'system',
         entityId: input.systemId,
@@ -5113,8 +5299,7 @@ export function createMcpToolHandlers(
       );
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'ai_model_price.saved',
         entityType: 'ai_model_price',
         entityId: price.id,
@@ -5151,8 +5336,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'ai_model_price.retired',
         entityType: 'ai_model_price',
         entityId: price.id,
@@ -5192,8 +5376,7 @@ export function createMcpToolHandlers(
       }
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'ai_billing_entry.created',
         entityType: 'ai_billing_entry',
         entityId: entry.id,
@@ -5227,8 +5410,7 @@ export function createMcpToolHandlers(
       }
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'ai_billing_entry.updated',
         entityType: 'ai_billing_entry',
         entityId: entry.id,
@@ -5262,8 +5444,7 @@ export function createMcpToolHandlers(
       }
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'ai_billing_entry.deleted',
         entityType: 'ai_billing_entry',
         entityId: input.entryId,
@@ -5309,8 +5490,7 @@ export function createMcpToolHandlers(
       }
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'ai_usage_import.created',
         entityType: 'ai_usage_import',
         entityId: result.usageImport.id,
@@ -5355,8 +5535,7 @@ export function createMcpToolHandlers(
       
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.stakeholder_deleted',
         entityType: 'project_stakeholder',
         entityId: rosterId,
@@ -5453,8 +5632,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.raid_item_created',
         entityType: 'project_raid_item',
         entityId: raidItem.id,
@@ -5513,8 +5691,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.raid_item_updated',
         entityType: 'project_raid_item',
         entityId: raidItem.id,
@@ -5549,8 +5726,7 @@ export function createMcpToolHandlers(
       );
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action:
           input.targetKind === 'issue'
             ? 'raid.transferred_to_issue'
@@ -5601,8 +5777,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.raid_task_links_set',
         entityType: 'project_raid_item',
         entityId: raidItem.id,
@@ -5648,8 +5823,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.raid_record_links_set',
         entityType: 'project_raid_item',
         entityId: raidItem.id,
@@ -5720,8 +5894,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'knowledge.raid_links_set',
         entityType: 'knowledge_record',
         entityId: recordId,
@@ -5863,8 +6036,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.change_item_created',
         entityType: 'project_change_item',
         entityId: changeItem.id,
@@ -5974,8 +6146,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'project.change_item_updated',
         entityType: 'project_change_item',
         entityId: changeItem.id,
@@ -5986,8 +6157,7 @@ export function createMcpToolHandlers(
         && changeItem.status === 'approved'
         && changeHasScheduleChange(changeItem)
         ? await applyChangeToBaseline(app.database, changeId, {
-            actorType: 'api_client',
-            actorId: client.id,
+            ...mcpAuditActor(client),
             actingUserId,
             organizationId: client.organizationId,
             ipAddress: ipAddress ?? null,
@@ -6012,8 +6182,7 @@ export function createMcpToolHandlers(
         forWrite: true,
       });
       const result = await applyChangeToBaseline(app.database, changeId, {
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         actingUserId,
         organizationId: client.organizationId,
         ipAddress: ipAddress ?? null,
@@ -6064,8 +6233,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'knowledge.delivery_links_set',
         entityType: 'knowledge_record',
         entityId: recordId,
@@ -6141,8 +6309,7 @@ export function createMcpToolHandlers(
       });
       await writeAuditEvent(app.database, {
         organizationId: client.organizationId,
-        actorType: 'api_client',
-        actorId: client.id,
+        ...mcpAuditActor(client),
         action: 'knowledge.record_relations_set',
         entityType: 'knowledge_record',
         entityId: recordId,

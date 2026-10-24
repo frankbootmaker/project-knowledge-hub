@@ -33,7 +33,11 @@ export type KnowledgeRecordRelationCard = {
 };
 
 export type KnowledgeRecordRelationEdge = {
+  /** Display label. Inbound directed edges use the inverse name. */
   relationType: string;
+  /** Stored type, the same value set_knowledge_record_relations accepts. */
+  canonicalType: KnowledgeRecordRelationType;
+  direction: 'outbound' | 'inbound';
   record: KnowledgeRecordRelationCard;
 };
 
@@ -49,6 +53,7 @@ export type KnowledgeRecordRelationsView = {
 export type CompactRecordRelationItem = {
   direction: 'outbound' | 'inbound';
   relationType: string;
+  canonicalType: KnowledgeRecordRelationType;
   record: {
     id: string;
     humanKey: string | null;
@@ -293,10 +298,17 @@ function viewFromEdges(
     const record = cardFor(other, prefix);
     const direction = relationListDirection(anchorId, edge);
     if (direction === 'outbound') {
-      outbound.push({ relationType: edge.relationType, record });
+      outbound.push({
+        relationType: edge.relationType,
+        canonicalType: edge.relationType,
+        direction: 'outbound',
+        record,
+      });
     } else if (direction === 'inbound') {
       inbound.push({
         relationType: inverseKnowledgeRecordRelation(edge.relationType),
+        canonicalType: edge.relationType,
+        direction: 'inbound',
         record,
       });
     }
@@ -305,7 +317,7 @@ function viewFromEdges(
     left: KnowledgeRecordRelationEdge,
     right: KnowledgeRecordRelationEdge,
   ) => {
-    const typeDelta = typeRank(left.relationType) - typeRank(right.relationType);
+    const typeDelta = typeRank(left.canonicalType) - typeRank(right.canonicalType);
     if (typeDelta !== 0) return typeDelta;
     const key = (left.record.humanKey ?? left.record.title).localeCompare(
       right.record.humanKey ?? right.record.title,
@@ -329,6 +341,7 @@ export function toCompactRecordRelations(
     ...view.relations.outbound.map((edge) => ({
       direction: 'outbound' as const,
       relationType: edge.relationType,
+      canonicalType: edge.canonicalType,
       record: {
         id: edge.record.id,
         humanKey: edge.record.humanKey,
@@ -341,6 +354,7 @@ export function toCompactRecordRelations(
     ...view.relations.inbound.map((edge) => ({
       direction: 'inbound' as const,
       relationType: edge.relationType,
+      canonicalType: edge.canonicalType,
       record: {
         id: edge.record.id,
         humanKey: edge.record.humanKey,

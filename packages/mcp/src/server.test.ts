@@ -693,6 +693,8 @@ const OUTPUT_SAMPLES: Record<string, unknown> = {
       outbound: [
         {
           relationType: 'depends_on',
+          canonicalType: 'depends_on',
+          direction: 'outbound',
           record: {
             id: '22222222-2222-4222-8222-222222222222',
             humanKey: 'REL-ARCH-1',
@@ -1134,14 +1136,14 @@ describe('strict tool arguments', () => {
     ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
       statusCode: 400,
-      message: 'Unknown field: notAField',
+      message: expect.stringContaining('Unknown field: notAField'),
     });
     await expect(
       invokeNamedHubTool({ listProjectTasks }, ['pm:read'], 'list_project_tasks', {
         projectId: PROJECT_ID,
         nope: 1,
       }),
-    ).rejects.toMatchObject({ message: 'Unknown field: nope' });
+    ).rejects.toMatchObject({ message: expect.stringContaining('Unknown field: nope') });
     expect(updateProjectTask).not.toHaveBeenCalled();
     expect(listProjectTasks).not.toHaveBeenCalled();
   });
@@ -1170,7 +1172,7 @@ describe('strict tool arguments', () => {
         links: [{ kind: 'media', mediaId: PROJECT_ID, nope: 1 }],
       }),
     ).rejects.toMatchObject({
-      message: 'Unknown field: links[0].nope',
+      message: expect.stringContaining('Unknown field: links[0].nope'),
     });
     expect(setDeliveryMediaLinks).not.toHaveBeenCalled();
   });
@@ -1566,8 +1568,12 @@ describe('delivery dependency required arguments', () => {
       });
       expect(list.isError).toBe(true);
       expect(set.isError).toBe(true);
-        expect(toolText(list)).toBe('Missing required field: projectId');
-        expect(toolText(set)).toBe('Missing required field: projectId');
+      expect(toolText(list)).toContain('Missing required field: projectId');
+      expect(toolText(list)).toContain('Allowed fields:');
+      expect(toolText(list)).toContain('Required fields:');
+      expect(toolText(set)).toContain('Missing required field: projectId');
+      expect(toolText(set)).toContain('Allowed fields:');
+      expect(toolText(set)).toContain('Required fields:');
       expect(toolText(list)).not.toContain('Internal error');
       expect(toolText(set)).not.toContain('Internal error');
       expect(listDeliveryDependencies).not.toHaveBeenCalled();

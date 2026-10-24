@@ -40,6 +40,13 @@ export const KNOWLEDGE_RECORD_RELATION_INVERSE = {
 export type KnowledgeRecordRelationInverse =
   (typeof KNOWLEDGE_RECORD_RELATION_INVERSE)[KnowledgeRecordRelationType];
 
+/**
+ * Read-model names for inbound edges. Inverse names cannot be written.
+ * Shared by MCP tool descriptions on both the Bearer and OAuth catalogs.
+ */
+export const KNOWLEDGE_RECORD_RELATION_INVERSE_GUIDE =
+  'Canonical stored types are relates_to, depends_on, refines, derived_from, and contradicts. Inbound edges use inverse names that cannot be written: depends_on is required_by, refines is refined_by, and derived_from is source_for. relates_to and contradicts are symmetric and use the same name in both directions. Each edge includes canonicalType (the stored type) and direction (outbound or inbound).';
+
 export const MAX_KNOWLEDGE_RECORD_RELATIONS = 200;
 
 /** Compact `recordRelations.items` cap on get_knowledge_record. */
