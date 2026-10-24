@@ -1160,6 +1160,7 @@
     "relatedRecordsType": "Beziehungsart",
     "relatedRecordsSearch": "Einträge suchen",
     "relatedRecordsRemove": "Entfernen",
+    "relatedEntriesToggle": "Verwandte Einträge ({count})",
     "relationTypes": {
       "relates_to": "Bezieht sich auf",
       "depends_on": "Hängt ab von",
@@ -1174,7 +1175,7 @@
     "verifying": "Wird genehmigt…",
     "markCurrentAction": "Als aktuell markieren",
     "updating": "Wird aktualisiert…",
-    "contents": "Inhalt",
+    "contents": "Inhaltsverzeichnis",
     "tocExpand": "Inhalt anzeigen",
     "tocCollapse": "Inhalt ausblenden",
     "openWideViewer": "Breite Ansicht öffnen",

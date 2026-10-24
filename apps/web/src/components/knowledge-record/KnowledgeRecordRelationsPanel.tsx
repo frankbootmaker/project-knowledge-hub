@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { cn } from '../../lib/cn';
 import { LinkedKnowledgeRecord } from '../LinkedKnowledgeRecord';
 import {
   Badge,
@@ -84,18 +85,32 @@ function isRelationType(value: string): value is RelationType {
   return (RELATION_TYPES as readonly string[]).includes(value);
 }
 
+export function countRelatedEntries(
+  payload: KnowledgeRecordRelationsPayload | null,
+): number {
+  if (!payload) {
+    return 0;
+  }
+  return (
+    payload.relations.outbound.length + payload.relations.inbound.length
+  );
+}
+
 export function KnowledgeRecordRelationsPanel({
   recordId,
   projectId,
   canEdit,
   initial,
   catalogue,
+  embedded = false,
 }: {
   recordId: string;
   projectId: string | null;
   canEdit: boolean;
   initial: KnowledgeRecordRelationsPayload | null;
   catalogue: CatalogueRecord[];
+  /** Collapsible document toolbar: compact list without section title. */
+  embedded?: boolean;
 }) {
   const t = useTranslations('records');
   const tCommon = useTranslations('common');
@@ -194,14 +209,40 @@ export function KnowledgeRecordRelationsPanel({
 
   const empty = groups.length === 0;
 
+  const sectionClassName = embedded
+    ? 'kh-ops-related-records is-compact'
+    : 'kh-ops-related-records';
+
   return (
-    <section className="kh-ops-related-records" aria-labelledby="related-records-heading">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="related-records-heading">{t('relatedRecords')}</h2>
-        {canEdit ? (
+    <section
+      className={sectionClassName}
+      aria-labelledby={embedded ? undefined : 'related-records-heading'}
+    >
+      {!embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="related-records-heading">{t('relatedRecords')}</h2>
+          {canEdit ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={saving}
+              onClick={() => {
+                setQuery('');
+                setTargetId('');
+                setRelationType('relates_to');
+                setPickerOpen(true);
+              }}
+            >
+              {t('relatedRecordsAdd')}
+            </Button>
+          ) : null}
+        </div>
+      ) : canEdit ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             type="button"
             variant="secondary"
+            className="text-sm"
             disabled={saving}
             onClick={() => {
               setQuery('');
@@ -212,14 +253,19 @@ export function KnowledgeRecordRelationsPanel({
           >
             {t('relatedRecordsAdd')}
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       {!view ? (
         <p className="m-0 text-sm text-ink-muted">{t('relatedRecordsFailedLoad')}</p>
       ) : empty ? (
         <p className="m-0 text-sm text-ink-muted">{t('relatedRecordsEmpty')}</p>
       ) : (
-        <div className="grid gap-4">
+        <div
+          className={cn(
+            'grid gap-4',
+            embedded ? 'kh-ops-related-records-scroll' : undefined,
+          )}
+        >
           {groups.map((group) => (
             <div key={group.family} className="grid gap-2">
               <h3 className="text-ink">
@@ -227,11 +273,12 @@ export function KnowledgeRecordRelationsPanel({
               </h3>
               {group.outbound.length > 0 ? (
                 <RelationSubsection
-                  label={t('relatedRecordsOutbound')}
+                  label={embedded ? undefined : t('relatedRecordsOutbound')}
                   edges={group.outbound}
                   relationLabel={relationLabel}
                   canRemove={canEdit}
                   saving={saving}
+                  compact={embedded}
                   onRemove={(edge) => {
                     void save(
                       owned
@@ -252,12 +299,13 @@ export function KnowledgeRecordRelationsPanel({
               ) : null}
               {group.inbound.length > 0 ? (
                 <RelationSubsection
-                  label={t('relatedRecordsInbound')}
-                  hint={t('relatedRecordsInboundHint')}
+                  label={embedded ? undefined : t('relatedRecordsInbound')}
+                  hint={embedded ? undefined : t('relatedRecordsInboundHint')}
                   edges={group.inbound}
                   relationLabel={relationLabel}
                   canRemove={false}
                   saving={saving}
+                  compact={embedded}
                   onRemove={() => undefined}
                 />
               ) : null}
@@ -353,23 +401,27 @@ function RelationSubsection({
   relationLabel,
   canRemove,
   saving,
+  compact,
   onRemove,
 }: {
-  label: string;
+  label?: string;
   hint?: string;
   edges: Array<{ relationType: string; record: RelationRecordCard }>;
   relationLabel: (type: string) => string;
   canRemove: boolean;
   saving: boolean;
+  compact?: boolean;
   onRemove: (edge: { relationType: string; record: RelationRecordCard }) => void;
 }) {
   const t = useTranslations('records');
   return (
     <div className="grid gap-1">
-      <p className="m-0 text-xs text-ink-muted">
-        {label}
-        {hint ? ` — ${hint}` : ''}
-      </p>
+      {label ? (
+        <p className="m-0 text-xs text-ink-muted">
+          {label}
+          {hint ? ` — ${hint}` : ''}
+        </p>
+      ) : null}
       <ul className="m-0 list-none p-0">
         {edges.map((edge) => (
           <li
@@ -380,11 +432,15 @@ function RelationSubsection({
               <span className="kh-ops-key-badge">{edge.record.humanKey}</span>
             ) : null}
             <LinkedKnowledgeRecord slug={edge.record.slug} title={edge.record.title} />
-            <Badge tone="neutral">{relationLabel(edge.relationType)}</Badge>
-            <Badge tone={lifecycleTone(edge.record.lifecycleStatus)}>
-              {lifecycleLabel(edge.record.lifecycleStatus, t)}
-            </Badge>
-            {edge.record.archivedAt ? (
+            {!compact ? (
+              <Badge tone="neutral">{relationLabel(edge.relationType)}</Badge>
+            ) : null}
+            {!compact ? (
+              <Badge tone={lifecycleTone(edge.record.lifecycleStatus)}>
+                {lifecycleLabel(edge.record.lifecycleStatus, t)}
+              </Badge>
+            ) : null}
+            {!compact && edge.record.archivedAt ? (
               <Badge tone="warn">{t('lifecycleLabels.archived')}</Badge>
             ) : null}
             {canRemove ? (

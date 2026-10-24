@@ -1161,6 +1161,7 @@
     "relatedRecordsType": "Relation type",
     "relatedRecordsSearch": "Search records",
     "relatedRecordsRemove": "Remove",
+    "relatedEntriesToggle": "Related entries ({count})",
     "relationTypes": {
       "relates_to": "Relates to",
       "depends_on": "Depends on",

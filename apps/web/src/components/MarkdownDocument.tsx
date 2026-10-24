@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { useTranslations } from 'next-intl';
 import { cn } from '../lib/cn';
 import { Button, Modal } from './ui';
@@ -163,15 +170,24 @@ export function MarkdownView({ html, className }: { html: string; className?: st
   return <MarkdownBody html={html} className={className} />;
 }
 
+export type MarkdownDocumentRelatedEntries = {
+  count: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  panel: ReactNode;
+};
+
 export function MarkdownDocument({
   html,
   toc,
   title,
+  relatedEntries,
 }: {
   html: string;
   toc: TocItem[];
   /** Optional title shown in the wide document viewer. */
   title?: string;
+  relatedEntries?: MarkdownDocumentRelatedEntries;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const t = useTranslations('records');
@@ -239,9 +255,11 @@ export function MarkdownDocument({
             variant="secondary"
             className="text-sm"
             aria-expanded={tocOpen}
+            aria-label={t('tocLabel')}
+            title={t('tocLabel')}
             onClick={() => setTocOpen((open) => !open)}
           >
-            {tocOpen ? t('tocCollapse') : t('tocExpand')}
+            {tocOpen ? t('tocCollapse') : t('contents')}
           </Button>
         ) : null}
         <Button
@@ -252,7 +270,22 @@ export function MarkdownDocument({
         >
           {t('openWideViewer')}
         </Button>
+        {relatedEntries && relatedEntries.count > 0 ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="text-sm"
+            aria-expanded={relatedEntries.open}
+            onClick={() =>
+              relatedEntries.onOpenChange(!relatedEntries.open)
+            }
+          >
+            {t('relatedEntriesToggle', { count: relatedEntries.count })}
+          </Button>
+        ) : null}
       </div>
+
+      {relatedEntries?.open ? relatedEntries.panel : null}
 
       <div
         className={cn(

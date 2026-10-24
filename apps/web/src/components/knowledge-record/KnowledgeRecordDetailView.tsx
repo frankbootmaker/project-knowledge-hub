@@ -8,16 +8,13 @@ import {
   type KnowledgeRecordLinkedItemsPayload,
 } from '../KnowledgeRecordLinkedItems';
 import { KnowledgeRecordMoreDetails } from '../KnowledgeRecordMoreDetails';
-import { MarkdownDocument } from '../MarkdownDocument';
+import { KnowledgeRecordDetailMarkdown } from './KnowledgeRecordDetailMarkdown';
 import { PanelBackLink } from '../PanelBackLink';
 import { RecordLifecycleActions } from '../RecordLifecycleActions';
 import { RecordTranslationSwitcher } from '../RecordTranslationSwitcher';
 import { RegisterShellCrumbs } from '../ops/ShellCrumbContext';
 import { Badge, LinkButton, Page, PageHeader, lifecycleLabel, lifecycleTone } from '../ui';
-import {
-  KnowledgeRecordRelationsPanel,
-  type KnowledgeRecordRelationsPayload,
-} from './KnowledgeRecordRelationsPanel';
+import type { KnowledgeRecordRelationsPayload } from './KnowledgeRecordRelationsPanel';
 import { recordHref } from '../../lib/record-href';
 import {
   canMutateWorkspace,
@@ -358,17 +355,15 @@ export async function KnowledgeRecordDetailView({
               />
             </div>
           </div>
-          <KnowledgeRecordRelationsPanel
-            recordId={record.id}
-            projectId={record.projectId}
-            canEdit={canMutate && !isArchived}
-            initial={relations}
-            catalogue={listPayload.knowledgeRecords}
-          />
-          <MarkdownDocument
+          <KnowledgeRecordDetailMarkdown
             html={record.contentHtml ?? ''}
             toc={record.toc ?? []}
             title={record.title}
+            recordId={record.id}
+            projectId={record.projectId}
+            canEditRelations={canMutate && !isArchived}
+            relations={relations}
+            catalogue={listPayload.knowledgeRecords}
           />
         </article>
         <PanelBackLink href={knowledgeListHref} divided={false} className="px-0">
