@@ -123,10 +123,10 @@ describe('KnowledgeRecordDetailMarkdown', () => {
         toc={[]}
         title="Doc"
         recordId="rec"
+        workspaceId="ws"
         projectId={null}
         canEditRelations={false}
         relations={relations}
-        catalogue={[]}
       />,
     );
 
@@ -148,10 +148,10 @@ describe('KnowledgeRecordDetailMarkdown', () => {
         toc={[]}
         title="Doc"
         recordId="rec"
+        workspaceId="ws"
         projectId={null}
         canEditRelations={true}
         relations={relations}
-        catalogue={[]}
       />,
     );
     expect(container.textContent).not.toContain('Add relation');
@@ -165,10 +165,10 @@ describe('KnowledgeRecordDetailMarkdown', () => {
         toc={[]}
         title="Doc"
         recordId="rec"
+        workspaceId="ws"
         projectId={null}
         canEditRelations={true}
         relations={relations}
-        catalogue={[]}
       />,
     );
 
@@ -195,10 +195,10 @@ describe('KnowledgeRecordDetailMarkdown', () => {
         toc={[]}
         title="Doc"
         recordId="rec"
+        workspaceId="ws"
         projectId={null}
         canEditRelations={false}
         relations={relations}
-        catalogue={[]}
       />,
     );
 

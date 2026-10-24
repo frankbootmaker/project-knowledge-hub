@@ -1161,6 +1161,9 @@
     "relatedRecordsFailedSave": "A kapcsolatokat nem sikerült menteni",
     "relatedRecordsType": "Kapcsolat típusa",
     "relatedRecordsSearch": "Bejegyzések keresése",
+    "relatedRecordsPickerEmpty": "Nincs kapcsolható bejegyzés.",
+    "relatedRecordsPickerNone": "Nincs a keresésnek megfelelő bejegyzés.",
+    "relatedRecordsPickerFailed": "A bejegyzéseket nem sikerült betölteni.",
     "relatedRecordsRemove": "Eltávolítás",
     "relatedEntriesToggle": "Kapcsolódó bejegyzések ({count})",
     "relationTypes": {
