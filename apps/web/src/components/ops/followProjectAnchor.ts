@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 import { planProjectAnchorClick, scrollToProjectAnchor } from '../../lib/project-sections';
+import { planWorkspaceAnchorClick } from '../../lib/workspace-sections';
 import { useProjectRail } from './ProjectRailContext';
 
 /**
@@ -16,11 +17,13 @@ export function useFollowProjectAnchor() {
 
   return useCallback(
     (href: string, event?: { preventDefault(): void }) => {
-      const plan = planProjectAnchorClick({
+      const location = {
         href,
         pathname: window.location.pathname,
         search: window.location.search,
-      });
+      };
+      const plan =
+        planProjectAnchorClick(location) ?? planWorkspaceAnchorClick(location);
       if (!plan) {
         return false;
       }
