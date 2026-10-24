@@ -3,7 +3,6 @@ import type { Database } from '@project-knowledge-hub/database';
 import {
   projectMilestones,
   projectTasks,
-  projects,
 } from '@project-knowledge-hub/database';
 import {
   emptyProjectHealth,
@@ -37,7 +36,7 @@ export type ProjectHealthSnapshot = {
  * Schedule rows are two indexed reads (`project_id`, plus `archived_at`
  * filtered on that index). The fixed cost is the workspace paid-AI context
  * inside the budget signals, not the milestone or task scan. That context
- * and these snapshots are reused for a short time per workspace and day so
+ * and these snapshots are reused for a short time per project and day so
  * the project list, the project page, and budget-summary do not rebuild them.
  */
 const HEALTH_TTL_MS = 20_000;
@@ -58,25 +57,12 @@ function snapshotCache(database: Database): Map<string, CachedSnapshot> {
   return cache;
 }
 
-function healthCacheKey(workspaceId: string, today: string, projectId: string): string {
-  return `${workspaceId}:${today}:${projectId}`;
+function healthCacheKey(today: string, projectId: string): string {
+  return `${today}:${projectId}`;
 }
 
-async function loadProjectWorkspaces(
-  database: Database,
-  projectIds: string[],
-): Promise<Map<string, string>> {
-  const rows = await database.db
-    .select({
-      id: projects.id,
-      workspaceId: projects.workspaceId,
-    })
-    .from(projects)
-    .where(inArray(projects.id, projectIds));
-  return new Map(rows.map((row) => [row.id, row.workspaceId]));
-}
-
-async function computeProjectHealthSnapshots(
+/** @internal Equivalence tests compare one batch vs per-workspace slices. */
+export async function computeProjectHealthSnapshots(
   database: Database,
   projectIds: string[],
   today: string,
@@ -171,26 +157,22 @@ export async function listProjectHealthSnapshots(
   const now = Date.now();
   const ttl = liveReadTtl(HEALTH_TTL_MS);
   const cache = snapshotCache(database);
-  const workspaceOf = await loadProjectWorkspaces(database, ids);
-  const missingByWorkspace = new Map<string, string[]>();
+  const missing: string[] = [];
 
   for (const projectId of ids) {
-    const workspaceId = workspaceOf.get(projectId) ?? '_';
-    const hit = cache.get(healthCacheKey(workspaceId, today, projectId));
+    const hit = cache.get(healthCacheKey(today, projectId));
     if (hit && hit.expiresAt > now) {
       result.set(projectId, hit.snapshot);
       continue;
     }
-    const missing = missingByWorkspace.get(workspaceId) ?? [];
     missing.push(projectId);
-    missingByWorkspace.set(workspaceId, missing);
   }
 
-  await Promise.all([...missingByWorkspace].map(async ([workspaceId, missing]) => {
+  if (missing.length > 0) {
     const sorted = [...missing].sort();
     const computed = await coalesceRead(
       database,
-      `health-batch:${workspaceId}:${today}:${sorted.join(',')}`,
+      `health-batch:${today}:${sorted.join(',')}`,
       ttl,
       () => computeProjectHealthSnapshots(database, sorted, today),
     );
@@ -199,14 +181,14 @@ export async function listProjectHealthSnapshots(
       const snapshot = computed.get(projectId);
       if (!snapshot) continue;
       if (ttl > 0) {
-        cache.set(healthCacheKey(workspaceId, today, projectId), {
+        cache.set(healthCacheKey(today, projectId), {
           expiresAt,
           snapshot,
         });
       }
       result.set(projectId, snapshot);
     }
-  }));
+  }
 
   return result;
 }

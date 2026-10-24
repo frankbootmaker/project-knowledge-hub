@@ -7,7 +7,10 @@ vi.mock('./project-budget-signals.js', () => ({
 
 import type { ProjectBudgetSignal } from './project-budget.js';
 import { listProjectBudgetSignals } from './project-budget-signals.js';
-import { listProjectHealth } from './project-overall-rag.js';
+import {
+  computeProjectHealthSnapshots,
+  listProjectHealth,
+} from './project-overall-rag.js';
 
 const TODAY = '2026-10-17';
 
@@ -32,16 +35,6 @@ function testDatabase(input: { milestones: MilestoneRow[]; tasks: TaskRow[] }) {
         from() {
           return {
             where: async () => {
-              if (keys.includes('workspaceId')) {
-                selects.push('workspaces');
-                const ids = new Set([
-                  ...input.milestones.map((row) => row.projectId),
-                  ...input.tasks.map((row) => row.projectId),
-                  'p-1',
-                  'p-2',
-                ]);
-                return [...ids].map((id) => ({ id, workspaceId: 'ws-1' }));
-              }
               if (keys.includes('targetDate')) {
                 selects.push('milestones');
                 return input.milestones;
@@ -90,7 +83,7 @@ describe('listProjectHealth', () => {
 
     const health = await listProjectHealth(database, ['p-1', 'p-2'], TODAY);
 
-    expect(selects).toEqual(['workspaces', 'milestones', 'tasks']);
+    expect(selects).toEqual(['milestones', 'tasks']);
     expect(listProjectBudgetSignals).toHaveBeenCalledTimes(1);
     expect(listProjectBudgetSignals).toHaveBeenCalledWith(
       database,
@@ -151,5 +144,47 @@ describe('listProjectHealth', () => {
     expect(health.size).toBe(0);
     expect(selects).toEqual([]);
     expect(listProjectBudgetSignals).not.toHaveBeenCalled();
+  });
+
+  it('matches per-workspace compute slices when projects span workspaces', async () => {
+    const input = {
+      milestones: [
+        { projectId: 'p-ws1', status: 'planned', targetDate: '2026-10-20' },
+        { projectId: 'p-ws2', status: 'planned', targetDate: '2026-12-01' },
+      ],
+      tasks: [
+        { projectId: 'p-ws1', status: 'todo', dueDate: '2026-10-22' },
+        { projectId: 'p-ws2', status: 'done', dueDate: '2026-10-01' },
+      ],
+    };
+    const { database } = testDatabase(input);
+    const allIds = ['p-ws1', 'p-ws2'];
+
+    const batched = await computeProjectHealthSnapshots(database, allIds, TODAY);
+    const ws1Only = await computeProjectHealthSnapshots(database, ['p-ws1'], TODAY);
+    const ws2Only = await computeProjectHealthSnapshots(database, ['p-ws2'], TODAY);
+
+    expect(batched.get('p-ws1')).toEqual(ws1Only.get('p-ws1'));
+    expect(batched.get('p-ws2')).toEqual(ws2Only.get('p-ws2'));
+  });
+
+  it('batches budget signals once for projects across workspaces', async () => {
+    const { database, selects } = testDatabase({
+      milestones: [],
+      tasks: [
+        { projectId: 'p-ws1', status: 'todo', dueDate: '2026-12-01' },
+        { projectId: 'p-ws2', status: 'todo', dueDate: '2026-12-01' },
+      ],
+    });
+
+    await listProjectHealth(database, ['p-ws1', 'p-ws2'], TODAY);
+
+    expect(selects).toEqual(['milestones', 'tasks']);
+    expect(listProjectBudgetSignals).toHaveBeenCalledTimes(1);
+    expect(listProjectBudgetSignals).toHaveBeenCalledWith(
+      database,
+      ['p-ws1', 'p-ws2'],
+      TODAY,
+    );
   });
 });
