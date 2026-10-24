@@ -417,6 +417,64 @@ describe.skipIf(!hasIntegrationEnv)('Knowledge records', () => {
     ).toBe(true);
   });
 
+  it('pages and searches the catalogue without returning every record', async () => {
+    const headers = { cookie: adminCookie, origin: 'http://localhost:3100' };
+    const marker = `picker-${randomUUID().slice(0, 8)}`;
+    const created = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/knowledge-records',
+      headers,
+      payload: {
+        workspaceId,
+        title: `${marker} alpha`,
+        recordType: 'note',
+        contentMarkdown: '# Alpha',
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const createdId = (created.json() as { knowledgeRecord: { id: string } }).knowledgeRecord.id;
+    const other = await app!.inject({
+      method: 'POST',
+      url: '/api/v1/knowledge-records',
+      headers,
+      payload: {
+        workspaceId,
+        title: `${marker} beta`,
+        recordType: 'overview',
+        contentMarkdown: '# Beta',
+      },
+    });
+    expect(other.statusCode).toBe(200);
+
+    const page = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/knowledge-records?workspaceId=${workspaceId}&q=${encodeURIComponent(marker)}&limit=1&offset=0&recordType=note&workspaceLevel=true`,
+      headers: { cookie: adminCookie },
+    });
+    expect(page.statusCode).toBe(200);
+    const body = page.json() as {
+      total: number;
+      knowledgeRecords: Array<{ id: string; title: string; contentMarkdown?: string }>;
+    };
+    expect(body.total).toBe(1);
+    expect(body.knowledgeRecords).toHaveLength(1);
+    expect(body.knowledgeRecords[0]?.id).toBe(createdId);
+    expect(body.knowledgeRecords[0]?.contentMarkdown).toBeUndefined();
+
+    const excluded = await app!.inject({
+      method: 'GET',
+      url: `/api/v1/knowledge-records?workspaceId=${workspaceId}&q=${encodeURIComponent(marker)}&limit=5&excludeIds=${createdId}`,
+      headers: { cookie: adminCookie },
+    });
+    expect(excluded.statusCode).toBe(200);
+    const excludedBody = excluded.json() as {
+      total: number;
+      knowledgeRecords: Array<{ id: string }>;
+    };
+    expect(excludedBody.total).toBe(1);
+    expect(excludedBody.knowledgeRecords.map((row) => row.id)).not.toContain(createdId);
+  });
+
   it('blocks reader mutations and allows reader views', async () => {
     const readerCreate = await app.inject({
       method: 'POST',

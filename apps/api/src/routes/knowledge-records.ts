@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { and, eq, isNull, ne } from 'drizzle-orm';
+import { and, asc, count, eq, isNull, ne, notInArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   knowledgeRecords,
+  projects,
   users,
   workspaces,
 } from '@project-knowledge-hub/database';
@@ -53,6 +54,10 @@ import {
   resolveWorkspaceOrganizationId,
 } from '../lib/telemetry-audit.js';
 import { formatSseEvent } from '../lib/sse.js';
+import {
+  knowledgeRecordListQuerySchema,
+  knowledgeRecordSearchPattern,
+} from '../lib/knowledge-record-list-query.js';
 
 const recordRefSchema = z.string().min(1).max(80);
 
@@ -78,23 +83,7 @@ const exportFormatSchema = z.enum(['pdf', 'docx', 'md', 'xlsx']);
 export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/knowledge-records', async (request) => {
     const principal = requireAuthenticated(request);
-    const query = z
-      .object({
-        workspaceId: z.string().uuid(),
-        projectId: z.string().uuid().optional(),
-        systemId: z.string().uuid().optional(),
-        language: z.string().min(2).max(16).optional(),
-        slug: z.string().min(1).max(200).optional(),
-        includeArchived: z
-          .enum(['true', 'false'])
-          .optional()
-          .transform((value) => value === 'true'),
-        includeRecordRelations: z
-          .enum(['true', 'false'])
-          .optional()
-          .transform((value) => value === 'true'),
-      })
-      .parse(request.query);
+    const query = knowledgeRecordListQuerySchema.parse(request.query);
 
     requireWorkspaceView(principal, query.workspaceId);
 
@@ -105,6 +94,8 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
     }
     if (query.projectId) {
       conditions.push(eq(knowledgeRecords.projectId, query.projectId));
+    } else if (query.workspaceLevel) {
+      conditions.push(isNull(knowledgeRecords.projectId));
     }
     if (query.systemId) {
       conditions.push(eq(knowledgeRecords.systemId, query.systemId));
@@ -115,11 +106,57 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
     if (query.slug) {
       conditions.push(eq(knowledgeRecords.slug, query.slug));
     }
+    if (query.recordType) {
+      conditions.push(eq(knowledgeRecords.recordType, query.recordType));
+    }
+    if (query.excludeIds.length > 0) {
+      conditions.push(notInArray(knowledgeRecords.id, query.excludeIds));
+    }
+    if (query.q) {
+      const pattern = knowledgeRecordSearchPattern(query.q);
+      const search = or(
+        sql`${knowledgeRecords.title} ILIKE ${pattern} ESCAPE '\\'`,
+        sql`${knowledgeRecords.slug} ILIKE ${pattern} ESCAPE '\\'`,
+        sql`exists (
+          select 1 from ${projects}
+          where ${projects.id} = ${knowledgeRecords.projectId}
+            and (
+              upper(coalesce(${projects.keyPrefix}, '')) || '-' ||
+              upper(coalesce(${knowledgeRecords.documentKeyType}, '')) || '-' ||
+              coalesce(${knowledgeRecords.documentNumber}::text, '')
+            ) ILIKE ${pattern} ESCAPE '\\'
+        )`,
+      );
+      if (search) {
+        conditions.push(search);
+      }
+    }
 
-    const rows = await app.database.db
-      .select(knowledgeRecordListSelect)
-      .from(knowledgeRecords)
-      .where(and(...conditions));
+    const where = and(...conditions);
+    let rows;
+    let total: number | undefined;
+    if (query.limit !== undefined) {
+      const [page, counted] = await Promise.all([
+        app.database.db
+          .select(knowledgeRecordListSelect)
+          .from(knowledgeRecords)
+          .where(where)
+          .orderBy(asc(knowledgeRecords.title), asc(knowledgeRecords.id))
+          .limit(query.limit)
+          .offset(query.offset ?? 0),
+        app.database.db
+          .select({ value: count() })
+          .from(knowledgeRecords)
+          .where(where),
+      ]);
+      rows = page;
+      total = Number(counted[0]?.value ?? 0);
+    } else {
+      rows = await app.database.db
+        .select(knowledgeRecordListSelect)
+        .from(knowledgeRecords)
+        .where(where);
+    }
 
     const recordIds = rows.map((row) => row.id);
     const [tagMap, keyPrefixMap] = await Promise.all([
@@ -151,6 +188,7 @@ export async function registerKnowledgeRecordRoutes(app: FastifyInstance): Promi
           ? { recordRelations: relationMap.get(row.id) }
           : {}),
       })),
+      ...(total !== undefined ? { total } : {}),
     };
   });
 

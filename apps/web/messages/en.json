@@ -1161,6 +1161,9 @@
     "relatedRecordsFailedSave": "Could not save related records",
     "relatedRecordsType": "Relation type",
     "relatedRecordsSearch": "Search records",
+    "relatedRecordsPickerEmpty": "No records to link.",
+    "relatedRecordsPickerNone": "No records match this search.",
+    "relatedRecordsPickerFailed": "Could not load records.",
     "relatedRecordsRemove": "Remove",
     "relatedEntriesToggle": "Related entries ({count})",
     "relationTypes": {

@@ -1160,6 +1160,9 @@
     "relatedRecordsFailedSave": "Beziehungen konnten nicht gespeichert werden",
     "relatedRecordsType": "Beziehungsart",
     "relatedRecordsSearch": "Einträge suchen",
+    "relatedRecordsPickerEmpty": "Keine Einträge zum Verknüpfen.",
+    "relatedRecordsPickerNone": "Keine Einträge entsprechen dieser Suche.",
+    "relatedRecordsPickerFailed": "Einträge konnten nicht geladen werden.",
     "relatedRecordsRemove": "Entfernen",
     "relatedEntriesToggle": "Verwandte Einträge ({count})",
     "relationTypes": {
