@@ -2,13 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
+import { RECORD_TYPES } from '@project-knowledge-hub/domain';
 import { cn } from '../../lib/cn';
 import { LinkedKnowledgeRecord } from '../LinkedKnowledgeRecord';
+import {
+  RecordLinkPickerList,
+  type RecordLinkPickerQuery,
+} from '../RecordLinkPickerList';
 import {
   Badge,
   Button,
   Field,
-  Input,
   Modal,
   Select,
   lifecycleLabel,
@@ -64,17 +68,6 @@ export type KnowledgeRecordRelationsPayload = {
   lifecyclePredecessor: RelationRecordCard | null;
 };
 
-type CatalogueRecord = {
-  id: string;
-  title: string;
-  slug: string;
-  humanKey?: string | null;
-  recordType: string;
-  lifecycleStatus: string;
-  projectId: string | null;
-  archivedAt: string | null;
-};
-
 type OwnedLink = {
   targetRecordId: string;
   relationType: RelationType;
@@ -98,18 +91,18 @@ export function countRelatedEntries(
 
 export function KnowledgeRecordRelationsPanel({
   recordId,
+  workspaceId,
   projectId,
   canEdit,
   initial,
-  catalogue,
   embedded = false,
   supplyAddButton,
 }: {
   recordId: string;
+  workspaceId: string;
   projectId: string | null;
   canEdit: boolean;
   initial: KnowledgeRecordRelationsPayload | null;
-  catalogue: CatalogueRecord[];
   /** Collapsible document toolbar: compact list without section title. */
   embedded?: boolean;
   /** When embedded, renders the add-relation control in the document toolbar. */
@@ -120,13 +113,11 @@ export function KnowledgeRecordRelationsPanel({
   const { pushToast } = useToast();
   const [view, setView] = useState(initial);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [query, setQuery] = useState('');
   const [relationType, setRelationType] = useState<RelationType>('relates_to');
   const [targetId, setTargetId] = useState('');
   const [saving, setSaving] = useState(false);
 
   const openPicker = useCallback(() => {
-    setQuery('');
     setTargetId('');
     setRelationType('relates_to');
     setPickerOpen(true);
@@ -176,29 +167,64 @@ export function KnowledgeRecordRelationsPanel({
     });
   }, [view]);
 
-  const candidates = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return catalogue.filter((row) => {
-      if (row.id === recordId || row.archivedAt) return false;
-      if (projectId) {
-        if (row.projectId !== projectId) return false;
-      } else if (row.projectId) {
-        return false;
+  const excludeIds = useMemo(() => {
+    const ids = new Set<string>([recordId]);
+    for (const link of owned) {
+      if (link.relationType === relationType) {
+        ids.add(link.targetRecordId);
       }
-      if (
-        owned.some(
-          (link) =>
-            link.targetRecordId === row.id && link.relationType === relationType,
-        )
-      ) {
-        return false;
-      }
-      if (!needle) return true;
-      return `${row.humanKey ?? ''} ${row.title} ${row.recordType}`
-        .toLowerCase()
-        .includes(needle);
+    }
+    return [...ids];
+  }, [owned, recordId, relationType]);
+
+  const loadCandidates = useCallback(async (input: RecordLinkPickerQuery) => {
+    const params = new URLSearchParams({
+      workspaceId,
+      limit: String(input.limit),
+      offset: String(input.offset),
     });
-  }, [catalogue, owned, projectId, query, recordId, relationType]);
+    if (projectId) {
+      params.set('projectId', projectId);
+    } else {
+      params.set('workspaceLevel', 'true');
+    }
+    if (input.q) {
+      params.set('q', input.q);
+    }
+    if (input.recordType !== 'all') {
+      params.set('recordType', input.recordType);
+    }
+    if (excludeIds.length > 0) {
+      params.set('excludeIds', excludeIds.join(','));
+    }
+    const response = await fetch(`/api/v1/knowledge-records?${params.toString()}`, {
+      credentials: 'include',
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      knowledgeRecords?: Array<{
+        id: string;
+        title: string;
+        humanKey?: string | null;
+        recordType?: string | null;
+      }>;
+      total?: number;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      throw new Error(payload.error?.message || t('relatedRecordsPickerFailed'));
+    }
+    const items = (payload.knowledgeRecords ?? []).map((row) => ({
+      id: row.id,
+      title: row.title,
+      humanKey: row.humanKey ?? null,
+      recordType: row.recordType ?? null,
+    }));
+    return {
+      items,
+      total: payload.total ?? items.length,
+      emptyKind: input.q || input.recordType !== 'all' ? 'none' as const : 'empty' as const,
+    };
+  }, [excludeIds, projectId, t, workspaceId]);
 
   async function save(links: Array<{ targetRecordId: string; relationType: RelationType }>) {
     setSaving(true);
@@ -332,15 +358,14 @@ export function KnowledgeRecordRelationsPanel({
               type="button"
               disabled={!targetId || saving}
               onClick={() => {
-                const target = catalogue.find((row) => row.id === targetId);
-                if (!target) return;
+                if (!targetId) return;
                 setPickerOpen(false);
                 void save([
                   ...owned.map((link) => ({
                     targetRecordId: link.targetRecordId,
                     relationType: link.relationType,
                   })),
-                  { targetRecordId: target.id, relationType },
+                  { targetRecordId: targetId, relationType },
                 ]);
               }}
             >
@@ -365,33 +390,22 @@ export function KnowledgeRecordRelationsPanel({
               ))}
             </Select>
           </Field>
-          <Field label={t('relatedRecordsSearch')}>
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t('relatedRecordsSearch')}
-            />
-          </Field>
-          <ul className="m-0 grid max-h-80 list-none gap-1 overflow-auto p-0">
-            {candidates.slice(0, 50).map((row) => (
-              <li key={row.id}>
-                <label className="kh-ops-linked-row kh-ops-linked-row-start">
-                  <input
-                    type="radio"
-                    name="relation-target"
-                    checked={targetId === row.id}
-                    onChange={() => setTargetId(row.id)}
-                  />
-                  <span>
-                    {row.humanKey ? (
-                      <span className="kh-ops-key-badge mr-2">{row.humanKey}</span>
-                    ) : null}
-                    {row.title}
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
+          <RecordLinkPickerList
+            active={pickerOpen}
+            load={loadCandidates}
+            requestKey={`${relationType}:${excludeIds.join(',')}`}
+            typeOptions={[...RECORD_TYPES]}
+            selectedIds={targetId ? [targetId] : []}
+            onToggle={(id) => setTargetId(id)}
+            selection="single"
+            radioName="relation-target"
+            keyStyle="badge"
+            debounceMs={200}
+            placeholder={t('relatedRecordsSearch')}
+            emptyLabel={t('relatedRecordsPickerEmpty')}
+            noneLabel={t('relatedRecordsPickerNone')}
+            failedLabel={t('relatedRecordsPickerFailed')}
+          />
         </div>
       </Modal>
     </section>

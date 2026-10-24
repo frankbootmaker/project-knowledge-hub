@@ -350,10 +350,10 @@ export async function KnowledgeRecordDetailView({
             toc={record.toc ?? []}
             title={record.title}
             recordId={record.id}
+            workspaceId={workspace.id}
             projectId={record.projectId}
             canEditRelations={canMutate && !isArchived}
             relations={relations}
-            catalogue={listPayload.knowledgeRecords}
           />
         </article>
         <PanelBackLink href={knowledgeListHref} divided={false} className="px-0">

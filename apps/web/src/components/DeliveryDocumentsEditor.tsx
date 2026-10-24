@@ -1,9 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { LinkedKnowledgeRecord } from './LinkedKnowledgeRecord';
-import { Button, Input, Modal, Select } from './ui';
+import {
+  RecordLinkPickerList,
+  type RecordLinkPickerQuery,
+} from './RecordLinkPickerList';
+import { Button, Modal } from './ui';
 
 export type DeliveryDocumentRecord = {
   id: string;
@@ -12,13 +16,6 @@ export type DeliveryDocumentRecord = {
   humanKey?: string | null;
   recordType?: string | null;
 };
-
-const PAGE_SIZES = [5, 10, 25, 50] as const;
-type PageSize = (typeof PAGE_SIZES)[number];
-
-function isPageSize(value: number): value is PageSize {
-  return (PAGE_SIZES as readonly number[]).includes(value);
-}
 
 export async function saveDeliveryDocumentLinks(input: {
   projectId: string;
@@ -71,12 +68,8 @@ export function DeliveryDocumentsEditor({
   const tRecords = useTranslations('records');
   const tCommon = useTranslations('common');
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState('all');
   const [addIds, setAddIds] = useState<string[]>([]);
   const [removeIds, setRemoveIds] = useState<string[]>([]);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSize>(5);
 
   function recordTypeLabel(recordType: string): string {
     const key = `typeLabels.${recordType}` as 'typeLabels.note';
@@ -87,10 +80,7 @@ export function DeliveryDocumentsEditor({
     setPickerOpen(open);
     onPickerOpenChange?.(open);
     if (open) {
-      setQuery('');
-      setTypeFilter('all');
       setAddIds([]);
-      setPage(1);
     }
   }
 
@@ -104,18 +94,29 @@ export function DeliveryDocumentsEditor({
   const documentTypes = [...new Set(
     records.map((row) => row.recordType).filter((type): type is string => Boolean(type)),
   )].sort((left, right) => recordTypeLabel(left).localeCompare(recordTypeLabel(right)));
-  const needle = query.trim().toLowerCase();
-  const available = records.filter((row) => {
-    if (linkedIds.includes(row.id)) return false;
-    if (typeFilter !== 'all' && row.recordType !== typeFilter) return false;
-    if (!needle) return true;
-    const typeLabel = row.recordType ? recordTypeLabel(row.recordType) : '';
-    return `${row.humanKey ?? ''} ${row.title} ${typeLabel}`.toLowerCase().includes(needle);
-  });
-  const totalPages = Math.max(1, Math.ceil(available.length / pageSize) || 1);
-  const currentPage = Math.min(Math.max(1, page), totalPages);
-  const pageStart = (currentPage - 1) * pageSize;
-  const pageItems = available.slice(pageStart, pageStart + pageSize);
+  const loadAvailable = useCallback(async (input: RecordLinkPickerQuery) => {
+    const needle = input.q.trim().toLowerCase();
+    const available = records.filter((row) => {
+      if (linkedIds.includes(row.id)) return false;
+      if (input.recordType !== 'all' && row.recordType !== input.recordType) return false;
+      if (!needle) return true;
+      const typeKey = row.recordType
+        ? `typeLabels.${row.recordType}` as 'typeLabels.note'
+        : null;
+      const typeLabel = typeKey && tRecords.has(typeKey) ? tRecords(typeKey) : (row.recordType ?? '');
+      return `${row.humanKey ?? ''} ${row.title} ${typeLabel}`.toLowerCase().includes(needle);
+    });
+    const emptyKind = needle || input.recordType !== 'all'
+      ? 'none' as const
+      : records.length === 0
+        ? 'empty' as const
+        : 'allLinked' as const;
+    return {
+      items: available.slice(input.offset, input.offset + input.limit),
+      total: available.length,
+      emptyKind,
+    };
+  }, [linkedIds, records, tRecords]);
   const editable = canEdit && !disabled;
 
   return (
@@ -202,123 +203,18 @@ export function DeliveryDocumentsEditor({
           </>
         }
       >
-        <div className="grid gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setPage(1);
-              }}
-              placeholder={t('documentSearch')}
-              data-modal-initial-focus
-              className="min-w-[12rem] flex-1"
-            />
-            <Select
-              value={typeFilter}
-              onChange={(event) => {
-                setTypeFilter(event.target.value);
-                setPage(1);
-              }}
-              aria-label={t('itemsTypeFilter')}
-              className="h-10 min-h-10 w-auto min-w-[9rem] py-1.5 text-xs"
-            >
-              <option value="all">{t('itemsTypeAll')}</option>
-              {documentTypes.map((type) => (
-                <option key={type} value={type}>
-                  {recordTypeLabel(type)}
-                </option>
-              ))}
-            </Select>
-          </div>
-          {available.length === 0 ? (
-            <p className="m-0 text-sm text-ink-muted">
-              {t(
-                needle || typeFilter !== 'all'
-                  ? 'documentsNoneToAdd'
-                  : records.length === 0
-                    ? 'documentsEmpty'
-                    : 'documentsAllLinked',
-              )}
-            </p>
-          ) : (
-            <>
-              <ul className="m-0 grid list-none gap-2 p-0">
-                {pageItems.map((row) => (
-                  <li key={row.id}>
-                    <label className="flex items-start gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="mt-0.5"
-                        checked={addIds.includes(row.id)}
-                        onChange={() => {
-                          setAddIds((prev) => (
-                            prev.includes(row.id)
-                              ? prev.filter((id) => id !== row.id)
-                              : [...prev, row.id]
-                          ));
-                        }}
-                      />
-                      <span>
-                        {row.humanKey ? (
-                          <span className="text-ink-muted">{row.humanKey} · </span>
-                        ) : null}
-                        {row.title}
-                        {row.recordType ? (
-                          <span className="text-ink-muted"> · {recordTypeLabel(row.recordType)}</span>
-                        ) : null}
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
-                <p className="m-0 text-xs text-ink-muted">
-                  {t('documentsShowing', {
-                    from: available.length === 0 ? 0 : pageStart + 1,
-                    to: Math.min(pageStart + pageSize, available.length),
-                    total: available.length,
-                  })}
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Select
-                    value={String(pageSize)}
-                    onChange={(event) => {
-                      const parsed = Number(event.target.value);
-                      setPageSize(isPageSize(parsed) ? parsed : 5);
-                      setPage(1);
-                    }}
-                    aria-label={t('documentsPageSize')}
-                    className="h-10 min-h-10 w-auto min-w-[9rem] py-1.5 text-xs"
-                  >
-                    {PAGE_SIZES.map((size) => (
-                      <option key={size} value={String(size)}>
-                        {t('documentsPageSizeOption', { count: size })}
-                      </option>
-                    ))}
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={currentPage <= 1}
-                    onClick={() => setPage(Math.max(1, currentPage - 1))}
-                  >
-                    {t('documentsPrevPage')}
-                  </Button>
-                  <span className="text-xs text-ink-muted">{currentPage} / {totalPages}</span>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
-                  >
-                    {t('documentsNextPage')}
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+        <RecordLinkPickerList
+          active={pickerOpen}
+          load={loadAvailable}
+          requestKey={records.map((row) => row.id).join(',') + '|' + linkedIds.join(',')}
+          typeOptions={documentTypes}
+          selectedIds={addIds}
+          onToggle={(id) => {
+            setAddIds((prev) => (
+              prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+            ));
+          }}
+        />
       </Modal>
     </>
   );
