@@ -4,6 +4,12 @@ import {
   projectAnchorFromHash,
   type ProjectSectionDef,
 } from './project-sections';
+import {
+  WORKSPACE_KNOWLEDGE_ANCHOR,
+  WORKSPACE_SYSTEMS_ANCHOR,
+  navItemIdForWorkspaceAnchor,
+  workspaceAnchorFromHash,
+} from './workspace-sections';
 
 export const NAV_SECTION_IDS = [
   'personal',
@@ -85,6 +91,7 @@ export type NavItemId =
   | 'org'
   | 'baseline'
   | 'knowledge'
+  | 'workspace-systems'
   | 'project-knowledge'
   | 'media'
   | 'archive'
@@ -125,11 +132,11 @@ export type NavSectionDef = {
   items: NavItemDef[];
 };
 
-function workspaceHref(ctx: NavContext, suffix = ''): string {
+function workspaceHref(ctx: NavContext, suffix = '', hash = ''): string {
   if (!ctx.workspaceSlug) {
     return '/workspaces';
   }
-  return `/workspaces/${ctx.workspaceSlug}${suffix}`;
+  return `/workspaces/${ctx.workspaceSlug}${suffix}${hash}`;
 }
 
 function projectHref(ctx: NavContext, hash = '', search = ''): string {
@@ -244,7 +251,14 @@ export const NAV_SECTIONS: NavSectionDef[] = [
         icon: 'knowledgeItem',
         labelKey: 'knowledgeLibrary',
         requires: 'workspace',
-        href: (ctx) => workspaceHref(ctx),
+        href: (ctx) => workspaceHref(ctx, '', `#${WORKSPACE_KNOWLEDGE_ANCHOR}`),
+      },
+      {
+        id: 'workspace-systems',
+        icon: 'systems',
+        labelKey: 'workspaceSystems',
+        requires: 'workspace',
+        href: (ctx) => workspaceHref(ctx, '', `#${WORKSPACE_SYSTEMS_ANCHOR}`),
       },
       {
         id: 'media',
@@ -577,7 +591,18 @@ export function matchNavItem(
     return pathname === '/search' || pathname.startsWith('/search/');
   }
   if (item.id === 'knowledge') {
-    return Boolean(ctx.workspaceSlug) && pathname === `/workspaces/${ctx.workspaceSlug}`;
+    if (!ctx.workspaceSlug || pathname !== `/workspaces/${ctx.workspaceSlug}`) {
+      return false;
+    }
+    const fragment = hashId(hash);
+    return fragment === '' || fragment === WORKSPACE_KNOWLEDGE_ANCHOR;
+  }
+  if (item.id === 'workspace-systems') {
+    return (
+      Boolean(ctx.workspaceSlug) &&
+      pathname === `/workspaces/${ctx.workspaceSlug}` &&
+      hashId(hash) === WORKSPACE_SYSTEMS_ANCHOR
+    );
   }
   if (item.id === 'archive') {
     return pathname === '/archived' || pathname.includes('/archived');
@@ -668,6 +693,10 @@ function hrefParts(href: string): {
  */
 export function navItemIdForActiveAnchor(activeAnchor: string, search: string): string | null {
   const params = readSearchParams(search);
+  const workspaceItem = navItemIdForWorkspaceAnchor(activeAnchor);
+  if (workspaceItem) {
+    return workspaceItem;
+  }
   if (activeAnchor === PROJECT_TOP_ANCHOR || activeAnchor === 'project-overview') {
     return 'overview';
   }
@@ -749,8 +778,11 @@ export function resolveActiveNavItem(
   if (isProjectRecordPath(pathname)) {
     return navItemById('project-knowledge', ctx);
   }
+  const normalizedHash = hash.startsWith('#') ? hash : hash ? `#${hash}` : '';
   const anchor =
-    activeAnchor || projectAnchorFromHash(hash.startsWith('#') ? hash : hash ? `#${hash}` : '');
+    activeAnchor ||
+    projectAnchorFromHash(normalizedHash) ||
+    workspaceAnchorFromHash(normalizedHash);
   if (anchor) {
     const id = navItemIdForActiveAnchor(anchor, search);
     if (!id) {
