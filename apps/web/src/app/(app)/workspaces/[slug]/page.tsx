@@ -1,72 +1,15 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { WorkspaceCatalogueSections } from '../../../../components/WorkspaceCatalogueSections';
-import { WorkspaceManageMenu } from '../../../../components/WorkspaceManageMenu';
-import { WorkspaceStatusBadge } from '../../../../components/WorkspaceStatusBadge';
+import { WorkspaceHomeActions } from '../../../../components/WorkspaceHomeActions';
 import { OpsCountStrip } from '../../../../components/ops/OpsCountStrip';
 import { Page, PageHeader } from '../../../../components/ui';
-import { apiFetch, requireSession } from '../../../../lib/session';
+import { fetchWorkspaceList, requireSession } from '../../../../lib/session';
+import { loadWorkspaceHome } from '../../../../lib/workspace-home';
 import { workspaceAccentClassName } from '../../../../lib/workspace-colors';
-import { resolveWorkspaceStatus } from '../../../../lib/workspace-status';
 import { cn } from '../../../../lib/cn';
 
 export const dynamic = 'force-dynamic';
-
-type WorkspacePerson = {
-  id: string;
-  displayName: string;
-  email: string;
-};
-
-type Workspace = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  color: string | null;
-  createdAt: string;
-  updatedAt: string;
-  archivedAt?: string | null;
-  owners?: WorkspacePerson[];
-};
-
-type Project = {
-  id: string;
-  name: string;
-  slug: string;
-  status: string;
-  summary: string | null;
-  createdVia?: string | null;
-  generatedByModel?: string | null;
-  tags: Array<{ name: string }>;
-  updatedAt: string;
-  overallRag?: 'green' | 'amber' | 'red';
-};
-
-type System = {
-  id: string;
-  name: string;
-  slug: string;
-  status: string;
-  projectId: string | null;
-  summary: string | null;
-  tags: Array<{ name: string }>;
-  updatedAt: string;
-};
-
-type KnowledgeRecord = {
-  id: string;
-  title: string;
-  slug: string;
-  recordType: string;
-  humanKey?: string | null;
-  lifecycleStatus: string;
-  language?: string | null;
-  translationGroupId?: string | null;
-  summary: string | null;
-  systemId: string | null;
-  updatedAt: string;
-};
 
 export default async function WorkspaceDetailPage({
   params,
@@ -75,66 +18,21 @@ export default async function WorkspaceDetailPage({
 }) {
   const session = await requireSession();
   const t = await getTranslations('workspaces');
-  const tGit = await getTranslations('gitSync');
   const { slug } = await params;
 
-  const listResponse = await apiFetch('/api/v1/workspaces');
-  if (!listResponse.ok) {
-    notFound();
-  }
-
-  const listPayload = (await listResponse.json()) as { workspaces: Workspace[] };
-  const summary = listPayload.workspaces.find((workspace) => workspace.slug === slug);
+  const workspaces = await fetchWorkspaceList();
+  const summary = workspaces.find((workspace) => workspace.slug === slug);
   if (!summary) {
     notFound();
   }
 
-  const detailResponse = await apiFetch(`/api/v1/workspaces/${summary.id}`);
-  if (!detailResponse.ok) {
+  const home = await loadWorkspaceHome(summary.id);
+  const workspace = home.workspace;
+  if (!workspace) {
     notFound();
   }
-
-  const detailPayload = (await detailResponse.json()) as { workspace: Workspace };
-  const workspace = detailPayload.workspace;
   const owners = workspace.owners ?? [];
-
-  const [projectsResponse, systemsResponse, recordsResponse, gitResponse] =
-    await Promise.all([
-      apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`),
-      apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`),
-      apiFetch(`/api/v1/knowledge-records?workspaceId=${workspace.id}`),
-      apiFetch(`/api/v1/workspaces/${workspace.id}/git-connections?checkRemote=true`),
-    ]);
-
-  const projects = projectsResponse.ok
-    ? ((await projectsResponse.json()) as { projects: Project[] }).projects
-    : [];
-  const systems = systemsResponse.ok
-    ? ((await systemsResponse.json()) as { systems: System[] }).systems
-    : [];
-  const records = recordsResponse.ok
-    ? ((await recordsResponse.json()) as { knowledgeRecords: KnowledgeRecord[] })
-        .knowledgeRecords
-    : [];
-  const gitConnections = gitResponse.ok
-    ? (
-        (await gitResponse.json()) as {
-          connections: Array<{ syncHealth?: { status: string } | null }>;
-        }
-      ).connections
-    : [];
-  const workspaceStatus = resolveWorkspaceStatus({
-    archived: Boolean(workspace.archivedAt),
-    workspaceSlug: workspace.slug,
-    gitHealthStatuses: gitConnections.map(
-      (connection) => connection.syncHealth?.status,
-    ),
-  });
-  const gitHealthLabel = workspaceStatus.gitHealth
-    ? tGit(`health_${workspaceStatus.gitHealth}`)
-    : workspaceStatus.kind === 'healthy' && gitConnections.length > 0
-      ? tGit('health_healthy')
-      : null;
+  const { projects, systems, records, gitConnections } = home;
 
   const canMutate =
     session.user.isSystemAdmin ||
@@ -158,34 +56,31 @@ export default async function WorkspaceDetailPage({
         title={workspace.name}
         description={workspace.description?.trim() || undefined}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <WorkspaceStatusBadge status={workspaceStatus} />
-            <WorkspaceManageMenu
-              workspaceId={workspace.id}
-              workspaceSlug={workspace.slug}
-              workspaceName={workspace.name}
-              archived={Boolean(workspace.archivedAt)}
-              color={workspace.color}
-              canManageArchive={canManageWorkspace}
-              canManageColor={canManageWorkspace}
-              canEditDetails={canManageWorkspace}
-              gitHealthLabel={gitHealthLabel}
-              details={{
-                id: workspace.id,
-                slug: workspace.slug,
-                description: workspace.description,
-                createdAt: workspace.createdAt,
-                updatedAt: workspace.updatedAt,
-                archived: Boolean(workspace.archivedAt),
-                ownerNames: owners.map((owner) => owner.displayName),
-                projectCount: projects.length,
-                systemCount: systems.length,
-                recordCount: records.length,
-                gitConnectionCount: gitConnections.length,
-                memberAdminCount: owners.length,
-              }}
-            />
-          </div>
+          <WorkspaceHomeActions
+            workspaceId={workspace.id}
+            workspaceSlug={workspace.slug}
+            workspaceName={workspace.name}
+            archived={Boolean(workspace.archivedAt)}
+            color={workspace.color}
+            canManageWorkspace={canManageWorkspace}
+            initialGitStatuses={gitConnections.map(
+              (connection) => connection.syncHealth?.status,
+            )}
+            details={{
+              id: workspace.id,
+              slug: workspace.slug,
+              description: workspace.description,
+              createdAt: workspace.createdAt,
+              updatedAt: workspace.updatedAt,
+              archived: Boolean(workspace.archivedAt),
+              ownerNames: owners.map((owner) => owner.displayName),
+              projectCount: projects.length,
+              systemCount: systems.length,
+              recordCount: records.length,
+              gitConnectionCount: gitConnections.length,
+              memberAdminCount: owners.length,
+            }}
+          />
         }
       />
       <OpsCountStrip

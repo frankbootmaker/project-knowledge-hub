@@ -406,6 +406,9 @@ export const systems = pgTable(
   (table) => [
     uniqueIndex('systems_workspace_slug_uidx').on(table.workspaceId, table.slug),
     index('systems_workspace_id_idx').on(table.workspaceId),
+    index('systems_workspace_live_idx')
+      .on(table.workspaceId)
+      .where(sql`${table.archivedAt} IS NULL AND ${table.status} <> 'archived'`),
     index('systems_project_id_idx').on(table.projectId),
     index('systems_created_by_idx').on(table.createdBy),
   ],
@@ -859,6 +862,11 @@ export const knowledgeRecords = pgTable(
         sql`${table.projectId} IS NOT NULL AND ${table.documentKeyType} IS NOT NULL AND ${table.documentNumber} IS NOT NULL`,
       ),
     index('knowledge_records_workspace_id_idx').on(table.workspaceId),
+    index('knowledge_records_workspace_live_idx')
+      .on(table.workspaceId)
+      .where(
+        sql`${table.archivedAt} IS NULL AND ${table.lifecycleStatus} <> 'archived'`,
+      ),
     index('knowledge_records_project_id_idx').on(table.projectId),
     index('knowledge_records_system_id_idx').on(table.systemId),
     index('knowledge_records_lifecycle_status_idx').on(table.lifecycleStatus),

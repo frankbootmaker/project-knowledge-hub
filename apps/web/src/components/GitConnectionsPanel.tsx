@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { TableFilterControl, type TableFilterField } from './ui/TableFilterControl';
@@ -229,9 +229,30 @@ export function GitConnectionsPanel(props: {
   const [manageProjectId, setManageProjectId] = useState('');
   const [manageError, setManageError] = useState<string | null>(null);
 
+  const sawLiveRemote = useRef(false);
+
   useEffect(() => {
-    setConnections(props.initialConnections);
+    if (!sawLiveRemote.current) setConnections(props.initialConnections);
   }, [props.initialConnections]);
+
+  useEffect(() => {
+    sawLiveRemote.current = false;
+    let cancelled = false;
+    void fetch(`/api/v1/workspaces/${props.workspaceId}/git-connections?checkRemote=true`, {
+      credentials: 'include',
+    })
+      .then(async (response) => {
+        if (!response.ok || cancelled) return;
+        const payload = (await response.json()) as { connections: Connection[] };
+        if (cancelled) return;
+        sawLiveRemote.current = true;
+        setConnections(payload.connections);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [props.workspaceId]);
 
   useEffect(() => {
     if (addOpen) {

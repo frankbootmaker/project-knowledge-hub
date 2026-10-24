@@ -1787,7 +1787,14 @@ a.kh-ops-health-card:hover {
 
 .kh-ops-related-records.is-compact {
   gap: 8px;
-  padding: 0 20px 12px;
+  padding: 9px 11px;
+  border-bottom: none;
+}
+
+.kh-ops-related-records-shell {
+  margin: 9px 9px 12px;
+  border: 1px solid var(--kh-line);
+  background: var(--kh-bg);
 }
 
 .kh-ops-related-records-scroll {
@@ -5103,6 +5110,11 @@ a.kh-ops-admin-link-card {
   padding: 9px;
   border-bottom: 1px solid var(--kh-line);
   background: var(--kh-bg);
+}
+
+.kh-ops-manage-strip-has-trailing {
+  align-items: center;
+  justify-content: space-between;
 }
 
 .kh-ops-manage-strip.is-standalone {

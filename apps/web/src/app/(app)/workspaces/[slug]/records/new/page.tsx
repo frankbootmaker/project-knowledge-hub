@@ -35,8 +35,8 @@ export default async function NewKnowledgeRecordPage({
   }
 
   const [projectsResponse, systemsResponse] = await Promise.all([
-    apiFetch(`/api/v1/projects?workspaceId=${workspace.id}`),
-    apiFetch(`/api/v1/systems?workspaceId=${workspace.id}`),
+    apiFetch(`/api/v1/projects?workspaceId=${workspace.id}&view=picker`),
+    apiFetch(`/api/v1/systems?workspaceId=${workspace.id}&summary=true`),
   ]);
 
   const projects = projectsResponse.ok

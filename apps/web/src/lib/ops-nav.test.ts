@@ -388,8 +388,9 @@ describe('ops nav', () => {
     const library = NAV_SECTIONS.flatMap((section) => section.items).find(
       (item) => item.id === 'knowledge',
     )!;
-    expect(library.href(ctx)).toBe('/workspaces/platform');
+    expect(library.href(ctx)).toBe('/workspaces/platform#workspace-knowledge');
     expect(matchNavItem(library, ctx, '/workspaces/platform')).toBe(true);
+    expect(matchNavItem(library, ctx, '/workspaces/platform', 'workspace-knowledge')).toBe(true);
     expect(matchNavItem(library, ctx, '/workspaces/platform/media')).toBe(false);
     expect(projectTopHref(ctx)).toBe('/workspaces/platform/projects/renewal#project-top');
   });

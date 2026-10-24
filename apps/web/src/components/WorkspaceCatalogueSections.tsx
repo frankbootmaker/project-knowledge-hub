@@ -23,6 +23,11 @@ import {
   normalizeContentLanguage,
   pickPreferredRecord,
 } from '../lib/translation-families';
+import {
+  WORKSPACE_KNOWLEDGE_ANCHOR,
+  WORKSPACE_SYSTEMS_ANCHOR,
+} from '../lib/workspace-sections';
+import { WorkspaceSectionSpy } from './ops/WorkspaceSectionSpy';
 
 export type { CatalogueListItem } from './CatalogueSection';
 
@@ -477,6 +482,7 @@ export function WorkspaceCatalogueSections({
 
   return (
     <>
+      <WorkspaceSectionSpy />
       <CollapsibleSection
         storageKey={`workspace:${workspaceSlug}:projects`}
         title={t('projects')}
@@ -565,6 +571,7 @@ export function WorkspaceCatalogueSections({
         </section>
       </CollapsibleSection>
       <CollapsibleSection
+        id={WORKSPACE_SYSTEMS_ANCHOR}
         storageKey={`workspace:${workspaceSlug}:systems`}
         title={t('systems')}
         defaultOpen
@@ -657,6 +664,7 @@ export function WorkspaceCatalogueSections({
         </section>
       </CollapsibleSection>
       <CollapsibleSection
+        id={WORKSPACE_KNOWLEDGE_ANCHOR}
         storageKey={`workspace:${workspaceSlug}:records`}
         title={t('knowledgeRecords')}
         defaultOpen

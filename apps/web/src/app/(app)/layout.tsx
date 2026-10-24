@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { Suspense, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { OpsAppShell } from '../../components/ops/OpsAppShell';
 import { fetchWorkspaceList, getSession } from '../../lib/session';
 import { getThemePreference } from '../../lib/theme-actions';
@@ -15,15 +15,16 @@ export default async function AppShellLayout({ children }: { children: ReactNode
     fetchWorkspaceList(),
   ]);
 
+  // Do not put {children} in a Suspense fallback. Next renders that fallback
+  // as the static shell and then resumes the same page, and those two passes
+  // do not share React cache(). The rail's search params suspend on their own.
   return (
-    <Suspense fallback={<div className="min-h-screen">{children}</div>}>
-      <OpsAppShell
-        session={session}
-        workspaces={workspaces}
-        themePreference={themePreference}
-      >
-        {children}
-      </OpsAppShell>
-    </Suspense>
+    <OpsAppShell
+      session={session}
+      workspaces={workspaces}
+      themePreference={themePreference}
+    >
+      {children}
+    </OpsAppShell>
   );
 }
