@@ -101,18 +101,88 @@ function toPublicConnection(
   };
 }
 
-async function healthForConnection(
+const REMOTE_HEALTH_TTL_MS = 30_000;
+const REMOTE_HEALTH_BUDGET_MS = 1_200;
+
+type RemoteHealthCacheEntry = {
+  expiresAt: number;
+  health: GitSyncHealth;
+};
+
+const remoteHealthCache = new Map<string, RemoteHealthCacheEntry>();
+const remoteHealthInflight = new Map<string, Promise<GitSyncHealth>>();
+
+function connectionHealthKey(row: typeof gitRepositoryConnections.$inferSelect): string {
+  return [
+    row.id,
+    row.status,
+    row.lastError ?? '',
+    row.lastSyncedCommitSha ?? '',
+    row.lastSyncedAt?.toISOString() ?? '',
+    row.updatedAt.toISOString(),
+  ].join('|');
+}
+
+function healthInput(
   row: typeof gitRepositoryConnections.$inferSelect,
   checkRemote: boolean,
-): Promise<GitSyncHealth> {
-  return assessGitSyncHealth({
+) {
+  return {
     connectionStatus: row.status,
     lastError: row.lastError,
     lastSyncedAt: row.lastSyncedAt,
     lastSyncedCommitSha: row.lastSyncedCommitSha,
     ref: connectionToProviderRef(row),
     checkRemote,
+  };
+}
+
+/**
+ * Workspace home asks for a live remote SHA. Cache a hit for 30s and do not
+ * let a slow provider hold the page past the budget. The settled remote
+ * result is what the next request within the ttl receives.
+ */
+async function healthForConnection(
+  row: typeof gitRepositoryConnections.$inferSelect,
+  checkRemote: boolean,
+): Promise<GitSyncHealth> {
+  if (!checkRemote || process.env.NODE_ENV === 'test') {
+    return assessGitSyncHealth(healthInput(row, checkRemote));
+  }
+
+  const key = connectionHealthKey(row);
+  const now = Date.now();
+  const cached = remoteHealthCache.get(key);
+  if (cached && cached.expiresAt > now) return cached.health;
+
+  let pending = remoteHealthInflight.get(key);
+  if (!pending) {
+    const remote = assessGitSyncHealth(healthInput(row, true)).then((health) => {
+      remoteHealthCache.set(key, {
+        expiresAt: Date.now() + REMOTE_HEALTH_TTL_MS,
+        health,
+      });
+      return health;
+    });
+    // The finally callback runs after `tracked` is initialized.
+    const tracked = remote.finally(() => {
+      if (remoteHealthInflight.get(key) === tracked) remoteHealthInflight.delete(key);
+    });
+    remoteHealthInflight.set(key, tracked);
+    pending = tracked;
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const budget = new Promise<GitSyncHealth>((resolve) => {
+    timer = setTimeout(() => {
+      void assessGitSyncHealth(healthInput(row, false)).then(resolve);
+    }, REMOTE_HEALTH_BUDGET_MS);
   });
+  try {
+    return await Promise.race([pending, budget]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function headerMap(headers: Record<string, unknown>): Record<string, string | undefined> {

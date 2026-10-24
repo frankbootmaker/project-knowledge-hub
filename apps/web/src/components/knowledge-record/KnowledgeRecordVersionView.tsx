@@ -34,13 +34,14 @@ export async function KnowledgeRecordVersionView({
   }
 
   const workspace = await requireWorkspaceBySlug(workspaceSlug);
-  const routeProject = projectContext
-    ? await requireProjectBySlug(workspace.id, projectContext.projectSlug, workspace.slug)
-    : null;
-
-  const listResponse = await apiFetch(
-    `/api/v1/knowledge-records?workspaceId=${workspace.id}&includeArchived=true`,
-  );
+  const [routeProject, listResponse] = await Promise.all([
+    projectContext
+      ? requireProjectBySlug(workspace.id, projectContext.projectSlug, workspace.slug)
+      : Promise.resolve(null),
+    apiFetch(
+      `/api/v1/knowledge-records?workspaceId=${workspace.id}&slug=${encodeURIComponent(recordSlug)}&includeArchived=true`,
+    ),
+  ]);
   if (!listResponse.ok) {
     notFound();
   }

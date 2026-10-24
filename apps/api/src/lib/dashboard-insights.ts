@@ -10,6 +10,7 @@ import { addDaysYmd, todayYmd } from '@project-knowledge-hub/domain';
 import { loadWorkspacePaidAiContexts } from './ai-billing.js';
 import { countAssignedTasksByDue } from './project-delivery.js';
 import { listProjectHealthSnapshots } from './project-overall-rag.js';
+import { coalesceRead } from './read-cache.js';
 
 export type DashboardInsights = {
   tasksByDue: {
@@ -63,6 +64,8 @@ export async function accessibleWorkspaceIds(
   return rows.map((row) => row.workspaceId);
 }
 
+const INSIGHTS_TTL_MS = 15_000;
+
 export async function getDashboardInsights(
   database: Database,
   input: {
@@ -71,6 +74,22 @@ export async function getDashboardInsights(
   },
 ): Promise<DashboardInsights> {
   const today = todayYmd();
+  return coalesceRead(
+    database,
+    `insights:${input.userId}:${input.isSystemAdmin ? '1' : '0'}:${today}`,
+    INSIGHTS_TTL_MS,
+    () => loadDashboardInsights(database, input, today),
+  );
+}
+
+async function loadDashboardInsights(
+  database: Database,
+  input: {
+    userId: string;
+    isSystemAdmin: boolean;
+  },
+  today: string,
+): Promise<DashboardInsights> {
   const soon = addDaysYmd(today, 7);
 
   const [tasksByDue, workspaceIds] = await Promise.all([
