@@ -30,14 +30,32 @@ vi.mock('next-intl', () => ({
 }));
 
 vi.mock('./KnowledgeRecordRelationsPanel', async (importOriginal) => {
+  const { useEffect } = await import('react');
   const actual = await importOriginal<
     typeof import('./KnowledgeRecordRelationsPanel')
   >();
   return {
     ...actual,
-    KnowledgeRecordRelationsPanel: () => (
-      <div data-testid="relations-panel">Relations</div>
-    ),
+    KnowledgeRecordRelationsPanel: ({
+      supplyAddButton,
+      canEdit,
+    }: {
+      supplyAddButton?: (button: React.ReactNode) => void;
+      canEdit?: boolean;
+    }) => {
+      useEffect(() => {
+        if (!supplyAddButton) {
+          return;
+        }
+        supplyAddButton(
+          canEdit ? (
+            <button type="button">Add relation</button>
+          ) : null,
+        );
+        return () => supplyAddButton(null);
+      }, [canEdit, supplyAddButton]);
+      return <div data-testid="relations-panel">Relations</div>;
+    },
   };
 });
 
@@ -121,5 +139,76 @@ describe('KnowledgeRecordDetailMarkdown', () => {
       btn.textContent?.includes('Related entries (1)'),
     );
     expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('hides add relation in the toolbar when related entries are collapsed', () => {
+    const container = render(
+      <KnowledgeRecordDetailMarkdown
+        html="<p>Body</p>"
+        toc={[]}
+        title="Doc"
+        recordId="rec"
+        projectId={null}
+        canEditRelations={true}
+        relations={relations}
+        catalogue={[]}
+      />,
+    );
+    expect(container.textContent).not.toContain('Add relation');
+  });
+
+  it('shows add relation right-aligned in the toolbar when open and editable', async () => {
+    localStorage.setItem(relatedEntriesOpenStorageKey, '1');
+    const container = render(
+      <KnowledgeRecordDetailMarkdown
+        html="<p>Body</p>"
+        toc={[]}
+        title="Doc"
+        recordId="rec"
+        projectId={null}
+        canEditRelations={true}
+        relations={relations}
+        catalogue={[]}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const trailing = container.querySelector(
+      '[data-testid="related-entries-toolbar-trailing"]',
+    );
+    expect(trailing).not.toBeNull();
+    expect(trailing?.className).toContain('ml-auto');
+    expect(trailing?.textContent).toContain('Add relation');
+    expect(
+      container.querySelector('[data-testid="relations-panel"]')?.textContent,
+    ).not.toContain('Add relation');
+  });
+
+  it('does not show add relation when the user cannot edit relations', async () => {
+    localStorage.setItem(relatedEntriesOpenStorageKey, '1');
+    const container = render(
+      <KnowledgeRecordDetailMarkdown
+        html="<p>Body</p>"
+        toc={[]}
+        title="Doc"
+        recordId="rec"
+        projectId={null}
+        canEditRelations={false}
+        relations={relations}
+        catalogue={[]}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain('Add relation');
+    expect(
+      container.querySelector('[data-testid="related-entries-toolbar-trailing"]'),
+    ).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { cn } from '../../lib/cn';
 import { LinkedKnowledgeRecord } from '../LinkedKnowledgeRecord';
@@ -103,6 +103,7 @@ export function KnowledgeRecordRelationsPanel({
   initial,
   catalogue,
   embedded = false,
+  supplyAddButton,
 }: {
   recordId: string;
   projectId: string | null;
@@ -111,6 +112,8 @@ export function KnowledgeRecordRelationsPanel({
   catalogue: CatalogueRecord[];
   /** Collapsible document toolbar: compact list without section title. */
   embedded?: boolean;
+  /** When embedded, renders the add-relation control in the document toolbar. */
+  supplyAddButton?: (button: ReactNode) => void;
 }) {
   const t = useTranslations('records');
   const tCommon = useTranslations('common');
@@ -121,6 +124,38 @@ export function KnowledgeRecordRelationsPanel({
   const [relationType, setRelationType] = useState<RelationType>('relates_to');
   const [targetId, setTargetId] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const openPicker = useCallback(() => {
+    setQuery('');
+    setTargetId('');
+    setRelationType('relates_to');
+    setPickerOpen(true);
+  }, []);
+
+  const addButton = useMemo(() => {
+    if (!canEdit) {
+      return null;
+    }
+    return (
+      <Button
+        type="button"
+        variant="secondary"
+        className="text-sm"
+        disabled={saving}
+        onClick={openPicker}
+      >
+        {t('relatedRecordsAdd')}
+      </Button>
+    );
+  }, [canEdit, openPicker, saving, t]);
+
+  useEffect(() => {
+    if (!embedded || !supplyAddButton) {
+      return;
+    }
+    supplyAddButton(addButton);
+    return () => supplyAddButton(null);
+  }, [addButton, embedded, supplyAddButton]);
 
   function relationLabel(type: string): string {
     const key = `relationTypes.${type}` as 'relationTypes.relates_to';
@@ -221,38 +256,7 @@ export function KnowledgeRecordRelationsPanel({
       {!embedded ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="related-records-heading">{t('relatedRecords')}</h2>
-          {canEdit ? (
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={saving}
-              onClick={() => {
-                setQuery('');
-                setTargetId('');
-                setRelationType('relates_to');
-                setPickerOpen(true);
-              }}
-            >
-              {t('relatedRecordsAdd')}
-            </Button>
-          ) : null}
-        </div>
-      ) : canEdit ? (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            className="text-sm"
-            disabled={saving}
-            onClick={() => {
-              setQuery('');
-              setTargetId('');
-              setRelationType('relates_to');
-              setPickerOpen(true);
-            }}
-          >
-            {t('relatedRecordsAdd')}
-          </Button>
+          {addButton}
         </div>
       ) : null}
       {!view ? (

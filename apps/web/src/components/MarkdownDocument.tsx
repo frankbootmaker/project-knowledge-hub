@@ -175,6 +175,8 @@ export type MarkdownDocumentRelatedEntries = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   panel: ReactNode;
+  /** Shown right-aligned in the manage strip while the section is open. */
+  toolbarTrailing?: ReactNode;
 };
 
 export function MarkdownDocument({
@@ -248,44 +250,63 @@ export function MarkdownDocument({
 
   return (
     <div className="min-w-0 max-w-full">
-      <div className="kh-ops-manage-strip">
-        {toc.length > 0 ? (
+      <div
+        className={cn(
+          'kh-ops-manage-strip',
+          relatedEntries?.open && relatedEntries.toolbarTrailing
+            ? 'kh-ops-manage-strip-has-trailing'
+            : undefined,
+        )}
+      >
+        <div className="flex min-w-0 flex-wrap items-center gap-[7px]">
+          {toc.length > 0 ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="text-sm"
+              aria-expanded={tocOpen}
+              aria-label={t('tocLabel')}
+              title={t('tocLabel')}
+              onClick={() => setTocOpen((open) => !open)}
+            >
+              {tocOpen ? t('tocCollapse') : t('contents')}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="secondary"
             className="text-sm"
-            aria-expanded={tocOpen}
-            aria-label={t('tocLabel')}
-            title={t('tocLabel')}
-            onClick={() => setTocOpen((open) => !open)}
+            onClick={() => setViewerOpen(true)}
           >
-            {tocOpen ? t('tocCollapse') : t('contents')}
+            {t('openWideViewer')}
           </Button>
-        ) : null}
-        <Button
-          type="button"
-          variant="secondary"
-          className="text-sm"
-          onClick={() => setViewerOpen(true)}
-        >
-          {t('openWideViewer')}
-        </Button>
-        {relatedEntries && relatedEntries.count > 0 ? (
-          <Button
-            type="button"
-            variant="secondary"
-            className="text-sm"
-            aria-expanded={relatedEntries.open}
-            onClick={() =>
-              relatedEntries.onOpenChange(!relatedEntries.open)
-            }
+          {relatedEntries && relatedEntries.count > 0 ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="text-sm"
+              aria-expanded={relatedEntries.open}
+              onClick={() =>
+                relatedEntries.onOpenChange(!relatedEntries.open)
+              }
+            >
+              {t('relatedEntriesToggle', { count: relatedEntries.count })}
+            </Button>
+          ) : null}
+        </div>
+        {relatedEntries?.open && relatedEntries.toolbarTrailing ? (
+          <div
+            className="ml-auto flex shrink-0 items-center"
+            data-testid="related-entries-toolbar-trailing"
           >
-            {t('relatedEntriesToggle', { count: relatedEntries.count })}
-          </Button>
+            {relatedEntries.toolbarTrailing}
+          </div>
         ) : null}
       </div>
 
-      {relatedEntries?.open ? relatedEntries.panel : null}
+      {relatedEntries?.open ? (
+        <div className="kh-ops-related-records-shell">{relatedEntries.panel}</div>
+      ) : null}
 
       <div
         className={cn(
